@@ -1,0 +1,24 @@
+{
+  "appId": "com.schoolmanage.app",
+  "productName": "SchoolManage",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "src/**/*",
+    "dist/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": ["nsis"],
+    "icon": "src/resources/icons/icon.ico"
+  },
+  "mac": {
+    "target": ["dmg"],
+    "icon": "src/resources/icons/icon.icns"
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "icon": "src/resources/icons/icon.png"
+  }
+}

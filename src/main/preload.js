@@ -1,0 +1,37 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+// API sécurisée exposée au renderer process
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Students
+  getStudents: () => ipcRenderer.invoke('students:getAll'),
+  getStudentById: (id) => ipcRenderer.invoke('students:getById', id),
+  createStudent: (data) => ipcRenderer.invoke('students:create', data),
+  updateStudent: (id, data) => ipcRenderer.invoke('students:update', id, data),
+  deleteStudent: (id) => ipcRenderer.invoke('students:delete', id),
+  
+  // Teachers
+  getTeachers: () => ipcRenderer.invoke('teachers:getAll'),
+  getTeacherById: (id) => ipcRenderer.invoke('teachers:getById', id),
+  createTeacher: (data) => ipcRenderer.invoke('teachers:create', data),
+  updateTeacher: (id, data) => ipcRenderer.invoke('teachers:update', id, data),
+  deleteTeacher: (id) => ipcRenderer.invoke('teachers:delete', id),
+  
+  // Classes
+  getClasses: () => ipcRenderer.invoke('classes:getAll'),
+  getClassById: (id) => ipcRenderer.invoke('classes:getById', id),
+  createClass: (data) => ipcRenderer.invoke('classes:create', data),
+  updateClass: (id, data) => ipcRenderer.invoke('classes:update', id, data),
+  deleteClass: (id) => ipcRenderer.invoke('classes:delete', id),
+  
+  // Dashboard Stats
+  getDashboardStats: () => ipcRenderer.invoke('dashboard:getStats'),
+  
+  // Subjects
+  getSubjects: () => ipcRenderer.invoke('subjects:getAll'),
+  createSubject: (data) => ipcRenderer.invoke('subjects:create', data),
+  
+  // Grades
+  getGrades: () => ipcRenderer.invoke('grades:getAll'),
+  getGradesByStudent: (studentId) => ipcRenderer.invoke('grades:getByStudent', studentId),
+  createGrade: (data) => ipcRenderer.invoke('grades:create', data),
+});
