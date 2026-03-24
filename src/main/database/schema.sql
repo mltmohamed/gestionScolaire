@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS students (
   class_id INTEGER,
   enrollment_date DATE DEFAULT CURRENT_DATE,
   status TEXT DEFAULT 'active',
+  photo TEXT, -- Chemin ou Base64 de la photo
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (class_id) REFERENCES classes(id)
@@ -29,6 +30,8 @@ CREATE TABLE IF NOT EXISTS teachers (
   specialty TEXT,
   hire_date DATE DEFAULT CURRENT_DATE,
   status TEXT DEFAULT 'active',
+  gender TEXT, -- Ajout du sexe pour les enseignants aussi
+  photo TEXT, -- Chemin ou Base64 de la photo
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,8 +74,38 @@ CREATE TABLE IF NOT EXISTS grades (
   FOREIGN KEY (subject_id) REFERENCES subjects(id)
 );
 
+-- Table: payments (Paiements des élèves : Tenues, Scolarité)
+CREATE TABLE IF NOT EXISTS student_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL,
+  type TEXT NOT NULL, -- 'uniform', 'tuition'
+  amount DECIMAL(10,2) NOT NULL,
+  payment_date DATE DEFAULT CURRENT_DATE,
+  payment_method TEXT,
+  description TEXT,
+  academic_year TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_id) REFERENCES students(id)
+);
+
+-- Table: teacher_salaries (Paiements des enseignants)
+CREATE TABLE IF NOT EXISTS teacher_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  teacher_id INTEGER NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  payment_date DATE DEFAULT CURRENT_DATE,
+  payment_method TEXT,
+  period_month INTEGER NOT NULL,
+  period_year INTEGER NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (teacher_id) REFERENCES teachers(id)
+);
+
 -- Index pour améliorer les performances
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id);
 CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_student_payments_student ON student_payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_payments_teacher ON teacher_payments(teacher_id);

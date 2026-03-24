@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, User, UserCircle } from 'lucide-react';
 
 export default function Teachers() {
   const { teachers, loading, createTeacher, updateTeacher, deleteTeacher } = useTeachers();
@@ -28,7 +28,34 @@ export default function Teachers() {
     phone: '',
     address: '',
     specialty: '',
+    gender: '',
+    photo: null,
   });
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getAvatar = (teacher) => {
+    if (teacher.photo) {
+      return <img src={teacher.photo} alt="Avatar" className="h-10 w-10 rounded-full object-cover border border-white/20 shadow-sm" />;
+    }
+    
+    // Avatar par défaut selon le sexe
+    const color = teacher.gender === 'F' ? 'text-pink-400 bg-pink-400/10' : 'text-blue-400 bg-blue-400/10';
+    return (
+      <div className={`h-10 w-10 rounded-full flex items-center justify-center border border-white/10 ${color}`}>
+        <User className="h-6 w-6" />
+      </div>
+    );
+  };
 
   const filteredTeachers = teachers.filter(teacher =>
     teacher.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -46,6 +73,8 @@ export default function Teachers() {
         phone: teacher.phone || '',
         address: teacher.address || '',
         specialty: teacher.specialty || '',
+        gender: teacher.gender || '',
+        photo: teacher.photo || null,
       });
     } else {
       setEditingTeacher(null);
@@ -56,6 +85,8 @@ export default function Teachers() {
         phone: '',
         address: '',
         specialty: '',
+        gender: '',
+        photo: null,
       });
     }
     setIsDialogOpen(true);
@@ -148,6 +179,7 @@ export default function Teachers() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Nom complet</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Téléphone</TableHead>
@@ -161,6 +193,7 @@ export default function Teachers() {
               {filteredTeachers.length > 0 ? (
                 filteredTeachers.map((teacher) => (
                   <TableRow key={teacher.id}>
+                    <TableCell>{getAvatar(teacher)}</TableCell>
                     <TableCell className="font-medium">
                       {teacher.first_name} {teacher.last_name}
                     </TableCell>
@@ -227,6 +260,27 @@ export default function Teachers() {
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
+              <div className="flex flex-col items-center gap-4 mb-4">
+                <div className="relative group">
+                  {formData.photo ? (
+                    <img 
+                      src={formData.photo} 
+                      alt="Aperçu" 
+                      className="h-24 w-24 rounded-full object-cover border-2 border-primary/20"
+                    />
+                  ) : (
+                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-pink-50' : 'bg-blue-50'}`}>
+                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-pink-300' : 'text-blue-300'}`} />
+                    </div>
+                  )}
+                  <label className="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">
+                    <Plus className="h-4 w-4" />
+                    <input type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">Cliquez sur le bouton + pour ajouter une photo</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Prénom *</label>
@@ -278,6 +332,19 @@ export default function Teachers() {
                   onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
                   placeholder="Ex: Mathématiques, Physique, etc."
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Genre</label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Sélectionner</option>
+                  <option value="M">Masculin</option>
+                  <option value="F">Féminin</option>
+                </select>
               </div>
             </div>
 

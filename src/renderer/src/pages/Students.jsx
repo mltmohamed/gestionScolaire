@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, User, UserCircle } from 'lucide-react';
 
 export default function Students() {
   const { students, loading, createStudent, updateStudent, deleteStudent } = useStudents();
@@ -32,7 +32,33 @@ export default function Students() {
     phone: '',
     address: '',
     class_id: '',
+    photo: null,
   });
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getAvatar = (student) => {
+    if (student.photo) {
+      return <img src={student.photo} alt="Avatar" className="h-10 w-10 rounded-full object-cover border border-white/20 shadow-sm" />;
+    }
+    
+    // Avatar par défaut selon le sexe
+    const color = student.gender === 'F' ? 'text-pink-400 bg-pink-400/10' : 'text-blue-400 bg-blue-400/10';
+    return (
+      <div className={`h-10 w-10 rounded-full flex items-center justify-center border border-white/10 ${color}`}>
+        <User className="h-6 w-6" />
+      </div>
+    );
+  };
 
   const filteredStudents = students.filter(student =>
     student.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -52,6 +78,7 @@ export default function Students() {
         phone: student.phone || '',
         address: student.address || '',
         class_id: student.class_id || '',
+        photo: student.photo || null,
       });
     } else {
       setEditingStudent(null);
@@ -64,6 +91,7 @@ export default function Students() {
         phone: '',
         address: '',
         class_id: '',
+        photo: null,
       });
     }
     setIsDialogOpen(true);
@@ -157,6 +185,7 @@ export default function Students() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Nom complet</TableHead>
                 <TableHead>Date de naissance</TableHead>
                 <TableHead>Email</TableHead>
@@ -170,6 +199,7 @@ export default function Students() {
               {filteredStudents.length > 0 ? (
                 filteredStudents.map((student) => (
                   <TableRow key={student.id}>
+                    <TableCell>{getAvatar(student)}</TableCell>
                     <TableCell className="font-medium">
                       {student.first_name} {student.last_name}
                     </TableCell>
@@ -236,6 +266,27 @@ export default function Students() {
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
+              <div className="flex flex-col items-center gap-4 mb-4">
+                <div className="relative group">
+                  {formData.photo ? (
+                    <img 
+                      src={formData.photo} 
+                      alt="Aperçu" 
+                      className="h-24 w-24 rounded-full object-cover border-2 border-primary/20"
+                    />
+                  ) : (
+                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-pink-50' : 'bg-blue-50'}`}>
+                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-pink-300' : 'text-blue-300'}`} />
+                    </div>
+                  )}
+                  <label className="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">
+                    <Plus className="h-4 w-4" />
+                    <input type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">Cliquez sur le bouton + pour ajouter une photo</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Prénom *</label>

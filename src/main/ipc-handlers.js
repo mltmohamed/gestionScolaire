@@ -30,8 +30,8 @@ function setupIPCHandlers(ipcMain) {
   ipcMain.handle('students:create', (event, data) => {
     try {
       const sql = `
-        INSERT INTO students (first_name, last_name, date_of_birth, gender, email, phone, address, class_id, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO students (first_name, last_name, date_of_birth, gender, email, phone, address, class_id, status, photo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const result = query(sql, [
         data.first_name,
@@ -42,7 +42,8 @@ function setupIPCHandlers(ipcMain) {
         data.phone || null,
         data.address || null,
         data.class_id || null,
-        data.status || 'active'
+        data.status || 'active',
+        data.photo || null
       ]);
       return { success: true, data: { id: result.lastInsertRowid } };
     } catch (error) {
@@ -55,7 +56,7 @@ function setupIPCHandlers(ipcMain) {
       const sql = `
         UPDATE students 
         SET first_name = ?, last_name = ?, date_of_birth = ?, gender = ?, 
-            email = ?, phone = ?, address = ?, class_id = ?, status = ?,
+            email = ?, phone = ?, address = ?, class_id = ?, status = ?, photo = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
@@ -69,6 +70,7 @@ function setupIPCHandlers(ipcMain) {
         data.address,
         data.class_id,
         data.status,
+        data.photo,
         id
       ]);
       return { success: true };
@@ -110,8 +112,8 @@ function setupIPCHandlers(ipcMain) {
   ipcMain.handle('teachers:create', (event, data) => {
     try {
       const sql = `
-        INSERT INTO teachers (first_name, last_name, email, phone, address, specialty, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO teachers (first_name, last_name, email, phone, address, specialty, status, gender, photo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const result = query(sql, [
         data.first_name,
@@ -120,7 +122,9 @@ function setupIPCHandlers(ipcMain) {
         data.phone || null,
         data.address || null,
         data.specialty || null,
-        data.status || 'active'
+        data.status || 'active',
+        data.gender || null,
+        data.photo || null
       ]);
       return { success: true, data: { id: result.lastInsertRowid } };
     } catch (error) {
@@ -133,7 +137,7 @@ function setupIPCHandlers(ipcMain) {
       const sql = `
         UPDATE teachers 
         SET first_name = ?, last_name = ?, email = ?, phone = ?, 
-            address = ?, specialty = ?, status = ?,
+            address = ?, specialty = ?, status = ?, gender = ?, photo = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
@@ -145,6 +149,8 @@ function setupIPCHandlers(ipcMain) {
         data.address,
         data.specialty,
         data.status,
+        data.gender,
+        data.photo,
         id
       ]);
       return { success: true };
@@ -269,6 +275,16 @@ function setupIPCHandlers(ipcMain) {
         LIMIT 5
       `);
       
+      // Derniers paiements (scolarité)
+      stats.recentTuition = query(`
+        SELECT p.*, s.first_name, s.last_name
+        FROM student_payments p
+        JOIN students s ON p.student_id = s.id
+        WHERE p.type = 'tuition'
+        ORDER BY p.payment_date DESC
+        LIMIT 5
+      `);
+      
       return { success: true, data: stats };
     } catch (error) {
       return { success: false, error: error.message };
@@ -349,6 +365,80 @@ function setupIPCHandlers(ipcMain) {
         data.comment || null,
         data.date || new Date().toISOString().split('T')[0],
         data.term || null
+      ]);
+      return { success: true, data: { id: result.lastInsertRowid } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ==================== PAYMENTS ====================
+  // Student Payments (Uniforms, Tuition)
+  ipcMain.handle('payments:getStudentPayments', () => {
+    try {
+      const sql = `
+        SELECT p.*, s.first_name, s.last_name, c.name as class_name
+        FROM student_payments p
+        JOIN students s ON p.student_id = s.id
+        LEFT JOIN classes c ON s.class_id = c.id
+        ORDER BY p.payment_date DESC
+      `;
+      return { success: true, data: query(sql) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('payments:createStudentPayment', (event, data) => {
+    try {
+      const sql = `
+        INSERT INTO student_payments (student_id, type, amount, payment_date, payment_method, description, academic_year)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      const result = query(sql, [
+        data.student_id,
+        data.type,
+        data.amount,
+        data.payment_date || new Date().toISOString().split('T')[0],
+        data.payment_method || 'Espèces',
+        data.description || null,
+        data.academic_year || null
+      ]);
+      return { success: true, data: { id: result.lastInsertRowid } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Teacher Payments
+  ipcMain.handle('payments:getTeacherPayments', () => {
+    try {
+      const sql = `
+        SELECT p.*, t.first_name, t.last_name
+        FROM teacher_payments p
+        JOIN teachers t ON p.teacher_id = t.id
+        ORDER BY p.payment_date DESC
+      `;
+      return { success: true, data: query(sql) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('payments:createTeacherPayment', (event, data) => {
+    try {
+      const sql = `
+        INSERT INTO teacher_payments (teacher_id, amount, payment_date, payment_method, period_month, period_year, description)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      const result = query(sql, [
+        data.teacher_id,
+        data.amount,
+        data.payment_date || new Date().toISOString().split('T')[0],
+        data.payment_method || 'Espèces',
+        data.period_month,
+        data.period_year,
+        data.description || null
       ]);
       return { success: true, data: { id: result.lastInsertRowid } };
     } catch (error) {

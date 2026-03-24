@@ -46,9 +46,16 @@ class DatabaseManager {
   }
 
   save() {
-    // Désactiver temporairement la sauvegarde pour éviter les erreurs sql.js
-    // La base de données reste en mémoire uniquement
-    return;
+    try {
+      if (this.db) {
+        const data = this.db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(this.dbPath, buffer);
+        console.log('Base de données sauvegardée sur le disque à', this.dbPath);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de la base de données:', error);
+    }
   }
 
   close() {
@@ -62,11 +69,12 @@ class DatabaseManager {
   query(sql, params = []) {
     try {
       const stmt = this.db.prepare(sql);
-      if (params.length > 0) {
+      const results = [];
+      
+      if (params && params.length > 0) {
         stmt.bind(params);
       }
       
-      const results = [];
       while (stmt.step()) {
         results.push(stmt.getAsObject());
       }
@@ -83,7 +91,7 @@ class DatabaseManager {
   run(sql, params = []) {
     try {
       this.db.run(sql, params);
-      // Ne pas sauvegarder automatiquement à chaque écriture
+      this.save(); // Sauvegarder automatiquement après chaque modification
     } catch (error) {
       console.error('Erreur SQL:', error);
       throw error;

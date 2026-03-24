@@ -34,4 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGrades: () => ipcRenderer.invoke('grades:getAll'),
   getGradesByStudent: (studentId) => ipcRenderer.invoke('grades:getByStudent', studentId),
   createGrade: (data) => ipcRenderer.invoke('grades:create', data),
+  
+  // Payments
+  getStudentPayments: () => ipcRenderer.invoke('payments:getStudentPayments'),
+  createStudentPayment: (data) => ipcRenderer.invoke('payments:createStudentPayment', data),
+  getTeacherPayments: () => ipcRenderer.invoke('payments:getTeacherPayments'),
+  createTeacherPayment: (data) => ipcRenderer.invoke('payments:createTeacherPayment', data),
 });

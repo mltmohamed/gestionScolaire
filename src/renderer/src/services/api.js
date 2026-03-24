@@ -96,3 +96,25 @@ export const dashboardAPI = {
     return result.success ? result.data : null;
   },
 };
+
+export const paymentAPI = {
+  getStudentPayments: async () => {
+    const result = await window.electronAPI.getStudentPayments();
+    return result.success ? result.data : [];
+  },
+  
+  createStudentPayment: async (data) => {
+    const result = await window.electronAPI.createStudentPayment(data);
+    return result;
+  },
+  
+  getTeacherPayments: async () => {
+    const result = await window.electronAPI.getTeacherPayments();
+    return result.success ? result.data : [];
+  },
+  
+  createTeacherPayment: async (data) => {
+    const result = await window.electronAPI.createTeacherPayment(data);
+    return result;
+  },
+};

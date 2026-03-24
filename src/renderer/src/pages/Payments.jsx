@@ -1,0 +1,477 @@
+import React, { useState } from 'react';
+import { usePayments } from '@/hooks/usePayments';
+import { useStudents } from '@/hooks/useStudents';
+import { useTeachers } from '@/hooks/useTeachers';
+import { useToast } from '@/hooks/useToast.jsx';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
+
+export default function Payments() {
+  const { studentPayments, teacherPayments, loading, createStudentPayment, createTeacherPayment } = usePayments();
+  const { students } = useStudents();
+  const { teachers } = useTeachers();
+  const { toast, ToastComponent } = useToast();
+
+  const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
+  const [isTeacherDialogOpen, setIsTeacherDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('tuition');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Statistiques calculées
+  const stats = React.useMemo(() => {
+    if (activeTab === 'teachers') {
+      const totalPaid = teacherPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const uniqueTeachersPaid = new Set(teacherPayments.map(p => p.teacher_id)).size;
+      const totalTeachers = teachers.length;
+      return {
+        totalAmount: totalPaid,
+        countPaid: uniqueTeachersPaid,
+        countUnpaid: totalTeachers - uniqueTeachersPaid,
+        label: "Salaires Versés",
+        subLabel: "Enseignants Payés",
+        unpaidLabel: "Restants"
+      };
+    } else {
+      const currentPayments = studentPayments.filter(p => p.type === activeTab);
+      const totalAmount = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const studentsWhoPaid = new Set(currentPayments.map(p => p.student_id)).size;
+      const totalStudents = students.length;
+      return {
+        totalAmount,
+        countPaid: studentsWhoPaid,
+        countUnpaid: totalStudents - studentsWhoPaid,
+        label: activeTab === 'tuition' ? "Scolarité Totale" : "Ventes Tenues",
+        subLabel: "Élèves ayant payé",
+        unpaidLabel: "N'ayant pas payé"
+      };
+    }
+  }, [activeTab, studentPayments, teacherPayments, students, teachers]);
+
+  const [studentFormData, setStudentFormData] = useState({
+    student_id: '',
+    type: 'tuition',
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'Espèces',
+    description: '',
+    academic_year: '2025-2026',
+  });
+
+  const [teacherFormData, setTeacherFormData] = useState({
+    teacher_id: '',
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'Espèces',
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+    description: '',
+  });
+
+  const filteredStudentPayments = studentPayments.filter(p => 
+    p.type === (activeTab === 'tuition' ? 'tuition' : 'uniform') &&
+    (`${p.first_name} ${p.last_name}`).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredTeacherPayments = teacherPayments.filter(p =>
+    (`${p.first_name} ${p.last_name}`).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleOpenStudentDialog = (type) => {
+    setActiveTab(type);
+    setStudentFormData({
+      ...studentFormData,
+      type: type,
+      student_id: '',
+      amount: '',
+      payment_date: new Date().toISOString().split('T')[0],
+      description: '',
+    });
+    setIsStudentDialogOpen(true);
+  };
+
+  const handleOpenTeacherDialog = () => {
+    setTeacherFormData({
+      teacher_id: '',
+      amount: '',
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_method: 'Espèces',
+      period_month: new Date().getMonth() + 1,
+      period_year: new Date().getFullYear(),
+      description: '',
+    });
+    setIsTeacherDialogOpen(true);
+  };
+
+  const handleStudentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const result = await createStudentPayment(studentFormData);
+      if (result.success) {
+        toast.success('Paiement enregistré avec succès !');
+        setIsStudentDialogOpen(false);
+      } else {
+        toast.error(result.error || 'Erreur lors de l\'enregistrement');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Une erreur est survenue');
+    }
+  };
+
+  const handleTeacherSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const result = await createTeacherPayment(teacherFormData);
+      if (result.success) {
+        toast.success('Paiement enseignant enregistré avec succès !');
+        setIsTeacherDialogOpen(false);
+      } else {
+        toast.error(result.error || 'Erreur lors de l\'enregistrement');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Une erreur est survenue');
+    }
+  };
+
+  const months = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold tracking-tight">Gestion des Paiements</h1>
+        <div className="flex gap-2">
+          <Button onClick={() => handleOpenStudentDialog('tuition')} className="bg-primary text-white">
+            <GraduationCap className="mr-2 h-4 w-4" /> Nouveau Paiement Scolarité
+          </Button>
+          <Button onClick={() => handleOpenStudentDialog('uniform')} variant="outline">
+            <Shirt className="mr-2 h-4 w-4" /> Nouveau Paiement Tenue
+          </Button>
+          <Button onClick={handleOpenTeacherDialog} variant="secondary">
+            <Users className="mr-2 h-4 w-4" /> Paiement Enseignant
+          </Button>
+        </div>
+      </div>
+
+      {/* Cartes de Statistiques */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{stats.label}</p>
+                <h3 className="text-2xl font-bold mt-1 text-violet-600">
+                  {stats.totalAmount.toLocaleString()} FCFA
+                </h3>
+              </div>
+              <div className="h-12 w-12 bg-violet-100 rounded-xl flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-violet-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{stats.subLabel}</p>
+                <h3 className="text-2xl font-bold mt-1 text-green-600">
+                  {stats.countPaid}
+                </h3>
+              </div>
+              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{stats.unpaidLabel}</p>
+                <h3 className="text-2xl font-bold mt-1 text-amber-600">
+                  {stats.countUnpaid}
+                </h3>
+              </div>
+              <div className="h-12 w-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <XCircle className="h-6 w-6 text-amber-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger 
+            value="tuition" 
+            onClick={() => setActiveTab('tuition')}
+            data-state={activeTab === 'tuition' ? 'active' : 'inactive'}
+          >
+            Frais de Scolarité
+          </TabsTrigger>
+          <TabsTrigger 
+            value="uniform" 
+            onClick={() => setActiveTab('uniform')}
+            data-state={activeTab === 'uniform' ? 'active' : 'inactive'}
+          >
+            Tenues Scolaires
+          </TabsTrigger>
+          <TabsTrigger 
+            value="teachers" 
+            onClick={() => setActiveTab('teachers')}
+            data-state={activeTab === 'teachers' ? 'active' : 'inactive'}
+          >
+            Salaires Enseignants
+          </TabsTrigger>
+        </TabsList>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>
+                {activeTab === 'tuition' ? 'Historique Scolarité' : 
+                 activeTab === 'uniform' ? 'Historique Tenues' : 'Historique Enseignants'}
+              </CardTitle>
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher..."
+                  className="pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>{activeTab === 'teachers' ? 'Enseignant' : 'Élève'}</TableHead>
+                  {activeTab !== 'teachers' && <TableHead>Classe</TableHead>}
+                  <TableHead>Montant</TableHead>
+                  <TableHead>Méthode</TableHead>
+                  {activeTab === 'teachers' && <TableHead>Période</TableHead>}
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-10">Chargement...</TableCell>
+                  </TableRow>
+                ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-10">Aucun paiement trouvé</TableCell>
+                  </TableRow>
+                ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>{new Date(p.payment_date).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-medium">{p.first_name} {p.last_name}</TableCell>
+                    {activeTab !== 'teachers' && <TableCell>{p.class_name || 'N/A'}</TableCell>}
+                    <TableCell className="font-bold text-green-600">{p.amount.toLocaleString()} FCFA</TableCell>
+                    <TableCell>{p.payment_method}</TableCell>
+                    {activeTab === 'teachers' && (
+                      <TableCell>{months[p.period_month - 1]} {p.period_year}</TableCell>
+                    )}
+                    <TableCell>{p.description || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </Tabs>
+
+      {/* Dialog Nouveau Paiement Élève */}
+      <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <form onSubmit={handleStudentSubmit}>
+            <DialogHeader>
+              <DialogTitle>
+                {studentFormData.type === 'tuition' ? 'Nouveau Paiement Scolarité' : 'Nouveau Paiement Tenue'}
+              </DialogTitle>
+              <DialogDescription>
+                Remplissez les informations ci-dessous pour enregistrer le paiement.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Élève</label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={studentFormData.student_id}
+                  onChange={(e) => setStudentFormData({ ...studentFormData, student_id: e.target.value })}
+                  required
+                >
+                  <option value="">Sélectionner un élève</option>
+                  {students.map(s => (
+                    <option key={s.id} value={s.id}>{s.first_name} {s.last_name} - {s.class_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Montant (FCFA)</label>
+                  <Input
+                    type="number"
+                    value={studentFormData.amount}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, amount: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Date</label>
+                  <Input
+                    type="date"
+                    value={studentFormData.payment_date}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, payment_date: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Méthode</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={studentFormData.payment_method}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, payment_method: e.target.value })}
+                  >
+                    <option value="Espèces">Espèces</option>
+                    <option value="Virement">Virement</option>
+                    <option value="Chèque">Chèque</option>
+                    <option value="Mobile Money">Mobile Money</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Année Académique</label>
+                  <Input
+                    value={studentFormData.academic_year}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, academic_year: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input
+                  value={studentFormData.description}
+                  onChange={(e) => setStudentFormData({ ...studentFormData, description: e.target.value })}
+                  placeholder="Ex: Premier versement, Paiement complet..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsStudentDialogOpen(false)}>Annuler</Button>
+              <Button type="submit">Enregistrer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Nouveau Paiement Enseignant */}
+      <Dialog open={isTeacherDialogOpen} onOpenChange={setIsTeacherDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <form onSubmit={handleTeacherSubmit}>
+            <DialogHeader>
+              <DialogTitle>Paiement de Salaire Enseignant</DialogTitle>
+              <DialogDescription>
+                Enregistrez le paiement mensuel d'un enseignant.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Enseignant</label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={teacherFormData.teacher_id}
+                  onChange={(e) => setTeacherFormData({ ...teacherFormData, teacher_id: e.target.value })}
+                  required
+                >
+                  <option value="">Sélectionner un enseignant</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.first_name} {t.last_name} - {t.specialty}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Montant (FCFA)</label>
+                  <Input
+                    type="number"
+                    value={teacherFormData.amount}
+                    onChange={(e) => setTeacherFormData({ ...teacherFormData, amount: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Date de Paiement</label>
+                  <Input
+                    type="date"
+                    value={teacherFormData.payment_date}
+                    onChange={(e) => setTeacherFormData({ ...teacherFormData, payment_date: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Mois</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={teacherFormData.period_month}
+                    onChange={(e) => setTeacherFormData({ ...teacherFormData, period_month: parseInt(e.target.value) })}
+                  >
+                    {months.map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Année</label>
+                  <Input
+                    type="number"
+                    value={teacherFormData.period_year}
+                    onChange={(e) => setTeacherFormData({ ...teacherFormData, period_year: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input
+                  value={teacherFormData.description}
+                  onChange={(e) => setTeacherFormData({ ...teacherFormData, description: e.target.value })}
+                  placeholder="Ex: Salaire du mois, Prime..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsTeacherDialogOpen(false)}>Annuler</Button>
+              <Button type="submit">Enregistrer le Paiement</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {ToastComponent}
+    </div>
+  );
+}

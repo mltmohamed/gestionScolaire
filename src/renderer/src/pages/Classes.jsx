@@ -243,13 +243,15 @@ export default function Classes() {
                     required
                   >
                     <option value="">Sélectionner</option>
-                    <option value="6ème">6ème</option>
-                    <option value="5ème">5ème</option>
-                    <option value="4ème">4ème</option>
-                    <option value="3ème">3ème</option>
-                    <option value="2nde">2nde</option>
-                    <option value="1ère">1ère</option>
-                    <option value="Terminale">Terminale</option>
+                    <option value="1ère année">1ère année</option>
+                    <option value="2ème année">2ème année</option>
+                    <option value="3ème année">3ème année</option>
+                    <option value="4ème année">4ème année</option>
+                    <option value="5ème année">5ème année</option>
+                    <option value="6ème année">6ème année</option>
+                    <option value="7ème année">7ème année</option>
+                    <option value="8ème année">8ème année</option>
+                    <option value="9ème année">9ème année</option>
                   </select>
                 </div>
               </div>
