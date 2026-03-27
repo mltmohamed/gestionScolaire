@@ -2,6 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // API sécurisée exposée au renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Auth
+  getSession: () => ipcRenderer.invoke('auth:getSession'),
+  login: (username, password) => ipcRenderer.invoke('auth:login', { username, password }),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+
   // Students
   getStudents: () => ipcRenderer.invoke('students:getAll'),
   getStudentById: (id) => ipcRenderer.invoke('students:getById', id),

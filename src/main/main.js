@@ -5,6 +5,34 @@ const setupIPCHandlers = require('./ipc-handlers');
 
 let mainWindow;
 
+function getCspHeaderValue({ isDev }) {
+  if (isDev) {
+    return [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      "connect-src 'self' http://localhost:5173 ws://localhost:5173 http://localhost:5174 ws://localhost:5174 http://localhost:5175 ws://localhost:5175"
+    ].join('; ');
+  }
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
+    "script-src 'self'",
+    "connect-src 'self'"
+  ].join('; ');
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -16,6 +44,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
+      // NOTE: sandbox breaks preload in this project (preload uses require). Keep disabled unless preload is rewritten.
+      sandbox: false,
     },
     backgroundColor: '#FAFAFA',
     show: false,
@@ -23,8 +53,42 @@ function createWindow() {
     titleBarStyle: 'default',
   });
 
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('did-fail-load:', { errorCode, errorDescription, validatedURL });
+  });
+
   // Charger l'application en développement ou production
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+  // CSP via en-têtes (évite de casser Vite en dev tout en durcissant en prod)
+  const csp = getCspHeaderValue({ isDev });
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
+  });
+
+  // Bloquer la navigation vers des URL externes
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    try {
+      const allowedOrigins = isDev
+        ? new Set(['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'])
+        : new Set([`file://${path.join(__dirname, '../../dist/index.html').replace(/\\/g, '/')}`]);
+
+      const target = new URL(url);
+      if (!allowedOrigins.has(target.origin)) {
+        event.preventDefault();
+      }
+    } catch {
+      event.preventDefault();
+    }
+  });
+
+  // Bloquer window.open et toute création de fenêtre non contrôlée
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   
   if (isDev) {
     // Essayer plusieurs ports possibles
@@ -37,7 +101,7 @@ function createWindow() {
             mainWindow.loadURL('http://localhost:5175');
           });
       });
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
@@ -52,10 +116,10 @@ function createWindow() {
 }
 
 // Initialisation de l'application
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     // Initialiser la base de données
-    initializeDatabase();
+    await initializeDatabase();
     
     // Configurer les handlers IPC
     setupIPCHandlers(ipcMain);

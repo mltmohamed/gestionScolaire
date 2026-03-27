@@ -1,12 +1,22 @@
 const initSqlJs = require('sql.js');
+const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 class DatabaseManager {
   constructor() {
     this.db = null;
-    // Utiliser un chemin simple dans le répertoire courant pour le développement
-    this.dbPath = path.join(__dirname, '../../../schoolmanage.db');
+    this._saving = false;
+    const legacyDbPath = path.join(__dirname, '../../../schoolmanage.db');
+    this.dbPath = path.join(app.getPath('userData'), 'schoolmanage.db');
+    try {
+      fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
+      if (!fs.existsSync(this.dbPath) && fs.existsSync(legacyDbPath)) {
+        fs.copyFileSync(legacyDbPath, this.dbPath);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la préparation du chemin de la base de données:', error);
+    }
     console.log('Chemin de la base de données:', this.dbPath);
   }
 
@@ -34,6 +44,20 @@ class DatabaseManager {
       
       const schema = fs.readFileSync(schemaPath, 'utf8');
       this.db.run(schema);
+
+      // Migrations légères (tables existantes créées avec un ancien schéma)
+      const ensureColumn = (tableName, columnName, columnType) => {
+        const cols = this.query(`PRAGMA table_info(${tableName})`);
+        const exists = Array.isArray(cols) && cols.some((c) => c && c.name === columnName);
+        if (!exists) {
+          this.db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+        }
+      };
+
+      ensureColumn('students', 'photo', 'TEXT');
+      ensureColumn('teachers', 'photo', 'TEXT');
+      ensureColumn('students', 'gender', 'TEXT');
+      ensureColumn('teachers', 'gender', 'TEXT');
       
       console.log('Schéma de base de données initialisé');
       this.save(); // Sauvegarder immédiatement après création
@@ -46,15 +70,49 @@ class DatabaseManager {
   }
 
   save() {
+    if (!this.db || this._saving) return;
+
+    this._saving = true;
     try {
-      if (this.db) {
-        const data = this.db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(this.dbPath, buffer);
-        console.log('Base de données sauvegardée sur le disque à', this.dbPath);
+      let data;
+      try {
+        data = this.db.export();
+      } catch (error) {
+        console.error('Erreur lors de l\'export de la base de données:', error);
+        return;
       }
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde de la base de données:', error);
+
+      const buffer = Buffer.from(data);
+      const tmpPath = `${this.dbPath}.tmp`;
+
+      try {
+        fs.writeFileSync(tmpPath, buffer);
+      } catch (error) {
+        console.error('Erreur écriture du fichier temporaire DB:', error);
+        return;
+      }
+
+      try {
+        fs.renameSync(tmpPath, this.dbPath);
+      } catch (error) {
+        // Fallback: certaines machines Windows/AV peuvent bloquer rename atomique.
+        console.error('Erreur lors du renommage atomique DB (fallback écriture directe):', error);
+        try {
+          fs.writeFileSync(this.dbPath, buffer);
+          try {
+            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+          } catch {
+            // ignorer
+          }
+        } catch (error2) {
+          console.error('Erreur lors de l\'écriture directe DB:', error2);
+          return;
+        }
+      }
+
+      console.log('Base de données sauvegardée sur le disque à', this.dbPath);
+    } finally {
+      this._saving = false;
     }
   }
 
