@@ -516,6 +516,11 @@ function setupIPCHandlers(ipcMain) {
       return { success: false, error: 'Tuteur obligatoire' };
     }
 
+    const existing = query('SELECT id FROM students WHERE matricule = ? LIMIT 1', [data.matricule]);
+    if (existing && existing[0] && existing[0].id) {
+      return { success: false, error: 'Matricule existe déjà' };
+    }
+
     const sql = `
       INSERT INTO students (first_name, last_name, date_of_birth, gender, matricule, phone, address, class_id, status, photo)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -532,7 +537,12 @@ function setupIPCHandlers(ipcMain) {
       data.status || 'active',
       data.photo || null
     ]);
-    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
+
+    const inserted = query('SELECT id FROM students WHERE matricule = ? ORDER BY id DESC LIMIT 1', [data.matricule]);
+    const id = inserted && inserted[0] ? inserted[0].id : null;
+    if (!id || Number(id) <= 0) {
+      return { success: false, error: 'Erreur lors de la création de l\'élève' };
+    }
 
     run(
       `INSERT INTO guardians (student_id, first_name, last_name, phone, address, job, relationship)
