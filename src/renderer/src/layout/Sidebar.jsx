@@ -7,7 +7,6 @@ import {
   School,
   Wallet,
   Settings as SettingsIcon,
-  Sparkles,
   LogOut
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -27,29 +26,29 @@ export default function Sidebar() {
   return (
     <div className="relative flex h-full w-72 flex-col">
       {/* Arrière-plan glassmorphism */}
-      <div className="absolute inset-0 bg-gradient-to-b from-violet-950 via-purple-950 to-indigo-950"></div>
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjAyIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-[#003399] via-black to-black"></div>
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjAyIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50"></div>
       
       {/* Effets de lumière */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-violet-500/50 via-purple-500/50 to-indigo-500/50"></div>
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-violet-500/30 via-purple-500/30 to-indigo-500/30"></div>
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-[#0066CC]/60 via-white/10 to-[#003399]/60"></div>
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#0066CC]/40 via-white/10 to-[#003399]/40"></div>
       
       {/* Contenu */}
       <div className="relative z-10 flex h-full flex-col">
         {/* Logo avec effet glow */}
         <div className="group relative flex h-20 items-center border-b border-white/10 px-6 transition-all duration-300 hover:bg-white/5">
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg blur-md opacity-50 group-hover:opacity-75 transition-opacity"></div>
-            <div className="relative p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
-              <Sparkles className="h-6 w-6 text-white" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0066CC] to-[#003399] rounded-lg blur-md opacity-50 group-hover:opacity-75 transition-opacity"></div>
+            <div className="relative p-2 bg-gradient-to-br from-[#0066CC] to-[#003399] rounded-lg">
+              <img src="/assets/images/logo.png" alt="LA SAGESSE" className="h-6 w-6 object-contain" />
             </div>
           </div>
           <div className="ml-4">
-            <span className="block text-lg font-bold bg-gradient-to-r from-white via-violet-100 to-white bg-clip-text text-transparent">
-              SchoolManage
+            <span className="block text-lg font-bold bg-gradient-to-r from-white via-white to-white bg-clip-text text-transparent">
+              LA SAGESSE
             </span>
-            <span className="block text-xs text-violet-300 font-medium">
-              Éducation Platform
+            <span className="block text-xs text-white/70 font-medium">
+              Établissement
             </span>
           </div>
         </div>
@@ -64,16 +63,16 @@ export default function Sidebar() {
                 cn(
                   'group relative flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
                   isActive
-                    ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-500/25'
-                    : 'text-violet-200 hover:bg-white/10 hover:text-white'
+                    ? 'bg-gradient-to-r from-[#0066CC] to-[#003399] text-white shadow-lg shadow-black/25'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white'
                 )
               }
             >
               {/* Effet de bordure animée */}
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#0066CC]/20 to-[#003399]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
               
               {/* Indicateur latéral */}
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-gradient-to-b from-violet-400 to-purple-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-gradient-to-b from-[#0066CC] to-[#003399] opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
               
               <item.icon className={cn(
                 "relative mr-4 h-5 w-5 transition-transform duration-200",
@@ -95,14 +94,14 @@ export default function Sidebar() {
         {/* Footer avec séparation élégante */}
         <div className="border-t border-white/10 p-4 space-y-2">
           <div className="flex items-center px-4 py-2 mb-2">
-            <div className="h-8 w-8 rounded-full bg-violet-500/20 flex items-center justify-center border border-violet-500/30">
-              <span className="text-xs font-bold text-violet-200">
+            <div className="h-8 w-8 rounded-full bg-[#0066CC]/20 flex items-center justify-center border border-[#0066CC]/30">
+              <span className="text-xs font-bold text-white">
                 {user?.username?.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-medium text-white truncate">{user?.username}</p>
-              <p className="text-[10px] text-violet-400 uppercase tracking-wider font-bold">Administrator</p>
+              <p className="text-[10px] text-white/60 uppercase tracking-wider font-bold">Administrator</p>
             </div>
           </div>
 
@@ -112,8 +111,8 @@ export default function Sidebar() {
               cn(
                 "group relative flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                 isActive
-                  ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-500/25"
-                  : "text-violet-200 hover:bg-white/10 hover:text-white"
+                  ? "bg-gradient-to-r from-[#0066CC] to-[#003399] text-white shadow-lg shadow-black/25"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
               )
             }
           >

@@ -156,11 +156,12 @@ function setupIPCHandlers(ipcMain) {
 
   handle('students:getById', { auth: true }, (event, id) => {
     const sql = `
-      SELECT s.*, 
+      SELECT s.*, c.name as class_name,
              g.first_name as guardian_first_name, g.last_name as guardian_last_name,
              g.phone as guardian_phone, g.address as guardian_address,
              g.job as guardian_job, g.relationship as guardian_relationship
       FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN guardians g ON g.student_id = s.id
       WHERE s.id = ?
     `;

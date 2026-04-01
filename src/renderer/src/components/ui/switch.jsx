@@ -9,9 +9,9 @@ const Switch = React.forwardRef(({ className, ...props }, ref) => (
     aria-checked={props.checked}
     data-state={props.checked ? 'checked' : 'unchecked'}
     className={cn(
-      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
+      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066CC] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
       props.checked 
-        ? "bg-violet-600" 
+        ? "bg-[#0066CC]" 
         : "bg-gray-300 dark:bg-gray-700",
       className
     )}

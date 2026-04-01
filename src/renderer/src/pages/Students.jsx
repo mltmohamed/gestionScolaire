@@ -15,14 +15,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, User, UserCircle } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, User, UserCircle, Eye } from 'lucide-react';
 
 export default function Students() {
   const { students, loading, createStudent, updateStudent, deleteStudent } = useStudents();
   const { classes } = useClasses();
   const { toast, ToastComponent } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [viewingStudent, setViewingStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     first_name: '',
@@ -61,7 +63,7 @@ export default function Students() {
     }
     
     // Avatar par défaut selon le sexe
-    const color = student.gender === 'F' ? 'text-pink-400 bg-pink-400/10' : 'text-blue-400 bg-blue-400/10';
+    const color = student.gender === 'F' ? 'text-[#CC0033] bg-[#CC0033]/10' : 'text-[#0066CC] bg-[#0066CC]/10';
     return (
       <div className={`h-10 w-10 rounded-full flex items-center justify-center border border-white/10 ${color}`}>
         <User className="h-6 w-6" />
@@ -130,6 +132,17 @@ export default function Students() {
     }
     setIsDialogOpen(true);
     console.log('État du dialog:', isDialogOpen);
+  };
+
+  const handleViewStudent = async (student) => {
+    try {
+      const fetched = await studentAPI.getById(student.id);
+      setViewingStudent(fetched || student);
+      setIsViewDialogOpen(true);
+    } catch (error) {
+      console.error('Erreur chargement élève:', error);
+      toast.error(error.message || 'Erreur lors du chargement');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -248,14 +261,22 @@ export default function Students() {
                     <TableCell>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         student.status === 'active'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                          ? 'bg-[#0066CC]/10 text-[#003399] dark:bg-[#0066CC]/20 dark:text-white'
+                          : 'bg-[#CC0033]/10 text-[#CC0033] dark:bg-[#CC0033]/20 dark:text-white'
                       }`}>
                         {student.status === 'active' ? '● Actif' : '● Inactif'}
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleViewStudent(student)}
+                          title="Voir"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -309,8 +330,8 @@ export default function Students() {
                       className="h-24 w-24 rounded-full object-cover border-2 border-primary/20"
                     />
                   ) : (
-                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-pink-50' : 'bg-blue-50'}`}>
-                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-pink-300' : 'text-blue-300'}`} />
+                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-[#CC0033]/10' : 'bg-[#0066CC]/10'}`}>
+                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-[#CC0033]' : 'text-[#0066CC]'}`} />
                     </div>
                   )}
                   <label className="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">
@@ -505,6 +526,121 @@ export default function Students() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de visualisation */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fiche élève</DialogTitle>
+            <DialogDescription>
+              Informations détaillées de l'élève.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingStudent && (
+            <div className="py-2 space-y-6">
+              <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-gradient-to-br from-[#0066CC]/10 via-white to-[#FF6600]/10 dark:from-[#0066CC]/20 dark:via-black dark:to-[#FF6600]/20 p-5">
+                <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')]" />
+                <div className="relative flex items-center gap-4">
+                  <div className="h-16 w-16">
+                    {viewingStudent.photo ? (
+                      <img src={viewingStudent.photo} alt="Avatar" className="h-16 w-16 rounded-2xl object-cover border border-white/30 shadow-sm" />
+                    ) : (
+                      <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border border-white/20 ${viewingStudent.gender === 'F' ? 'bg-[#CC0033]/10 text-[#CC0033]' : 'bg-[#0066CC]/10 text-[#0066CC]'}`}>
+                        <User className="h-8 w-8" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-xl font-extrabold tracking-tight text-black dark:text-white truncate">
+                      {viewingStudent.first_name} {viewingStudent.last_name}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-white/70 dark:bg-white/10 px-3 py-1 text-xs font-semibold text-black dark:text-white border border-black/10 dark:border-white/10">
+                        Matricule: {viewingStudent.matricule || '-'}
+                      </span>
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
+                        viewingStudent.status === 'active'
+                          ? 'bg-[#0066CC]/10 text-[#003399] border-[#0066CC]/20 dark:text-white'
+                          : 'bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/20 dark:text-white'
+                      }`}>
+                        {viewingStudent.status === 'active' ? '● Actif' : '● Inactif'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-gray-900 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-bold text-black dark:text-white">Informations élève</p>
+                    <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#0066CC] to-[#003399]" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Date de naissance</p>
+                      <p className="text-sm font-semibold">
+                        {viewingStudent.date_of_birth ? new Date(viewingStudent.date_of_birth).toLocaleDateString('fr-FR') : '-'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Classe</p>
+                      <p className="text-sm font-semibold">{viewingStudent.class_name || 'Non assigné'}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Téléphone</p>
+                      <p className="text-sm font-semibold">{viewingStudent.phone || '-'}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Adresse</p>
+                      <p className="text-sm font-semibold">{viewingStudent.address || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-gray-900 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-bold text-black dark:text-white">Informations du tuteur</p>
+                    <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#FF6600] to-[#FF3300]" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Nom complet</p>
+                      <p className="text-sm font-semibold">{viewingStudent.guardian_first_name || '-'} {viewingStudent.guardian_last_name || ''}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Téléphone</p>
+                      <p className="text-sm font-semibold">{viewingStudent.guardian_phone || '-'}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Lien</p>
+                      <p className="text-sm font-semibold">{viewingStudent.guardian_relationship || '-'}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Profession</p>
+                      <p className="text-sm font-semibold">{viewingStudent.guardian_job || '-'}</p>
+                    </div>
+                    <div className="sm:col-span-2 rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Adresse</p>
+                      <p className="text-sm font-semibold">{viewingStudent.guardian_address || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Fermer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

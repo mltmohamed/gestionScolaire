@@ -10,21 +10,21 @@ export function Toast({ message, type = 'success', onClose }) {
   };
 
   const bgColors = {
-    success: 'bg-green-50 dark:bg-green-900/20',
-    error: 'bg-red-50 dark:bg-red-900/20',
-    warning: 'bg-yellow-50 dark:bg-yellow-900/20',
+    success: 'bg-[#0066CC]/10 dark:bg-[#0066CC]/20',
+    error: 'bg-[#CC0033]/10 dark:bg-[#CC0033]/20',
+    warning: 'bg-[#FF6600]/10 dark:bg-[#FF6600]/20',
   };
 
   const borderColors = {
-    success: 'border-green-200 dark:border-green-800',
-    error: 'border-red-200 dark:border-red-800',
-    warning: 'border-yellow-200 dark:border-yellow-800',
+    success: 'border-[#0066CC]/30 dark:border-[#0066CC]/40',
+    error: 'border-[#CC0033]/30 dark:border-[#CC0033]/40',
+    warning: 'border-[#FF6600]/30 dark:border-[#FF6600]/40',
   };
 
   const textColors = {
-    success: 'text-green-800 dark:text-green-300',
-    error: 'text-red-800 dark:text-red-300',
-    warning: 'text-yellow-800 dark:text-yellow-300',
+    success: 'text-[#003399] dark:text-white',
+    error: 'text-[#CC0033] dark:text-white',
+    warning: 'text-[#FF3300] dark:text-white',
   };
 
   return (

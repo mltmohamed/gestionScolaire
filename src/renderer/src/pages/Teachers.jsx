@@ -49,7 +49,7 @@ export default function Teachers() {
     }
     
     // Avatar par défaut selon le sexe
-    const color = teacher.gender === 'F' ? 'text-pink-400 bg-pink-400/10' : 'text-blue-400 bg-blue-400/10';
+    const color = teacher.gender === 'F' ? 'text-[#CC0033] bg-[#CC0033]/10' : 'text-[#0066CC] bg-[#0066CC]/10';
     return (
       <div className={`h-10 w-10 rounded-full flex items-center justify-center border border-white/10 ${color}`}>
         <User className="h-6 w-6" />
@@ -208,8 +208,8 @@ export default function Teachers() {
                     <TableCell>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         teacher.status === 'active'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                          ? 'bg-[#0066CC]/10 text-[#003399] dark:bg-[#0066CC]/20 dark:text-white'
+                          : 'bg-[#CC0033]/10 text-[#CC0033] dark:bg-[#CC0033]/20 dark:text-white'
                       }`}>
                         {teacher.status === 'active' ? '● Actif' : '● Inactif'}
                       </span>
@@ -269,8 +269,8 @@ export default function Teachers() {
                       className="h-24 w-24 rounded-full object-cover border-2 border-primary/20"
                     />
                   ) : (
-                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-pink-50' : 'bg-blue-50'}`}>
-                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-pink-300' : 'text-blue-300'}`} />
+                    <div className={`h-24 w-24 rounded-full flex items-center justify-center border-2 border-dashed border-primary/20 ${formData.gender === 'F' ? 'bg-[#CC0033]/10' : 'bg-[#0066CC]/10'}`}>
+                      <UserCircle className={`h-12 w-12 ${formData.gender === 'F' ? 'text-[#CC0033]' : 'text-[#0066CC]'}`} />
                     </div>
                   )}
                   <label className="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">

@@ -168,49 +168,49 @@ export default function Payments() {
 
       {/* Cartes de Statistiques */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/20">
+        <Card className="bg-gradient-to-br from-[#0066CC]/10 to-[#003399]/10 border-black/10">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{stats.label}</p>
-                <h3 className="text-2xl font-bold mt-1 text-violet-600">
+                <h3 className="text-2xl font-bold mt-1 text-[#0066CC]">
                   {stats.totalAmount.toLocaleString()} FCFA
                 </h3>
               </div>
-              <div className="h-12 w-12 bg-violet-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-violet-600" />
+              <div className="h-12 w-12 bg-[#0066CC]/15 rounded-xl flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-[#0066CC]" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20">
+        <Card className="bg-gradient-to-br from-[#FF6600]/10 to-[#FF3300]/10 border-black/10">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{stats.subLabel}</p>
-                <h3 className="text-2xl font-bold mt-1 text-green-600">
+                <h3 className="text-2xl font-bold mt-1 text-[#FF3300]">
                   {stats.countPaid}
                 </h3>
               </div>
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+              <div className="h-12 w-12 bg-[#FF6600]/15 rounded-xl flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-[#FF3300]" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/20">
+        <Card className="bg-gradient-to-br from-[#CC0033]/10 to-[#CC0033]/5 border-black/10">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{stats.unpaidLabel}</p>
-                <h3 className="text-2xl font-bold mt-1 text-amber-600">
+                <h3 className="text-2xl font-bold mt-1 text-[#CC0033]">
                   {stats.countUnpaid}
                 </h3>
               </div>
-              <div className="h-12 w-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <XCircle className="h-6 w-6 text-amber-600" />
+              <div className="h-12 w-12 bg-[#CC0033]/15 rounded-xl flex items-center justify-center">
+                <XCircle className="h-6 w-6 text-[#CC0033]" />
               </div>
             </div>
           </CardContent>
@@ -287,7 +287,7 @@ export default function Payments() {
                     <TableCell>{new Date(p.payment_date).toLocaleDateString()}</TableCell>
                     <TableCell className="font-medium">{p.first_name} {p.last_name}</TableCell>
                     {activeTab !== 'teachers' && <TableCell>{p.class_name || 'N/A'}</TableCell>}
-                    <TableCell className="font-bold text-green-600">{p.amount.toLocaleString()} FCFA</TableCell>
+                    <TableCell className="font-bold text-[#FF3300]">{p.amount.toLocaleString()} FCFA</TableCell>
                     <TableCell>{p.payment_method}</TableCell>
                     {activeTab === 'teachers' && (
                       <TableCell>{months[p.period_month - 1]} {p.period_year}</TableCell>
