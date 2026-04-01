@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS students (
   last_name TEXT NOT NULL,
   date_of_birth DATE NOT NULL,
   gender TEXT,
+  matricule TEXT,
   email TEXT,
   phone TEXT,
   address TEXT,
@@ -17,6 +18,21 @@ CREATE TABLE IF NOT EXISTS students (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+
+-- Table: guardians (Tuteurs)
+CREATE TABLE IF NOT EXISTS guardians (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL UNIQUE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  address TEXT,
+  job TEXT,
+  relationship TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
 -- Table: teachers (Professeurs)
@@ -103,6 +119,7 @@ CREATE TABLE IF NOT EXISTS teacher_payments (
 );
 
 -- Index pour améliorer les performances
+CREATE UNIQUE INDEX IF NOT EXISTS idx_students_matricule ON students(matricule);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id);
 CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);

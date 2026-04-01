@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDashboard } from '@/hooks/useDashboard';
-import { Users, GraduationCap, School, Wallet, TrendingUp, Activity, User, DollarSign } from 'lucide-react';
+import { Users, GraduationCap, School, TrendingUp, Activity, User, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -46,14 +46,6 @@ export default function Dashboard() {
       gradient: 'from-orange-500 to-amber-500',
       shadow: 'shadow-orange-500/25',
     },
-    {
-      title: 'Matières Enseignées',
-      value: stats.totalSubjects,
-      icon: Wallet, // Remplacé BookOpen par Wallet
-      description: 'Programmes scolaires',
-      gradient: 'from-emerald-500 to-green-500',
-      shadow: 'shadow-emerald-500/25',
-    },
   ];
 
   const getAvatar = (student) => {
@@ -98,7 +90,7 @@ export default function Dashboard() {
       </div>
 
       {/* Cartes de statistiques */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((stat) => (
           <Card 
             key={stat.title}

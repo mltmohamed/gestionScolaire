@@ -78,6 +78,9 @@ function setupIPCHandlers(ipcMain) {
         }
         return await handler(event, ...args);
       } catch (error) {
+        if (error && error.message && error.message.includes('UNIQUE constraint failed: students.matricule')) {
+          return { success: false, error: 'Matricule déjà utilisé' };
+        }
         if (error && (error.code === 'UNAUTHORIZED' || error.message === 'UNAUTHORIZED')) {
           return { success: false, error: 'Unauthorized' };
         }
@@ -139,23 +142,42 @@ function setupIPCHandlers(ipcMain) {
   // ==================== STUDENTS ====================
   handle('students:getAll', { auth: true }, () => {
     const sql = `
-      SELECT s.*, c.name as class_name 
+      SELECT s.*, c.name as class_name,
+             g.first_name as guardian_first_name, g.last_name as guardian_last_name,
+             g.phone as guardian_phone, g.address as guardian_address,
+             g.job as guardian_job, g.relationship as guardian_relationship
       FROM students s 
       LEFT JOIN classes c ON s.class_id = c.id 
+      LEFT JOIN guardians g ON g.student_id = s.id
       ORDER BY s.last_name ASC
     `;
     return { success: true, data: query(sql) };
   });
 
   handle('students:getById', { auth: true }, (event, id) => {
-    const sql = 'SELECT * FROM students WHERE id = ?';
+    const sql = `
+      SELECT s.*, 
+             g.first_name as guardian_first_name, g.last_name as guardian_last_name,
+             g.phone as guardian_phone, g.address as guardian_address,
+             g.job as guardian_job, g.relationship as guardian_relationship
+      FROM students s
+      LEFT JOIN guardians g ON g.student_id = s.id
+      WHERE s.id = ?
+    `;
     const result = query(sql, [id]);
     return { success: true, data: result[0] };
   });
 
   handle('students:create', { auth: true }, (event, data) => {
+    if (!data || !data.matricule) {
+      return { success: false, error: 'Matricule obligatoire' };
+    }
+    if (!data.guardian || !data.guardian.first_name || !data.guardian.last_name || !data.guardian.phone) {
+      return { success: false, error: 'Tuteur obligatoire' };
+    }
+
     const sql = `
-      INSERT INTO students (first_name, last_name, date_of_birth, gender, email, phone, address, class_id, status, photo)
+      INSERT INTO students (first_name, last_name, date_of_birth, gender, matricule, phone, address, class_id, status, photo)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     run(sql, [
@@ -163,7 +185,7 @@ function setupIPCHandlers(ipcMain) {
       data.last_name,
       data.date_of_birth,
       data.gender || null,
-      data.email || null,
+      data.matricule,
       data.phone || null,
       data.address || null,
       data.class_id || null,
@@ -171,30 +193,92 @@ function setupIPCHandlers(ipcMain) {
       data.photo || null
     ]);
     const id = query('SELECT last_insert_rowid() as id')[0]?.id;
-    return { success: true, data: { id } };
+
+    run(
+      `INSERT INTO guardians (student_id, first_name, last_name, phone, address, job, relationship)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(student_id) DO UPDATE SET
+         first_name=excluded.first_name,
+         last_name=excluded.last_name,
+         phone=excluded.phone,
+         address=excluded.address,
+         job=excluded.job,
+         relationship=excluded.relationship,
+         updated_at=CURRENT_TIMESTAMP`
+      , [
+        id,
+        data.guardian.first_name,
+        data.guardian.last_name,
+        data.guardian.phone,
+        data.guardian.address || null,
+        data.guardian.job || null,
+        data.guardian.relationship || null
+      ]
+    );
+
+    const guardian = query('SELECT * FROM guardians WHERE student_id = ? LIMIT 1', [id])[0];
+    if (!guardian) {
+      return { success: false, error: 'Erreur lors de l\'enregistrement du tuteur' };
+    }
+    console.log('Tuteur enregistré:', { student_id: id, guardian_id: guardian.id });
+    return { success: true, data: { id, guardian } };
   });
 
   handle('students:update', { auth: true }, (event, id, data) => {
+    if (!data || !data.matricule) {
+      return { success: false, error: 'Matricule obligatoire' };
+    }
+    if (!data.guardian || !data.guardian.first_name || !data.guardian.last_name || !data.guardian.phone) {
+      return { success: false, error: 'Tuteur obligatoire' };
+    }
+
     const sql = `
       UPDATE students 
       SET first_name = ?, last_name = ?, date_of_birth = ?, gender = ?, 
-          email = ?, phone = ?, address = ?, class_id = ?, status = ?, photo = ?,
+          matricule = ?, phone = ?, address = ?, class_id = ?, status = ?, photo = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
-    query(sql, [
+    run(sql, [
       data.first_name,
       data.last_name,
       data.date_of_birth,
-      data.gender,
-      data.email,
-      data.phone,
-      data.address,
-      data.class_id,
-      data.status,
-      data.photo,
+      data.gender || null,
+      data.matricule,
+      data.phone || null,
+      data.address || null,
+      data.class_id || null,
+      data.status || 'active',
+      data.photo || null,
       id
     ]);
+
+    run(
+      `INSERT INTO guardians (student_id, first_name, last_name, phone, address, job, relationship)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(student_id) DO UPDATE SET
+         first_name=excluded.first_name,
+         last_name=excluded.last_name,
+         phone=excluded.phone,
+         address=excluded.address,
+         job=excluded.job,
+         relationship=excluded.relationship,
+         updated_at=CURRENT_TIMESTAMP`
+      , [
+        id,
+        data.guardian.first_name,
+        data.guardian.last_name,
+        data.guardian.phone,
+        data.guardian.address || null,
+        data.guardian.job || null,
+        data.guardian.relationship || null
+      ]
+    );
+
+    const guardian = query('SELECT * FROM guardians WHERE student_id = ? LIMIT 1', [id])[0];
+    if (!guardian) {
+      return { success: false, error: 'Erreur lors de l\'enregistrement du tuteur' };
+    }
     return { success: true };
   });
 

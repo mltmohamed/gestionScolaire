@@ -43,7 +43,13 @@ class DatabaseManager {
       }
       
       const schema = fs.readFileSync(schemaPath, 'utf8');
-      this.db.run(schema);
+      // Exécuter le schéma en 2 phases: tables d'abord, puis migrations (ALTER), puis indexes.
+      // Sinon une ancienne DB peut échouer si un index référence une colonne ajoutée plus tard (ex: matricule).
+      const indexMarker = '\n-- Index';
+      const markerPos = schema.indexOf(indexMarker);
+      const schemaTables = markerPos >= 0 ? schema.slice(0, markerPos) : schema;
+      const schemaIndexes = markerPos >= 0 ? schema.slice(markerPos) : '';
+      this.db.run(schemaTables);
 
       // Migrations légères (tables existantes créées avec un ancien schéma)
       const ensureColumn = (tableName, columnName, columnType) => {
@@ -58,6 +64,31 @@ class DatabaseManager {
       ensureColumn('teachers', 'photo', 'TEXT');
       ensureColumn('students', 'gender', 'TEXT');
       ensureColumn('teachers', 'gender', 'TEXT');
+      ensureColumn('students', 'matricule', 'TEXT');
+
+      // Table guardians (tuteur)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS guardians (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL UNIQUE,
+          first_name TEXT NOT NULL,
+          last_name TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          address TEXT,
+          job TEXT,
+          relationship TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+        )
+      `);
+
+      // Index unique pour matricule
+      this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_students_matricule ON students(matricule)');
+
+      if (schemaIndexes) {
+        this.db.run(schemaIndexes);
+      }
       
       console.log('Schéma de base de données initialisé');
       this.save(); // Sauvegarder immédiatement après création
@@ -130,7 +161,8 @@ class DatabaseManager {
       const results = [];
       
       if (params && params.length > 0) {
-        stmt.bind(params);
+        const sanitized = params.map((p) => (p === undefined ? null : p));
+        stmt.bind(sanitized);
       }
       
       while (stmt.step()) {
@@ -148,7 +180,8 @@ class DatabaseManager {
   // Exécution simple sans retour
   run(sql, params = []) {
     try {
-      this.db.run(sql, params);
+      const sanitized = params && params.length > 0 ? params.map((p) => (p === undefined ? null : p)) : params;
+      this.db.run(sql, sanitized);
       this.save(); // Sauvegarder automatiquement après chaque modification
     } catch (error) {
       console.error('Erreur SQL:', error);

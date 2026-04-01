@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
+import { studentAPI } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -28,11 +29,19 @@ export default function Students() {
     last_name: '',
     date_of_birth: '',
     gender: '',
-    email: '',
+    matricule: '',
     phone: '',
     address: '',
     class_id: '',
     photo: null,
+    guardian: {
+      first_name: '',
+      last_name: '',
+      phone: '',
+      address: '',
+      job: '',
+      relationship: '',
+    },
   });
 
   const handlePhotoChange = (e) => {
@@ -65,20 +74,37 @@ export default function Students() {
     student.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleOpenDialog = (student = null) => {
+  const handleOpenDialog = async (student = null) => {
     console.log('Ouverture dialog étudiant:', student ? 'Modification' : 'Ajout');
     if (student) {
+      let fullStudent = student;
+      try {
+        const fetched = await studentAPI.getById(student.id);
+        if (fetched) {
+          fullStudent = fetched;
+        }
+      } catch {
+        // ignorer, fallback sur les données de la liste
+      }
       setEditingStudent(student);
       setFormData({
-        first_name: student.first_name || '',
-        last_name: student.last_name || '',
-        date_of_birth: student.date_of_birth?.split('T')[0] || '',
-        gender: student.gender || '',
-        email: student.email || '',
-        phone: student.phone || '',
-        address: student.address || '',
-        class_id: student.class_id || '',
-        photo: student.photo || null,
+        first_name: fullStudent.first_name || '',
+        last_name: fullStudent.last_name || '',
+        date_of_birth: fullStudent.date_of_birth?.split('T')[0] || '',
+        gender: fullStudent.gender || '',
+        matricule: fullStudent.matricule || '',
+        phone: fullStudent.phone || '',
+        address: fullStudent.address || '',
+        class_id: fullStudent.class_id || '',
+        photo: fullStudent.photo || null,
+        guardian: {
+          first_name: fullStudent.guardian_first_name || '',
+          last_name: fullStudent.guardian_last_name || '',
+          phone: fullStudent.guardian_phone || '',
+          address: fullStudent.guardian_address || '',
+          job: fullStudent.guardian_job || '',
+          relationship: fullStudent.guardian_relationship || '',
+        },
       });
     } else {
       setEditingStudent(null);
@@ -87,11 +113,19 @@ export default function Students() {
         last_name: '',
         date_of_birth: '',
         gender: '',
-        email: '',
+        matricule: '',
         phone: '',
         address: '',
         class_id: '',
         photo: null,
+        guardian: {
+          first_name: '',
+          last_name: '',
+          phone: '',
+          address: '',
+          job: '',
+          relationship: '',
+        },
       });
     }
     setIsDialogOpen(true);
@@ -188,7 +222,7 @@ export default function Students() {
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Nom complet</TableHead>
                 <TableHead>Date de naissance</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>Matricule</TableHead>
                 <TableHead>Téléphone</TableHead>
                 <TableHead>Classe</TableHead>
                 <TableHead>Statut</TableHead>
@@ -208,7 +242,7 @@ export default function Students() {
                         ? new Date(student.date_of_birth).toLocaleDateString('fr-FR')
                         : '-'}
                     </TableCell>
-                    <TableCell>{student.email || '-'}</TableCell>
+                    <TableCell>{student.matricule || '-'}</TableCell>
                     <TableCell>{student.phone || '-'}</TableCell>
                     <TableCell>{student.class_name || 'Non assigné'}</TableCell>
                     <TableCell>
@@ -331,12 +365,102 @@ export default function Students() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <label className="text-sm font-medium">Matricule *</label>
                 <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  value={formData.matricule}
+                  onChange={(e) => setFormData({ ...formData, matricule: e.target.value })}
+                  required
                 />
+              </div>
+
+              <div className="rounded-lg border border-input p-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium">Informations du tuteur *</h3>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Prénom tuteur *</label>
+                    <Input
+                      value={formData.guardian.first_name}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guardian: { ...formData.guardian, first_name: e.target.value },
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Nom tuteur *</label>
+                    <Input
+                      value={formData.guardian.last_name}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guardian: { ...formData.guardian, last_name: e.target.value },
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Téléphone tuteur *</label>
+                    <Input
+                      value={formData.guardian.phone}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guardian: { ...formData.guardian, phone: e.target.value },
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Lien</label>
+                    <Input
+                      value={formData.guardian.relationship}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guardian: { ...formData.guardian, relationship: e.target.value },
+                        })
+                      }
+                      placeholder="Ex: Père, Mère"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Adresse tuteur</label>
+                  <Input
+                    value={formData.guardian.address}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        guardian: { ...formData.guardian, address: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Profession</label>
+                  <Input
+                    value={formData.guardian.job}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        guardian: { ...formData.guardian, job: e.target.value },
+                      })
+                    }
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
