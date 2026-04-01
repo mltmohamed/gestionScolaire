@@ -2,6 +2,7 @@ const initSqlJs = require('sql.js');
 const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 class DatabaseManager {
   constructor() {
@@ -88,6 +89,30 @@ class DatabaseManager {
 
       if (schemaIndexes) {
         this.db.run(schemaIndexes);
+      }
+
+      // Table users + seed admin (pour l'authentification)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          role TEXT DEFAULT 'administrator',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+
+      const usersCount = this.query('SELECT COUNT(*) as count FROM users')[0]?.count || 0;
+      if (usersCount === 0) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const hash = crypto.pbkdf2Sync('admin', salt, 100000, 64, 'sha512').toString('hex');
+        this.db.run(
+          'INSERT INTO users (username, password_hash, password_salt, role) VALUES (?, ?, ?, ?)',
+          ['admin', hash, salt, 'administrator']
+        );
       }
       
       console.log('Schéma de base de données initialisé');
@@ -188,6 +213,32 @@ class DatabaseManager {
       throw error;
     }
   }
+
+  runMany(statements = []) {
+    if (!this.db) return;
+    if (!Array.isArray(statements) || statements.length === 0) return;
+
+    try {
+      this.db.run('BEGIN');
+      for (const item of statements) {
+        if (!item) continue;
+        const sql = item.sql;
+        const params = item.params || [];
+        const sanitized = params && params.length > 0 ? params.map((p) => (p === undefined ? null : p)) : params;
+        this.db.run(sql, sanitized);
+      }
+      this.db.run('COMMIT');
+      this.save();
+    } catch (error) {
+      try {
+        this.db.run('ROLLBACK');
+      } catch {
+        // ignorer
+      }
+      console.error('Erreur SQL:', error);
+      throw error;
+    }
+  }
 }
 
 // Instance singleton
@@ -198,5 +249,6 @@ module.exports = {
   initializeDatabase: () => dbManager.initialize(),
   closeDatabase: () => dbManager.close(),
   query: (sql, params) => dbManager.query(sql, params),
-  run: (sql, params) => dbManager.run(sql, params)
+  run: (sql, params) => dbManager.run(sql, params),
+  runMany: (statements) => dbManager.runMany(statements)
 };

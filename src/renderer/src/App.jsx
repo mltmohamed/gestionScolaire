@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProfileProvider } from './context/ProfileContext';
 import AppLayout from './layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
@@ -27,26 +28,28 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="students" element={<Students />} />
-              <Route path="teachers" element={<Teachers />} />
-              <Route path="classes" element={<Classes />} />
-              <Route path="payments" element={<Payments />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-          </Routes>
-        </Router>
+        <ProfileProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route 
+                path="/" 
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="students" element={<Students />} />
+                <Route path="teachers" element={<Teachers />} />
+                <Route path="classes" element={<Classes />} />
+                <Route path="payments" element={<Payments />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+            </Routes>
+          </Router>
+        </ProfileProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   User, 
-  Bell, 
   Palette, 
   Shield, 
   Database, 
@@ -18,7 +17,6 @@ import {
   Download,
   Upload,
   CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,35 +25,196 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/useToast.jsx';
+import { useTheme } from '@/context/ThemeContext';
+import { useProfile } from '@/context/ProfileContext';
 
 export default function Settings() {
   const { toast, ToastComponent } = useToast();
+  const { theme, setTheme } = useTheme();
+  const { profile, setProfile, initials } = useProfile();
   const [activeTab, setActiveTab] = useState('profile');
+  const photoInputRef = useRef(null);
+
+  const [securityForm, setSecurityForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [securityLoading, setSecurityLoading] = useState(false);
+
+  const [dataLoading, setDataLoading] = useState({ export: false, import: false });
   
   // États pour les différents paramètres
-  const [profile, setProfile] = useState({
-    name: 'Admin',
-    email: 'admin@schoolmanage.com',
-    phone: '+33 6 12 34 56 78',
-    role: 'Administrateur'
+  const [preferences, setPreferences] = useState({
+    theme: 'system',
+    language: 'fr',
   });
 
-  const [preferences, setPreferences] = useState({
-    theme: 'dark',
-    language: 'fr',
-    notifications: true,
-    emails: true,
-    sound: true
-  });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('settings.preferences');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          setPreferences((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch {
+      // ignorer
+    }
+  }, []);
+
+  useEffect(() => {
+    // Si aucun réglage n'a encore été sauvegardé, on aligne l'UI sur le thème courant.
+    try {
+      const raw = localStorage.getItem('settings.preferences');
+      if (!raw) {
+        setPreferences((prev) => ({ ...prev, theme }));
+      }
+    } catch {
+      // ignorer
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (preferences && preferences.theme && preferences.theme !== theme) {
+      setTheme(preferences.theme);
+    }
+  }, [preferences.theme, setTheme, theme]);
 
   const handleSave = () => {
+    try {
+      localStorage.setItem('settings.preferences', JSON.stringify(preferences));
+    } catch {
+      // ignorer
+    }
     toast.success('Paramètres enregistrés avec succès !');
+  };
+
+  const handleExportData = async () => {
+    if (dataLoading.export) return;
+    if (!window.electronAPI || !window.electronAPI.exportData) {
+      toast.error('API non disponible');
+      return;
+    }
+
+    setDataLoading((prev) => ({ ...prev, export: true }));
+    try {
+      const result = await window.electronAPI.exportData();
+      if (result && result.success) {
+        toast.success('Export terminé');
+      } else if (result && result.error === 'Cancelled') {
+        // ignorer
+      } else {
+        toast.error((result && result.error) || 'Erreur export');
+      }
+    } catch (error) {
+      toast.error((error && error.message) || 'Erreur export');
+    } finally {
+      setDataLoading((prev) => ({ ...prev, export: false }));
+    }
+  };
+
+  const handleImportData = async () => {
+    if (dataLoading.import) return;
+    if (!window.electronAPI || !window.electronAPI.importData) {
+      toast.error('API non disponible');
+      return;
+    }
+
+    if (!window.confirm('Importer remplacera les données actuelles (élèves, professeurs, classes, paiements). Continuer ?')) {
+      return;
+    }
+
+    setDataLoading((prev) => ({ ...prev, import: true }));
+    try {
+      const result = await window.electronAPI.importData();
+      if (result && result.success) {
+        toast.success('Import terminé');
+      } else if (result && result.error === 'Cancelled') {
+        // ignorer
+      } else {
+        toast.error((result && result.error) || 'Erreur import');
+      }
+    } catch (error) {
+      toast.error((error && error.message) || 'Erreur import');
+    } finally {
+      setDataLoading((prev) => ({ ...prev, import: false }));
+    }
+  };
+
+  const handleSelectPhoto = () => {
+    if (photoInputRef.current) {
+      photoInputRef.current.value = '';
+      photoInputRef.current.click();
+    }
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (!file.type || !file.type.startsWith('image/')) {
+      toast.error('Veuillez sélectionner une image');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfile({ ...profile, photo: reader.result });
+      toast.success('Photo de profil mise à jour');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setProfile({ ...profile, photo: null });
+    toast.success('Photo supprimée');
+  };
+
+  const handleChangePassword = async () => {
+    if (securityLoading) return;
+
+    const current = String(securityForm.currentPassword || '');
+    const next = String(securityForm.newPassword || '');
+    const confirm = String(securityForm.confirmPassword || '');
+
+    if (!current || !next || !confirm) {
+      toast.error('Veuillez remplir tous les champs');
+      return;
+    }
+    if (next.length < 6) {
+      toast.error('Le nouveau mot de passe doit contenir au moins 6 caractères');
+      return;
+    }
+    if (next !== confirm) {
+      toast.error('La confirmation ne correspond pas au nouveau mot de passe');
+      return;
+    }
+    if (!window.electronAPI || !window.electronAPI.changePassword) {
+      toast.error('API non disponible');
+      return;
+    }
+
+    setSecurityLoading(true);
+    try {
+      const result = await window.electronAPI.changePassword(current, next);
+      if (result && result.success) {
+        toast.success('Mot de passe modifié avec succès');
+        setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        toast.error((result && result.error) || 'Erreur lors de la modification');
+      }
+    } catch (error) {
+      toast.error((error && error.message) || 'Erreur lors de la modification');
+    } finally {
+      setSecurityLoading(false);
+    }
   };
 
   const tabs = [
     { id: 'profile', label: 'Profil', icon: User },
     { id: 'appearance', label: 'Apparence', icon: Palette },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Sécurité', icon: Shield },
     { id: 'data', label: 'Données', icon: Database },
   ];
@@ -122,10 +281,18 @@ export default function Settings() {
                 <div className="flex items-center gap-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                   <div className="relative group">
                     <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition-opacity"></div>
-                    <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold shadow-xl cursor-pointer group-hover:scale-105 transition-transform">
-                      A
-                    </div>
-                    <button className="absolute -bottom-2 -right-2 p-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border-2 border-violet-200 dark:border-violet-800 hover:scale-110 transition-transform">
+                    <button
+                      type="button"
+                      onClick={handleSelectPhoto}
+                      className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold shadow-xl cursor-pointer group-hover:scale-105 transition-transform overflow-hidden"
+                    >
+                      {profile.photo ? (
+                        <img src={profile.photo} alt="Avatar" className="h-full w-full object-cover" />
+                      ) : (
+                        initials
+                      )}
+                    </button>
+                    <button type="button" onClick={handleSelectPhoto} className="absolute -bottom-2 -right-2 p-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border-2 border-violet-200 dark:border-violet-800 hover:scale-110 transition-transform">
                       <Camera className="w-4 h-4 text-violet-600" />
                     </button>
                   </div>
@@ -133,11 +300,18 @@ export default function Settings() {
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Photo de profil</h3>
                     <p className="text-sm text-gray-500 mt-1">Cliquez pour changer votre photo</p>
                     <div className="flex gap-2 mt-3">
-                      <Button variant="outline" size="sm" className="border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400">
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handlePhotoChange}
+                      />
+                      <Button type="button" onClick={handleSelectPhoto} variant="outline" size="sm" className="border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400">
                         <Upload className="w-4 h-4 mr-2" />
                         Importer
                       </Button>
-                      <Button variant="outline" size="sm" className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+                      <Button type="button" onClick={handleRemovePhoto} variant="outline" size="sm" className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400" disabled={!profile.photo}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Supprimer
                       </Button>
@@ -288,50 +462,6 @@ export default function Settings() {
             </Card>
           )}
 
-          {/* Notifications */}
-          {activeTab === 'notifications' && (
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 p-6 border-b border-violet-100 dark:border-violet-900/30">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Notifications</h2>
-                <p className="text-sm text-gray-500 mt-1">Gérez vos préférences de notification</p>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                {[
-                  { id: 'notifications', icon: Bell, label: 'Notifications push', desc: 'Recevoir des notifications sur le bureau' },
-                  { id: 'emails', icon: Mail, label: 'Notifications par email', desc: 'Recevoir des résumés par email' },
-                  { id: 'sound', icon: AlertCircle, label: 'Sons', desc: 'Activer les sons des notifications' }
-                ].map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-xl bg-violet-100 dark:bg-violet-900/30">
-                        <item.icon className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{item.label}</p>
-                        <p className="text-sm text-gray-500">{item.desc}</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={preferences[item.id]}
-                      onCheckedChange={(checked) => setPreferences({ ...preferences, [item.id]: checked })}
-                      className="data-[state=checked]:bg-violet-600"
-                    />
-                  </div>
-                ))}
-
-                <div className="flex justify-end pt-4">
-                  <Button 
-                    onClick={handleSave}
-                    className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl px-6"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Enregistrer
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Sécurité */}
           {activeTab === 'security' && (
             <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
@@ -349,6 +479,10 @@ export default function Settings() {
                     <Input
                       type="password"
                       placeholder="••••••••"
+                      value={securityForm.currentPassword}
+                      onChange={(e) =>
+                        setSecurityForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                      }
                       className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                     />
                   </div>
@@ -357,6 +491,10 @@ export default function Settings() {
                     <Input
                       type="password"
                       placeholder="••••••••"
+                      value={securityForm.newPassword}
+                      onChange={(e) =>
+                        setSecurityForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                      }
                       className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                     />
                   </div>
@@ -365,21 +503,31 @@ export default function Settings() {
                     <Input
                       type="password"
                       placeholder="••••••••"
+                      value={securityForm.confirmPassword}
+                      onChange={(e) =>
+                        setSecurityForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                      }
                       className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-between pt-4">
-                  <Button variant="outline" className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                  <Button
+                    variant="outline"
+                    disabled
+                    className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Supprimer le compte
                   </Button>
                   <Button 
+                    onClick={handleChangePassword}
+                    disabled={securityLoading}
                     className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl px-6"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Changer le mot de passe
+                    {securityLoading ? 'Modification...' : 'Changer le mot de passe'}
                   </Button>
                 </div>
               </CardContent>
@@ -401,9 +549,13 @@ export default function Settings() {
                     <p className="text-sm text-gray-500 mb-4">
                       Téléchargez toutes vos données dans un fichier JSON
                     </p>
-                    <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl">
+                    <Button
+                      onClick={handleExportData}
+                      disabled={dataLoading.export}
+                      className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl"
+                    >
                       <Download className="w-4 h-4 mr-2" />
-                      Exporter
+                      {dataLoading.export ? 'Export...' : 'Exporter'}
                     </Button>
                   </div>
 
@@ -413,9 +565,14 @@ export default function Settings() {
                     <p className="text-sm text-gray-500 mb-4">
                       Restaurez vos données depuis un fichier JSON
                     </p>
-                    <Button variant="outline" className="w-full border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 rounded-xl">
+                    <Button
+                      onClick={handleImportData}
+                      disabled={dataLoading.import}
+                      variant="outline"
+                      className="w-full border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 rounded-xl"
+                    >
                       <Upload className="w-4 h-4 mr-2" />
-                      Importer
+                      {dataLoading.import ? 'Import...' : 'Importer'}
                     </Button>
                   </div>
                 </div>

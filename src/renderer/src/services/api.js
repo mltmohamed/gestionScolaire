@@ -32,6 +32,11 @@ export const teacherAPI = {
     const result = await window.electronAPI.getTeachers();
     return result.success ? result.data : [];
   },
+
+  getById: async (id) => {
+    const result = await window.electronAPI.getTeacherById(id);
+    return result.success ? result.data : null;
+  },
   
   create: async (data) => {
     const result = await window.electronAPI.createTeacher(data);
@@ -57,6 +62,14 @@ export const classAPI = {
     }
     const result = await window.electronAPI.getClasses();
     return result.success ? result.data : [];
+  },
+
+  getById: async (id) => {
+    if (!window.electronAPI) {
+      return null;
+    }
+    const result = await window.electronAPI.getClassById(id);
+    return result.success ? result.data : null;
   },
   
   create: async (data) => {

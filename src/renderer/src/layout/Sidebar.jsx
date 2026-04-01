@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/context/AuthContext';
+import { useProfile } from '@/context/ProfileContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -22,6 +23,7 @@ const navigation = [
 
 export default function Sidebar() {
   const { logout, user } = useAuth();
+  const { profile, initials } = useProfile();
 
   return (
     <div className="relative flex h-full w-72 flex-col">
@@ -94,13 +96,21 @@ export default function Sidebar() {
         {/* Footer avec séparation élégante */}
         <div className="border-t border-white/10 p-4 space-y-2">
           <div className="flex items-center px-4 py-2 mb-2">
-            <div className="h-8 w-8 rounded-full bg-[#0066CC]/20 flex items-center justify-center border border-[#0066CC]/30">
-              <span className="text-xs font-bold text-white">
-                {user?.username?.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {profile.photo ? (
+              <img
+                src={profile.photo}
+                alt="Avatar"
+                className="h-8 w-8 rounded-full object-cover border border-white/20"
+              />
+            ) : (
+              <div className="h-8 w-8 rounded-full bg-[#0066CC]/20 flex items-center justify-center border border-[#0066CC]/30">
+                <span className="text-xs font-bold text-white">
+                  {initials}
+                </span>
+              </div>
+            )}
             <div className="ml-3 overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">{user?.username}</p>
+              <p className="text-sm font-medium text-white truncate">{profile.name || user?.username}</p>
               <p className="text-[10px] text-white/60 uppercase tracking-wider font-bold">Administrator</p>
             </div>
           </div>

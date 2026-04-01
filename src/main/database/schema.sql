@@ -1,5 +1,16 @@
 -- Schéma de la base de données pour SchoolManage
 
+ -- Table: users (Comptes)
+ CREATE TABLE IF NOT EXISTS users (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   username TEXT NOT NULL UNIQUE,
+   password_hash TEXT NOT NULL,
+   password_salt TEXT NOT NULL,
+   role TEXT DEFAULT 'administrator',
+   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+ );
+
 -- Table: students (Élèves)
 CREATE TABLE IF NOT EXISTS students (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +131,7 @@ CREATE TABLE IF NOT EXISTS teacher_payments (
 
 -- Index pour améliorer les performances
 CREATE UNIQUE INDEX IF NOT EXISTS idx_students_matricule ON students(matricule);
+ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id);
 CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);

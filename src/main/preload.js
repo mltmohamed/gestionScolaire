@@ -6,6 +6,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSession: () => ipcRenderer.invoke('auth:getSession'),
   login: (username, password) => ipcRenderer.invoke('auth:login', { username, password }),
   logout: () => ipcRenderer.invoke('auth:logout'),
+  changePassword: (currentPassword, newPassword) =>
+    ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword }),
+
+  // Settings
+  getProfile: () => ipcRenderer.invoke('settings:getProfile'),
+  setProfile: (profile) => ipcRenderer.invoke('settings:setProfile', profile),
+
+  // Data
+  exportData: () => ipcRenderer.invoke('data:export'),
+  importData: () => ipcRenderer.invoke('data:import'),
 
   // Students
   getStudents: () => ipcRenderer.invoke('students:getAll'),

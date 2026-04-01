@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
+import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign } from 'lucide-react';
 
 export default function Payments() {
   const { studentPayments, teacherPayments, loading, createStudentPayment, createTeacherPayment } = usePayments();
@@ -28,6 +28,8 @@ export default function Payments() {
   const [isTeacherDialogOpen, setIsTeacherDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('tuition');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingPayment, setViewingPayment] = useState(null);
 
   // Statistiques calculées
   const stats = React.useMemo(() => {
@@ -112,6 +114,11 @@ export default function Payments() {
       description: '',
     });
     setIsTeacherDialogOpen(true);
+  };
+
+  const handleViewPayment = (payment) => {
+    setViewingPayment({ ...payment, _kind: activeTab === 'teachers' ? 'teacher' : 'student' });
+    setIsViewDialogOpen(true);
   };
 
   const handleStudentSubmit = async (e) => {
@@ -271,16 +278,17 @@ export default function Payments() {
                   <TableHead>Méthode</TableHead>
                   {activeTab === 'teachers' && <TableHead>Période</TableHead>}
                   <TableHead>Description</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-10">Chargement...</TableCell>
+                    <TableCell colSpan={8} className="text-center py-10">Chargement...</TableCell>
                   </TableRow>
                 ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-10">Aucun paiement trouvé</TableCell>
+                    <TableCell colSpan={8} className="text-center py-10">Aucun paiement trouvé</TableCell>
                   </TableRow>
                 ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).map((p) => (
                   <TableRow key={p.id}>
@@ -293,6 +301,16 @@ export default function Payments() {
                       <TableCell>{months[p.period_month - 1]} {p.period_year}</TableCell>
                     )}
                     <TableCell>{p.description || '-'}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleViewPayment(p)}
+                        title="Voir"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -300,6 +318,93 @@ export default function Payments() {
           </CardContent>
         </Card>
       </Tabs>
+
+      {/* Dialog de visualisation */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Détails du paiement</DialogTitle>
+            <DialogDescription>
+              Visualisation du paiement sélectionné.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingPayment && (
+            <div className="py-2 space-y-6">
+              <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-gradient-to-br from-[#FF6600]/10 via-white to-[#FF3300]/10 dark:from-[#FF6600]/20 dark:via-black dark:to-[#FF3300]/20 p-5">
+                <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')]" />
+                <div className="relative flex items-center gap-4">
+                  <div className="h-16 w-16 rounded-2xl bg-[#FF6600]/15 flex items-center justify-center border border-white/20 text-[#FF3300]">
+                    <DollarSign className="h-8 w-8" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xl font-extrabold tracking-tight text-black dark:text-white truncate">
+                      {viewingPayment.first_name} {viewingPayment.last_name}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-white/70 dark:bg-white/10 px-3 py-1 text-xs font-semibold text-black dark:text-white border border-black/10 dark:border-white/10">
+                        {new Date(viewingPayment.payment_date).toLocaleDateString('fr-FR')}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-white/70 dark:bg-white/10 px-3 py-1 text-xs font-semibold text-black dark:text-white border border-black/10 dark:border-white/10">
+                        {Number(viewingPayment.amount).toLocaleString()} FCFA
+                      </span>
+                      {viewingPayment._kind === 'student' && (
+                        <span className="inline-flex items-center rounded-full bg-[#0066CC]/10 text-[#003399] border border-[#0066CC]/20 px-3 py-1 text-xs font-semibold dark:text-white">
+                          {viewingPayment.type === 'uniform' ? 'Tenue' : 'Scolarité'}
+                        </span>
+                      )}
+                      {viewingPayment._kind === 'teacher' && (
+                        <span className="inline-flex items-center rounded-full bg-[#0066CC]/10 text-[#003399] border border-[#0066CC]/20 px-3 py-1 text-xs font-semibold dark:text-white">
+                          Salaire
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-gray-900 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-bold text-black dark:text-white">Informations</p>
+                  <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#FF6600] to-[#FF3300]" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {viewingPayment._kind === 'student' && (
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Classe</p>
+                      <p className="text-sm font-semibold">{viewingPayment.class_name || 'N/A'}</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                    <p className="text-[11px] text-muted-foreground">Méthode</p>
+                    <p className="text-sm font-semibold">{viewingPayment.payment_method || '-'}</p>
+                  </div>
+
+                  {viewingPayment._kind === 'teacher' && (
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">Période</p>
+                      <p className="text-sm font-semibold">{months[(viewingPayment.period_month || 1) - 1]} {viewingPayment.period_year || ''}</p>
+                    </div>
+                  )}
+
+                  <div className="sm:col-span-2 rounded-xl border border-black/10 dark:border-white/10 p-3">
+                    <p className="text-[11px] text-muted-foreground">Description</p>
+                    <p className="text-sm font-semibold">{viewingPayment.description || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Fermer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Nouveau Paiement Élève */}
       <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>

@@ -1,14 +1,15 @@
-const { app } = require('electron');
+const { app, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { query, run } = require('./database/db');
+const { query, run, runMany } = require('./database/db');
 
 function setupIPCHandlers(ipcMain) {
   const sessions = new Map();
 
   const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 heures
   const sessionFilePath = path.join(app.getPath('userData'), 'session.json');
+  const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
 
   function now() {
     return Date.now();
@@ -40,6 +41,27 @@ function setupIPCHandlers(ipcMain) {
       if (fs.existsSync(sessionFilePath)) {
         fs.unlinkSync(sessionFilePath);
       }
+    } catch {
+      // ignorer
+    }
+  }
+
+  function readSettings() {
+    try {
+      if (!fs.existsSync(settingsFilePath)) return {};
+      const raw = fs.readFileSync(settingsFilePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return {};
+      return data;
+    } catch {
+      return {};
+    }
+  }
+
+  function writeSettings(data) {
+    try {
+      fs.mkdirSync(path.dirname(settingsFilePath), { recursive: true });
+      fs.writeFileSync(settingsFilePath, JSON.stringify(data), { encoding: 'utf8' });
     } catch {
       // ignorer
     }
@@ -89,6 +111,22 @@ function setupIPCHandlers(ipcMain) {
     });
   }
 
+  function hashPassword(password, salt) {
+    const actualSalt = salt || crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(String(password || ''), actualSalt, 100000, 64, 'sha512').toString('hex');
+    return { hash, salt: actualSalt };
+  }
+
+  function verifyPassword(password, salt, expectedHash) {
+    if (!salt || !expectedHash) return false;
+    const computed = crypto.pbkdf2Sync(String(password || ''), salt, 100000, 64, 'sha512').toString('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(String(expectedHash), 'hex'));
+    } catch {
+      return false;
+    }
+  }
+
   // ==================== AUTH ====================
   handle('auth:getSession', { auth: false }, (event) => {
     const senderId = getSenderId(event);
@@ -115,19 +153,65 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('auth:login', { auth: false }, (event, { username, password } = {}) => {
-    // Auth locale minimale (à remplacer par une table users + hash côté DB)
-    if (username === 'admin' && password === 'admin') {
-      const userData = { id: 1, username: 'admin', role: 'administrator' };
-      const senderId = getSenderId(event);
-      if (senderId) {
-        const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = now() + SESSION_TTL_MS;
-        sessions.set(senderId, { user: userData, token, expiresAt });
-        writePersistedSession({ user: userData, token, expiresAt });
-      }
-      return { success: true, data: userData };
+    const u = String(username || '').trim();
+    const p = String(password || '');
+    if (!u || !p) {
+      return { success: false, error: 'Identifiants incorrects' };
     }
-    return { success: false, error: 'Identifiants incorrects' };
+
+    const rows = query('SELECT id, username, role, password_hash, password_salt FROM users WHERE username = ? LIMIT 1', [u]);
+    const userRow = rows && rows[0];
+    if (!userRow) {
+      return { success: false, error: 'Identifiants incorrects' };
+    }
+    const ok = verifyPassword(p, userRow.password_salt, userRow.password_hash);
+    if (!ok) {
+      return { success: false, error: 'Identifiants incorrects' };
+    }
+
+    const userData = { id: userRow.id, username: userRow.username, role: userRow.role || 'administrator' };
+    const senderId = getSenderId(event);
+    if (senderId) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = now() + SESSION_TTL_MS;
+      sessions.set(senderId, { user: userData, token, expiresAt });
+      writePersistedSession({ user: userData, token, expiresAt });
+    }
+    return { success: true, data: userData };
+  });
+
+  handle('auth:changePassword', { auth: true }, (event, { currentPassword, newPassword } = {}) => {
+    const session = ensureAuth(event);
+    const userId = session && session.user ? session.user.id : null;
+    if (!userId) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const current = String(currentPassword || '');
+    const next = String(newPassword || '');
+    if (!current || !next) {
+      return { success: false, error: 'Champs obligatoires' };
+    }
+    if (next.length < 6) {
+      return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères' };
+    }
+
+    const rows = query('SELECT id, password_hash, password_salt FROM users WHERE id = ? LIMIT 1', [userId]);
+    const userRow = rows && rows[0];
+    if (!userRow) {
+      return { success: false, error: 'Utilisateur introuvable' };
+    }
+    const ok = verifyPassword(current, userRow.password_salt, userRow.password_hash);
+    if (!ok) {
+      return { success: false, error: 'Mot de passe actuel incorrect' };
+    }
+
+    const { hash, salt } = hashPassword(next);
+    run(
+      'UPDATE users SET password_hash = ?, password_salt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [hash, salt, userId]
+    );
+    return { success: true };
   });
 
   handle('auth:logout', { auth: false }, (event) => {
@@ -137,6 +221,261 @@ function setupIPCHandlers(ipcMain) {
     }
     clearPersistedSession();
     return { success: true };
+  });
+
+  // ==================== SETTINGS ====================
+  handle('settings:getProfile', { auth: false }, () => {
+    const settings = readSettings();
+    const profile = settings && settings.profile && typeof settings.profile === 'object' ? settings.profile : null;
+    return { success: true, data: profile };
+  });
+
+  handle('settings:setProfile', { auth: false }, (event, profile) => {
+    const safe = profile && typeof profile === 'object' ? profile : {};
+    const settings = readSettings();
+    const next = { ...settings, profile: safe };
+    writeSettings(next);
+    return { success: true };
+  });
+
+  // ==================== DATA (EXPORT / IMPORT) ====================
+  handle('data:export', { auth: true }, async (event) => {
+    const senderWindow = event && event.sender ? require('electron').BrowserWindow.fromWebContents(event.sender) : null;
+    const { canceled, filePath } = await dialog.showSaveDialog(senderWindow || undefined, {
+      title: 'Exporter les données',
+      defaultPath: `schoolmanage-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, error: 'Cancelled' };
+    }
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: {
+        classes: query('SELECT * FROM classes'),
+        students: query('SELECT * FROM students'),
+        guardians: query('SELECT * FROM guardians'),
+        teachers: query('SELECT * FROM teachers'),
+        subjects: query('SELECT * FROM subjects'),
+        grades: query('SELECT * FROM grades'),
+        student_payments: query('SELECT * FROM student_payments'),
+        teacher_payments: query('SELECT * FROM teacher_payments'),
+      },
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    return { success: true, data: { filePath } };
+  });
+
+  handle('data:import', { auth: true }, async (event) => {
+    const senderWindow = event && event.sender ? require('electron').BrowserWindow.fromWebContents(event.sender) : null;
+    const { canceled, filePaths } = await dialog.showOpenDialog(senderWindow || undefined, {
+      title: 'Importer des données',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+
+    if (canceled || !filePaths || !filePaths[0]) {
+      return { success: false, error: 'Cancelled' };
+    }
+
+    const filePath = filePaths[0];
+    const raw = fs.readFileSync(filePath, 'utf8');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { success: false, error: 'Fichier JSON invalide' };
+    }
+
+    const data = parsed && parsed.data ? parsed.data : null;
+    if (!data || typeof data !== 'object') {
+      return { success: false, error: 'Format de sauvegarde invalide' };
+    }
+
+    const getArr = (k) => (Array.isArray(data[k]) ? data[k] : []);
+    const classes = getArr('classes');
+    const students = getArr('students');
+    const guardians = getArr('guardians');
+    const teachers = getArr('teachers');
+    const subjects = getArr('subjects');
+    const grades = getArr('grades');
+    const studentPayments = getArr('student_payments');
+    const teacherPayments = getArr('teacher_payments');
+
+    const statements = [];
+    // Nettoyer les tables métier (ne touche pas users)
+    statements.push({ sql: 'DELETE FROM grades' });
+    statements.push({ sql: 'DELETE FROM student_payments' });
+    statements.push({ sql: 'DELETE FROM teacher_payments' });
+    statements.push({ sql: 'DELETE FROM guardians' });
+    statements.push({ sql: 'DELETE FROM students' });
+    statements.push({ sql: 'DELETE FROM subjects' });
+    statements.push({ sql: 'DELETE FROM classes' });
+    statements.push({ sql: 'DELETE FROM teachers' });
+
+    // Important: insérer dans un ordre compatible avec les FKs
+    for (const t of teachers) {
+      statements.push({
+        sql: `INSERT INTO teachers (id, first_name, last_name, email, phone, address, specialty, hire_date, status, gender, photo, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          t.id,
+          t.first_name,
+          t.last_name,
+          t.email,
+          t.phone,
+          t.address,
+          t.specialty,
+          t.hire_date,
+          t.status,
+          t.gender,
+          t.photo,
+          t.created_at,
+          t.updated_at,
+        ],
+      });
+    }
+
+    for (const c of classes) {
+      statements.push({
+        sql: `INSERT INTO classes (id, name, level, academic_year, max_students, teacher_id, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [c.id, c.name, c.level, c.academic_year, c.max_students, c.teacher_id, c.created_at, c.updated_at],
+      });
+    }
+
+    for (const s of students) {
+      statements.push({
+        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, class_id, enrollment_date, status, photo, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          s.id,
+          s.first_name,
+          s.last_name,
+          s.date_of_birth,
+          s.gender,
+          s.matricule,
+          s.email,
+          s.phone,
+          s.address,
+          s.class_id,
+          s.enrollment_date,
+          s.status,
+          s.photo,
+          s.created_at,
+          s.updated_at,
+        ],
+      });
+    }
+
+    for (const g of guardians) {
+      statements.push({
+        sql: `INSERT INTO guardians (id, student_id, first_name, last_name, phone, address, job, relationship, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          g.id,
+          g.student_id,
+          g.first_name,
+          g.last_name,
+          g.phone,
+          g.address,
+          g.job,
+          g.relationship,
+          g.created_at,
+          g.updated_at,
+        ],
+      });
+    }
+
+    for (const sub of subjects) {
+      statements.push({
+        sql: `INSERT INTO subjects (id, name, code, description, coefficient, created_at)
+              VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [sub.id, sub.name, sub.code, sub.description, sub.coefficient, sub.created_at],
+      });
+    }
+
+    for (const gr of grades) {
+      statements.push({
+        sql: `INSERT INTO grades (id, student_id, subject_id, value, max_value, comment, date, term, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          gr.id,
+          gr.student_id,
+          gr.subject_id,
+          gr.value,
+          gr.max_value,
+          gr.comment,
+          gr.date,
+          gr.term,
+          gr.created_at,
+        ],
+      });
+    }
+
+    for (const p of studentPayments) {
+      statements.push({
+        sql: `INSERT INTO student_payments (id, student_id, type, amount, payment_date, payment_method, description, academic_year, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          p.id,
+          p.student_id,
+          p.type,
+          p.amount,
+          p.payment_date,
+          p.payment_method,
+          p.description,
+          p.academic_year,
+          p.created_at,
+        ],
+      });
+    }
+
+    for (const p of teacherPayments) {
+      statements.push({
+        sql: `INSERT INTO teacher_payments (id, teacher_id, amount, payment_date, payment_method, period_month, period_year, description, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          p.id,
+          p.teacher_id,
+          p.amount,
+          p.payment_date,
+          p.payment_method,
+          p.period_month,
+          p.period_year,
+          p.description,
+          p.created_at,
+        ],
+      });
+    }
+
+    // exécution transactionnelle
+    try {
+      runMany(statements);
+    } catch (error) {
+      return { success: false, error: error && error.message ? error.message : 'Erreur import' };
+    }
+
+    return {
+      success: true,
+      data: {
+        filePath,
+        counts: {
+          teachers: teachers.length,
+          classes: classes.length,
+          students: students.length,
+          guardians: guardians.length,
+          subjects: subjects.length,
+          grades: grades.length,
+          student_payments: studentPayments.length,
+          teacher_payments: teacherPayments.length,
+        },
+      },
+    };
   });
 
   // ==================== STUDENTS ====================
@@ -321,6 +660,12 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('teachers:update', { auth: true }, (event, id, data) => {
+    if (data && data.status && data.status !== 'active') {
+      const assigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0]?.count || 0;
+      if (assigned > 0) {
+        return { success: false, error: 'Impossible de mettre ce professeur inactif: il est assigné à une classe' };
+      }
+    }
     const sql = `
       UPDATE teachers 
       SET first_name = ?, last_name = ?, email = ?, phone = ?, 
@@ -379,10 +724,15 @@ function setupIPCHandlers(ipcMain) {
       data.max_students || 30,
       data.teacher_id || null
     ]);
+
+    if (data.teacher_id) {
+      run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [data.teacher_id]);
+    }
     return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   handle('classes:update', { auth: true }, (event, id, data) => {
+    const previousTeacherId = query('SELECT teacher_id FROM classes WHERE id = ?', [id])[0]?.teacher_id || null;
     const sql = `
       UPDATE classes 
       SET name = ?, level = ?, academic_year = ?, max_students = ?, teacher_id = ?,
@@ -397,6 +747,16 @@ function setupIPCHandlers(ipcMain) {
       data.teacher_id,
       id
     ]);
+
+    if (data.teacher_id) {
+      run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [data.teacher_id]);
+    }
+    if (previousTeacherId && String(previousTeacherId) !== String(data.teacher_id || '')) {
+      const stillAssigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [previousTeacherId])[0]?.count || 0;
+      if (stillAssigned === 0) {
+        run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [previousTeacherId]);
+      }
+    }
     return { success: true };
   });
 
