@@ -5,6 +5,7 @@ import {
   Users, 
   GraduationCap, 
   School,
+  FileText,
   Wallet,
   Settings as SettingsIcon,
   LogOut
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Professeurs', href: '/teachers', icon: Users },
   { name: 'Classes', href: '/classes', icon: School },
   { name: 'Paiements', href: '/payments', icon: Wallet },
+  { name: 'Bulletin', href: '/bulletin', icon: FileText },
 ];
 
 export default function Sidebar() {
