@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { usePayments } from '@/hooks/usePayments';
 import { useStudents } from '@/hooks/useStudents';
 import { useTeachers } from '@/hooks/useTeachers';
+import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,12 +17,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign } from 'lucide-react';
+import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign, Pencil, Trash2 } from 'lucide-react';
 
 export default function Payments() {
-  const { studentPayments, teacherPayments, loading, createStudentPayment, createTeacherPayment } = usePayments();
+  const {
+    studentPayments,
+    teacherPayments,
+    loading,
+    createStudentPayment,
+    createTeacherPayment,
+    updateStudentPayment,
+    deleteStudentPayment,
+    updateTeacherPayment,
+    deleteTeacherPayment,
+  } = usePayments();
   const { students } = useStudents();
   const { teachers } = useTeachers();
+  const { classes } = useClasses();
   const { toast, ToastComponent } = useToast();
 
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
@@ -30,6 +42,17 @@ export default function Payments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingPayment, setViewingPayment] = useState(null);
+
+  const [editingPayment, setEditingPayment] = useState(null);
+
+  const [filters, setFilters] = useState({
+    class_id: 'all',
+    payment_method: 'all',
+    academic_year: 'all',
+    teacher_id: 'all',
+    period_year: 'all',
+    period_month: 'all',
+  });
 
   // Statistiques calculées
   const stats = React.useMemo(() => {
@@ -81,16 +104,70 @@ export default function Payments() {
     description: '',
   });
 
-  const filteredStudentPayments = studentPayments.filter(p => 
-    p.type === (activeTab === 'tuition' ? 'tuition' : 'uniform') &&
-    (`${p.first_name} ${p.last_name}`).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const paymentMethodOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const p of studentPayments) {
+      const m = String(p.payment_method || '').trim();
+      if (m) values.add(m);
+    }
+    for (const p of teacherPayments) {
+      const m = String(p.payment_method || '').trim();
+      if (m) values.add(m);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [studentPayments, teacherPayments]);
 
-  const filteredTeacherPayments = teacherPayments.filter(p =>
-    (`${p.first_name} ${p.last_name}`).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const academicYearOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const p of studentPayments) {
+      const y = String(p.academic_year || '').trim();
+      if (y) values.add(y);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [studentPayments]);
+
+  const periodYearOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const p of teacherPayments) {
+      const y = p.period_year;
+      if (y !== null && y !== undefined && String(y).trim()) values.add(String(y));
+    }
+    return Array.from(values).sort((a, b) => Number(a) - Number(b));
+  }, [teacherPayments]);
+
+  const filteredStudentPayments = studentPayments.filter((p) => {
+    const q = (searchTerm || '').trim().toLowerCase();
+    const matchSearch = !q
+      ? true
+      : (`${p.first_name || ''} ${p.last_name || ''}`).toLowerCase().includes(q);
+
+    const matchType = p.type === (activeTab === 'tuition' ? 'tuition' : 'uniform');
+    const matchClass = filters.class_id === 'all' ? true : String(p.class_id || '') === String(filters.class_id);
+    const matchMethod =
+      filters.payment_method === 'all' ? true : String(p.payment_method || '').trim() === String(filters.payment_method || '').trim();
+    const matchYear =
+      filters.academic_year === 'all' ? true : String(p.academic_year || '').trim() === String(filters.academic_year || '').trim();
+
+    return matchSearch && matchType && matchClass && matchMethod && matchYear;
+  });
+
+  const filteredTeacherPayments = teacherPayments.filter((p) => {
+    const q = (searchTerm || '').trim().toLowerCase();
+    const matchSearch = !q
+      ? true
+      : (`${p.first_name || ''} ${p.last_name || ''}`).toLowerCase().includes(q);
+
+    const matchTeacher = filters.teacher_id === 'all' ? true : String(p.teacher_id || '') === String(filters.teacher_id);
+    const matchMethod =
+      filters.payment_method === 'all' ? true : String(p.payment_method || '').trim() === String(filters.payment_method || '').trim();
+    const matchYear = filters.period_year === 'all' ? true : String(p.period_year || '') === String(filters.period_year);
+    const matchMonth = filters.period_month === 'all' ? true : String(p.period_month || '') === String(filters.period_month);
+
+    return matchSearch && matchTeacher && matchMethod && matchYear && matchMonth;
+  });
 
   const handleOpenStudentDialog = (type) => {
+    setEditingPayment(null);
     setActiveTab(type);
     setStudentFormData({
       ...studentFormData,
@@ -104,6 +181,7 @@ export default function Payments() {
   };
 
   const handleOpenTeacherDialog = () => {
+    setEditingPayment(null);
     setTeacherFormData({
       teacher_id: '',
       amount: '',
@@ -116,6 +194,57 @@ export default function Payments() {
     setIsTeacherDialogOpen(true);
   };
 
+  const handleEditPayment = (payment) => {
+    if (activeTab === 'teachers') {
+      setEditingPayment({ _kind: 'teacher', id: payment.id });
+      setTeacherFormData({
+        teacher_id: String(payment.teacher_id || ''),
+        amount: String(payment.amount || ''),
+        payment_date: payment.payment_date ? new Date(payment.payment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        payment_method: payment.payment_method || 'Espèces',
+        period_month: payment.period_month || new Date().getMonth() + 1,
+        period_year: payment.period_year || new Date().getFullYear(),
+        description: payment.description || '',
+      });
+      setIsTeacherDialogOpen(true);
+      return;
+    }
+
+    setEditingPayment({ _kind: 'student', id: payment.id });
+    setStudentFormData({
+      student_id: String(payment.student_id || ''),
+      type: payment.type || (activeTab === 'uniform' ? 'uniform' : 'tuition'),
+      amount: String(payment.amount || ''),
+      payment_date: payment.payment_date ? new Date(payment.payment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      payment_method: payment.payment_method || 'Espèces',
+      description: payment.description || '',
+      academic_year: payment.academic_year || '2025-2026',
+    });
+    setIsStudentDialogOpen(true);
+  };
+
+  const handleDeletePayment = async (payment) => {
+    if (!payment || !payment.id) return;
+    if (!window.confirm('Voulez-vous vraiment supprimer ce paiement ?')) return;
+
+    try {
+      let result;
+      if (activeTab === 'teachers') {
+        result = await deleteTeacherPayment(payment.id);
+      } else {
+        result = await deleteStudentPayment(payment.id);
+      }
+
+      if (result && result.success) {
+        toast.success('Paiement supprimé');
+      } else {
+        toast.error((result && result.error) || 'Erreur suppression');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Erreur suppression');
+    }
+  };
+
   const handleViewPayment = (payment) => {
     setViewingPayment({ ...payment, _kind: activeTab === 'teachers' ? 'teacher' : 'student' });
     setIsViewDialogOpen(true);
@@ -124,10 +253,13 @@ export default function Payments() {
   const handleStudentSubmit = async (e) => {
     e.preventDefault();
     try {
-      const result = await createStudentPayment(studentFormData);
+      const result = editingPayment && editingPayment._kind === 'student'
+        ? await updateStudentPayment(editingPayment.id, studentFormData)
+        : await createStudentPayment(studentFormData);
       if (result.success) {
-        toast.success('Paiement enregistré avec succès !');
+        toast.success(editingPayment && editingPayment._kind === 'student' ? 'Paiement modifié avec succès !' : 'Paiement enregistré avec succès !');
         setIsStudentDialogOpen(false);
+        setEditingPayment(null);
       } else {
         toast.error(result.error || 'Erreur lors de l\'enregistrement');
       }
@@ -139,10 +271,13 @@ export default function Payments() {
   const handleTeacherSubmit = async (e) => {
     e.preventDefault();
     try {
-      const result = await createTeacherPayment(teacherFormData);
+      const result = editingPayment && editingPayment._kind === 'teacher'
+        ? await updateTeacherPayment(editingPayment.id, teacherFormData)
+        : await createTeacherPayment(teacherFormData);
       if (result.success) {
-        toast.success('Paiement enseignant enregistré avec succès !');
+        toast.success(editingPayment && editingPayment._kind === 'teacher' ? 'Paiement modifié avec succès !' : 'Paiement enseignant enregistré avec succès !');
         setIsTeacherDialogOpen(false);
+        setEditingPayment(null);
       } else {
         toast.error(result.error || 'Erreur lors de l\'enregistrement');
       }
@@ -266,6 +401,124 @@ export default function Payments() {
                 />
               </div>
             </div>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+              {activeTab !== 'teachers' ? (
+                <>
+                  <select
+                    value={filters.class_id}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les classes</option>
+                    <option value="">Non assigné</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.payment_method}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, payment_method: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les méthodes</option>
+                    {paymentMethodOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.academic_year}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les années</option>
+                    {academicYearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={filters.teacher_id}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Tous les enseignants</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.first_name} {t.last_name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.payment_method}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, payment_method: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les méthodes</option>
+                    {paymentMethodOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.period_year}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, period_year: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les années</option>
+                    {periodYearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.period_month}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, period_month: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Tous les mois</option>
+                    {months.map((m, i) => (
+                      <option key={m} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilters({
+                    class_id: 'all',
+                    payment_method: 'all',
+                    academic_year: 'all',
+                    teacher_id: 'all',
+                    period_year: 'all',
+                    period_month: 'all',
+                  });
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -309,6 +562,22 @@ export default function Payments() {
                         title="Voir"
                       >
                         <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditPayment(p)}
+                        title="Modifier"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeletePayment(p)}
+                        title="Supprimer"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -412,7 +681,9 @@ export default function Payments() {
           <form onSubmit={handleStudentSubmit}>
             <DialogHeader>
               <DialogTitle>
-                {studentFormData.type === 'tuition' ? 'Nouveau Paiement Scolarité' : 'Nouveau Paiement Tenue'}
+                {editingPayment && editingPayment._kind === 'student'
+                  ? 'Modifier le paiement'
+                  : (studentFormData.type === 'tuition' ? 'Nouveau Paiement Scolarité' : 'Nouveau Paiement Tenue')}
               </DialogTitle>
               <DialogDescription>
                 Remplissez les informations ci-dessous pour enregistrer le paiement.
@@ -439,7 +710,10 @@ export default function Payments() {
                   <Input
                     type="number"
                     value={studentFormData.amount}
-                    onChange={(e) => setStudentFormData({ ...studentFormData, amount: e.target.value })}
+                    onChange={(e) => {
+                      const next = String(e.target.value ?? '').replace(/,/g, '');
+                      setStudentFormData((prev) => ({ ...prev, amount: next }));
+                    }}
                     required
                   />
                 </div>
@@ -486,7 +760,7 @@ export default function Payments() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsStudentDialogOpen(false)}>Annuler</Button>
-              <Button type="submit">Enregistrer</Button>
+              <Button type="submit">{editingPayment && editingPayment._kind === 'student' ? 'Modifier' : 'Enregistrer'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -497,7 +771,7 @@ export default function Payments() {
         <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleTeacherSubmit}>
             <DialogHeader>
-              <DialogTitle>Paiement de Salaire Enseignant</DialogTitle>
+              <DialogTitle>{editingPayment && editingPayment._kind === 'teacher' ? 'Modifier le paiement' : 'Paiement de Salaire Enseignant'}</DialogTitle>
               <DialogDescription>
                 Enregistrez le paiement mensuel d'un enseignant.
               </DialogDescription>
@@ -523,7 +797,10 @@ export default function Payments() {
                   <Input
                     type="number"
                     value={teacherFormData.amount}
-                    onChange={(e) => setTeacherFormData({ ...teacherFormData, amount: e.target.value })}
+                    onChange={(e) => {
+                      const next = String(e.target.value ?? '').replace(/,/g, '');
+                      setTeacherFormData((prev) => ({ ...prev, amount: next }));
+                    }}
                     required
                   />
                 </div>
@@ -570,7 +847,7 @@ export default function Payments() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsTeacherDialogOpen(false)}>Annuler</Button>
-              <Button type="submit">Enregistrer le Paiement</Button>
+              <Button type="submit">{editingPayment && editingPayment._kind === 'teacher' ? 'Modifier' : 'Enregistrer le Paiement'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

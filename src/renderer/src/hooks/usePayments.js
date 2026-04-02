@@ -44,6 +44,38 @@ export function usePayments() {
     return result;
   };
 
+  const updateStudentPayment = async (id, data) => {
+    const result = await paymentAPI.updateStudentPayment(id, data);
+    if (result.success) {
+      await loadPayments();
+    }
+    return result;
+  };
+
+  const deleteStudentPayment = async (id) => {
+    const result = await paymentAPI.deleteStudentPayment(id);
+    if (result.success) {
+      await loadPayments();
+    }
+    return result;
+  };
+
+  const updateTeacherPayment = async (id, data) => {
+    const result = await paymentAPI.updateTeacherPayment(id, data);
+    if (result.success) {
+      await loadPayments();
+    }
+    return result;
+  };
+
+  const deleteTeacherPayment = async (id) => {
+    const result = await paymentAPI.deleteTeacherPayment(id);
+    if (result.success) {
+      await loadPayments();
+    }
+    return result;
+  };
+
   return {
     studentPayments,
     teacherPayments,
@@ -51,6 +83,10 @@ export function usePayments() {
     error,
     createStudentPayment,
     createTeacherPayment,
+    updateStudentPayment,
+    deleteStudentPayment,
+    updateTeacherPayment,
+    deleteTeacherPayment,
     refresh: loadPayments,
   };
 }

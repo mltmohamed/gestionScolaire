@@ -24,6 +24,11 @@ export default function Teachers() {
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [viewingTeacher, setViewingTeacher] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState({
+    specialty: 'all',
+    status: 'all',
+    gender: 'all',
+  });
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -60,10 +65,30 @@ export default function Teachers() {
     );
   };
 
-  const filteredTeachers = teachers.filter(teacher =>
-    teacher.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    teacher.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const specialtyOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const t of teachers) {
+      const s = String(t.specialty || '').trim();
+      if (s) values.add(s);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [teachers]);
+
+  const filteredTeachers = teachers.filter((teacher) => {
+    const q = (searchTerm || '').trim().toLowerCase();
+    const matchSearch = !q
+      ? true
+      : (teacher.first_name || '').toLowerCase().includes(q) || (teacher.last_name || '').toLowerCase().includes(q);
+
+    const matchSpecialty =
+      filters.specialty === 'all'
+        ? true
+        : String(teacher.specialty || '').trim() === String(filters.specialty || '').trim();
+    const matchStatus = filters.status === 'all' ? true : String(teacher.status || '') === String(filters.status);
+    const matchGender = filters.gender === 'all' ? true : String(teacher.gender || '') === String(filters.gender);
+
+    return matchSearch && matchSpecialty && matchStatus && matchGender;
+  });
 
   const handleOpenDialog = (teacher = null) => {
     console.log('Ouverture dialog professeur:', teacher ? 'Modification' : 'Ajout');
@@ -171,15 +196,63 @@ export default function Teachers() {
       {/* Barre de recherche */}
       <Card>
         <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Rechercher un professeur..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+          <div className="grid gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Rechercher un professeur..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select
+                value={filters.specialty}
+                onChange={(e) => setFilters((prev) => ({ ...prev, specialty: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Toutes les spécialités</option>
+                {specialtyOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="active">Actif</option>
+                <option value="inactive">Inactif</option>
+              </select>
+
+              <select
+                value={filters.gender}
+                onChange={(e) => setFilters((prev) => ({ ...prev, gender: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les sexes</option>
+                <option value="M">Masculin</option>
+                <option value="F">Féminin</option>
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilters({ specialty: 'all', status: 'all', gender: 'all' });
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

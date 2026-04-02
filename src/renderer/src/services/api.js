@@ -120,6 +120,16 @@ export const paymentAPI = {
     const result = await window.electronAPI.createStudentPayment(data);
     return result;
   },
+
+  updateStudentPayment: async (id, data) => {
+    const result = await window.electronAPI.updateStudentPayment(id, data);
+    return result;
+  },
+
+  deleteStudentPayment: async (id) => {
+    const result = await window.electronAPI.deleteStudentPayment(id);
+    return result;
+  },
   
   getTeacherPayments: async () => {
     const result = await window.electronAPI.getTeacherPayments();
@@ -128,6 +138,16 @@ export const paymentAPI = {
   
   createTeacherPayment: async (data) => {
     const result = await window.electronAPI.createTeacherPayment(data);
+    return result;
+  },
+
+  updateTeacherPayment: async (id, data) => {
+    const result = await window.electronAPI.updateTeacherPayment(id, data);
+    return result;
+  },
+
+  deleteTeacherPayment: async (id) => {
+    const result = await window.electronAPI.deleteTeacherPayment(id);
     return result;
   },
 };

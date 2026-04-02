@@ -26,6 +26,11 @@ export default function Students() {
   const [editingStudent, setEditingStudent] = useState(null);
   const [viewingStudent, setViewingStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState({
+    class_id: 'all',
+    status: 'all',
+    gender: 'all',
+  });
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -71,10 +76,19 @@ export default function Students() {
     );
   };
 
-  const filteredStudents = students.filter(student =>
-    student.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter((student) => {
+    const q = (searchTerm || '').trim().toLowerCase();
+    const matchSearch = !q
+      ? true
+      : (student.first_name || '').toLowerCase().includes(q) || (student.last_name || '').toLowerCase().includes(q);
+
+    const matchClass =
+      filters.class_id === 'all' ? true : String(student.class_id || '') === String(filters.class_id);
+    const matchStatus = filters.status === 'all' ? true : String(student.status || '') === String(filters.status);
+    const matchGender = filters.gender === 'all' ? true : String(student.gender || '') === String(filters.gender);
+
+    return matchSearch && matchClass && matchStatus && matchGender;
+  });
 
   const handleOpenDialog = async (student = null) => {
     console.log('Ouverture dialog étudiant:', student ? 'Modification' : 'Ajout');
@@ -210,15 +224,64 @@ export default function Students() {
       {/* Barre de recherche */}
       <Card>
         <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Rechercher un élève..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+          <div className="grid gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Rechercher un élève..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select
+                value={filters.class_id}
+                onChange={(e) => setFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Toutes les classes</option>
+                <option value="">Non assigné</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name} - {cls.level}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="active">Actif</option>
+                <option value="inactive">Inactif</option>
+              </select>
+
+              <select
+                value={filters.gender}
+                onChange={(e) => setFilters((prev) => ({ ...prev, gender: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les sexes</option>
+                <option value="M">Masculin</option>
+                <option value="F">Féminin</option>
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilters({ class_id: 'all', status: 'all', gender: 'all' });
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

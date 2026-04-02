@@ -26,6 +26,11 @@ export default function Classes() {
   const [editingClass, setEditingClass] = useState(null);
   const [viewingClass, setViewingClass] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState({
+    level: 'all',
+    academic_year: 'all',
+    teacher_id: 'all',
+  });
   const [formData, setFormData] = useState({
     name: '',
     level: '',
@@ -34,10 +39,42 @@ export default function Classes() {
     teacher_id: '',
   });
 
-  const filteredClasses = classes.filter(cls =>
-    cls.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cls.level?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const levelOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const c of classes) {
+      const v = String(c.level || '').trim();
+      if (v) values.add(v);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [classes]);
+
+  const academicYearOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const c of classes) {
+      const v = String(c.academic_year || '').trim();
+      if (v) values.add(v);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [classes]);
+
+  const filteredClasses = classes.filter((cls) => {
+    const q = (searchTerm || '').trim().toLowerCase();
+    const matchSearch = !q
+      ? true
+      : (cls.name || '').toLowerCase().includes(q) || (cls.level || '').toLowerCase().includes(q);
+
+    const matchLevel = filters.level === 'all' ? true : String(cls.level || '').trim() === String(filters.level || '').trim();
+    const matchYear =
+      filters.academic_year === 'all'
+        ? true
+        : String(cls.academic_year || '').trim() === String(filters.academic_year || '').trim();
+    const matchTeacher =
+      filters.teacher_id === 'all'
+        ? true
+        : String(cls.teacher_id || '') === String(filters.teacher_id);
+
+    return matchSearch && matchLevel && matchYear && matchTeacher;
+  });
 
   const handleOpenDialog = (cls = null) => {
     if (cls) {
@@ -138,15 +175,70 @@ export default function Classes() {
       {/* Barre de recherche */}
       <Card>
         <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Rechercher une classe..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+          <div className="grid gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Rechercher une classe..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select
+                value={filters.level}
+                onChange={(e) => setFilters((prev) => ({ ...prev, level: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les niveaux</option>
+                {levelOptions.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.academic_year}
+                onChange={(e) => setFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Toutes les années</option>
+                {academicYearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.teacher_id}
+                onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Tous les professeurs</option>
+                <option value="">Non assigné</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.first_name} {t.last_name}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilters({ level: 'all', academic_year: 'all', teacher_id: 'all' });
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -265,6 +357,7 @@ export default function Classes() {
                     required
                   >
                     <option value="">Sélectionner</option>
+                    <option value="Jardin d'enfant">Jardin d'enfant</option>
                     <option value="1ère année">1ère année</option>
                     <option value="2ème année">2ème année</option>
                     <option value="3ème année">3ème année</option>

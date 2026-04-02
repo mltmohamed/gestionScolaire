@@ -882,7 +882,7 @@ function setupIPCHandlers(ipcMain) {
   // Student Payments (Uniforms, Tuition)
   handle('payments:getStudentPayments', { auth: true }, () => {
     const sql = `
-      SELECT p.*, s.first_name, s.last_name, c.name as class_name
+      SELECT p.*, s.first_name, s.last_name, s.class_id, c.name as class_name
       FROM student_payments p
       JOIN students s ON p.student_id = s.id
       LEFT JOIN classes c ON s.class_id = c.id
@@ -906,6 +906,32 @@ function setupIPCHandlers(ipcMain) {
       data.academic_year || null
     ]);
     return { success: true, data: { id: result.lastInsertRowid } };
+  });
+
+  handle('payments:updateStudentPayment', { auth: true }, (event, id, data) => {
+    if (!id) return { success: false, error: 'ID paiement obligatoire' };
+    const sql = `
+      UPDATE student_payments
+      SET student_id = ?, type = ?, amount = ?, payment_date = ?, payment_method = ?, description = ?, academic_year = ?
+      WHERE id = ?
+    `;
+    run(sql, [
+      data.student_id,
+      data.type,
+      data.amount,
+      data.payment_date || new Date().toISOString().split('T')[0],
+      data.payment_method || 'Espèces',
+      data.description || null,
+      data.academic_year || null,
+      id,
+    ]);
+    return { success: true };
+  });
+
+  handle('payments:deleteStudentPayment', { auth: true }, (event, id) => {
+    if (!id) return { success: false, error: 'ID paiement obligatoire' };
+    run('DELETE FROM student_payments WHERE id = ?', [id]);
+    return { success: true };
   });
 
   // Teacher Payments
@@ -934,6 +960,32 @@ function setupIPCHandlers(ipcMain) {
       data.description || null
     ]);
     return { success: true, data: { id: result.lastInsertRowid } };
+  });
+
+  handle('payments:updateTeacherPayment', { auth: true }, (event, id, data) => {
+    if (!id) return { success: false, error: 'ID paiement obligatoire' };
+    const sql = `
+      UPDATE teacher_payments
+      SET teacher_id = ?, amount = ?, payment_date = ?, payment_method = ?, period_month = ?, period_year = ?, description = ?
+      WHERE id = ?
+    `;
+    run(sql, [
+      data.teacher_id,
+      data.amount,
+      data.payment_date || new Date().toISOString().split('T')[0],
+      data.payment_method || 'Espèces',
+      data.period_month,
+      data.period_year,
+      data.description || null,
+      id,
+    ]);
+    return { success: true };
+  });
+
+  handle('payments:deleteTeacherPayment', { auth: true }, (event, id) => {
+    if (!id) return { success: false, error: 'ID paiement obligatoire' };
+    run('DELETE FROM teacher_payments WHERE id = ?', [id]);
+    return { success: true };
   });
 }
 
