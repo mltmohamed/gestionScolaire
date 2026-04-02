@@ -59,4 +59,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createTeacherPayment: (data) => ipcRenderer.invoke('payments:createTeacherPayment', data),
   updateTeacherPayment: (id, data) => ipcRenderer.invoke('payments:updateTeacherPayment', id, data),
   deleteTeacherPayment: (id) => ipcRenderer.invoke('payments:deleteTeacherPayment', id),
+
+  // Bulletin
+  getBulletin: (studentId, academicYear) => ipcRenderer.invoke('bulletin:get', studentId, academicYear),
+  saveBulletin: (studentId, academicYear, payload) => ipcRenderer.invoke('bulletin:save', studentId, academicYear, payload),
 });

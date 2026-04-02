@@ -151,3 +151,15 @@ export const paymentAPI = {
     return result;
   },
 };
+
+export const bulletinAPI = {
+  get: async (studentId, academicYear) => {
+    const result = await window.electronAPI.getBulletin(studentId, academicYear);
+    return result.success ? result.data : null;
+  },
+
+  save: async (studentId, academicYear, payload) => {
+    const result = await window.electronAPI.saveBulletin(studentId, academicYear, payload);
+    return result;
+  },
+};

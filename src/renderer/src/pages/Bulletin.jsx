@@ -1,7 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useStudents } from '@/hooks/useStudents';
+import { useClasses } from '@/hooks/useClasses';
+import { useToast } from '@/hooks/useToast.jsx';
+import { useBulletin } from '@/hooks/useBulletin';
 
 const MONTHS = [
   { key: 'oct', label: 'OCT.' },
@@ -50,6 +54,23 @@ function formatNumber(n) {
 
 export default function Bulletin() {
   const printRef = useRef(null);
+  const { students } = useStudents();
+  const { classes } = useClasses();
+  const { toast, ToastComponent } = useToast();
+  const { loading: bulletinLoading, getBulletin, saveBulletin } = useBulletin();
+
+  const defaultAcademicYear = useMemo(() => {
+    const y = new Date().getFullYear();
+    return `${y}-${y + 1}`;
+  }, []);
+
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [studentFilters, setStudentFilters] = useState({
+    class_id: 'all',
+    academic_year: 'all',
+  });
 
   const [notes, setNotes] = useState(() => {
     const base = {};
@@ -78,6 +99,159 @@ export default function Bulletin() {
   const [observationsGenerales, setObservationsGenerales] = useState('');
   const [decision, setDecision] = useState('');
   const [rang, setRang] = useState('');
+
+  const selectedStudent = useMemo(() => {
+    if (!selectedStudentId) return null;
+    return students.find((s) => String(s.id) === String(selectedStudentId)) || null;
+  }, [students, selectedStudentId]);
+
+  const classById = useMemo(() => {
+    const map = new Map();
+    for (const c of classes) {
+      if (c && c.id != null) map.set(String(c.id), c);
+    }
+    return map;
+  }, [classes]);
+
+  const classAcademicYearOptions = useMemo(() => {
+    const values = new Set();
+    for (const c of classes) {
+      const y = String(c.academic_year || '').trim();
+      if (y) values.add(y);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [classes]);
+
+  const filteredStudents = useMemo(() => {
+    const q = String(studentSearchTerm || '').trim().toLowerCase();
+    return students.filter((s) => {
+      const first = String(s.first_name || '').toLowerCase();
+      const last = String(s.last_name || '').toLowerCase();
+      const mat = String(s.matricule || '').toLowerCase();
+
+      const matchSearch = !q
+        ? true
+        : first.includes(q) || last.includes(q) || mat.includes(q) || `${last} ${first}`.includes(q);
+
+      const matchClass =
+        studentFilters.class_id === 'all'
+          ? true
+          : String(s.class_id || '') === String(studentFilters.class_id);
+
+      const cls = s.class_id != null ? classById.get(String(s.class_id)) : null;
+      const matchYear =
+        studentFilters.academic_year === 'all'
+          ? true
+          : String(cls?.academic_year || '').trim() === String(studentFilters.academic_year || '').trim();
+
+      return matchSearch && matchClass && matchYear;
+    });
+  }, [students, studentSearchTerm, studentFilters, classById]);
+
+  const selectedClass = useMemo(() => {
+    if (!selectedStudent || !selectedStudent.class_id) return null;
+    return classes.find((c) => String(c.id) === String(selectedStudent.class_id)) || null;
+  }, [classes, selectedStudent]);
+
+  const resetBulletinState = useCallback(() => {
+    const baseNotes = {};
+    for (const subject of SUBJECTS) {
+      baseNotes[subject] = {};
+      for (const m of MONTHS) {
+        baseNotes[subject][m.key] = '';
+      }
+    }
+    setNotes(baseNotes);
+
+    const baseVisas = {};
+    for (const m of MONTHS) {
+      baseVisas[m.key] = {
+        maitre: '',
+        directeur: '',
+        parents: '',
+        observations: '',
+      };
+    }
+    setVisas(baseVisas);
+
+    setObservationsGenerales('');
+    setDecision('');
+    setRang('');
+  }, []);
+
+  const loadBulletin = useCallback(async () => {
+      if (!selectedStudentId || !academicYear) {
+        resetBulletinState();
+        return;
+      }
+
+      const data = await getBulletin(selectedStudentId, academicYear);
+      if (!data) {
+        resetBulletinState();
+        return;
+      }
+
+      const baseNotes = {};
+      for (const subject of SUBJECTS) {
+        baseNotes[subject] = {};
+        for (const m of MONTHS) {
+          baseNotes[subject][m.key] = '';
+        }
+      }
+
+      for (const row of Array.isArray(data.notes) ? data.notes : []) {
+        const subject = String(row.subject || '').trim();
+        const monthKey = String(row.month_key || '').trim();
+        if (!subject || !monthKey) continue;
+        if (!baseNotes[subject] || baseNotes[subject][monthKey] === undefined) continue;
+        const v = row.note;
+        const n = v === '' || v === null || v === undefined ? '' : clampNote(v);
+        baseNotes[subject][monthKey] = n === '' ? '' : String(n);
+      }
+      setNotes(baseNotes);
+
+      let loadedVisas = null;
+      const meta = data.meta || null;
+      if (meta && meta.visas_json) {
+        try {
+          loadedVisas = JSON.parse(meta.visas_json);
+        } catch {
+          loadedVisas = null;
+        }
+      }
+      if (loadedVisas && typeof loadedVisas === 'object') {
+        const nextVisas = {};
+        for (const m of MONTHS) {
+          const row = loadedVisas[m.key] || {};
+          nextVisas[m.key] = {
+            maitre: row.maitre || '',
+            directeur: row.directeur || '',
+            parents: row.parents || '',
+            observations: row.observations || '',
+          };
+        }
+        setVisas(nextVisas);
+      } else {
+        const baseVisas = {};
+        for (const m of MONTHS) {
+          baseVisas[m.key] = {
+            maitre: '',
+            directeur: '',
+            parents: '',
+            observations: '',
+          };
+        }
+        setVisas(baseVisas);
+      }
+
+      setRang(meta && meta.rang ? String(meta.rang) : '');
+      setDecision(meta && meta.decision ? String(meta.decision) : '');
+      setObservationsGenerales(meta && meta.observations_generales ? String(meta.observations_generales) : '');
+  }, [academicYear, getBulletin, resetBulletinState, selectedStudentId]);
+
+  useEffect(() => {
+    loadBulletin();
+  }, [loadBulletin]);
 
   const totalsByMonth = useMemo(() => {
     const totals = {};
@@ -136,17 +310,159 @@ export default function Bulletin() {
     window.print();
   };
 
+  const handleSave = async () => {
+    if (!selectedStudentId) {
+      toast.error('Sélectionne un élève avant d’enregistrer.');
+      return;
+    }
+    if (!academicYear) {
+      toast.error('Renseigne une année scolaire.');
+      return;
+    }
+
+    const payloadNotes = [];
+    for (const subject of SUBJECTS) {
+      for (const m of MONTHS) {
+        const raw = notes?.[subject]?.[m.key];
+        if (raw === '' || raw === null || raw === undefined) continue;
+        const n = Number(raw);
+        if (Number.isNaN(n)) continue;
+        if (n < 0 || n > 10) continue;
+        payloadNotes.push({ subject, month_key: m.key, note: n });
+      }
+    }
+
+    const res = await saveBulletin(selectedStudentId, academicYear, {
+      notes: payloadNotes,
+      meta: {
+        rang,
+        decision,
+        observations_generales: observationsGenerales,
+        visas_json: JSON.stringify(visas || {}),
+      },
+    });
+
+    if (res && res.success) {
+      toast.success('Bulletin enregistré.');
+    } else {
+      toast.error(res?.error || 'Impossible d’enregistrer le bulletin.');
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {ToastComponent}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bulletin</h1>
           <p className="text-muted-foreground">Saisie des notes, calculs automatiques, visas et décisions</p>
         </div>
-        <Button variant="outline" onClick={handleExportPdf}>
-          Exporter PDF
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportPdf}>
+            Exporter PDF
+          </Button>
+          <Button onClick={handleSave} disabled={bulletinLoading}>
+            Enregistrer
+          </Button>
+        </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Élève & Année</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                value={studentSearchTerm}
+                onChange={(e) => setStudentSearchTerm(e.target.value)}
+                placeholder="Rechercher un élève (nom, prénom, matricule)"
+                className="h-10"
+              />
+
+              <select
+                value={studentFilters.class_id}
+                onChange={(e) => setStudentFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Toutes les classes</option>
+                <option value="">Non assigné</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={studentFilters.academic_year}
+                onChange={(e) => setStudentFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Toutes les années</option>
+                {classAcademicYearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Sélectionner un élève</option>
+                {filteredStudents.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.last_name} {s.first_name}
+                    {s.matricule ? ` (${s.matricule})` : ''}
+                  </option>
+                ))}
+              </select>
+
+              <Input
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                placeholder="2025-2026"
+                className="h-10"
+              />
+
+              <Input
+                value={selectedClass ? selectedClass.name : selectedStudent?.class_name || ''}
+                placeholder="Classe"
+                className="h-10"
+                readOnly
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetBulletinState}
+              disabled={bulletinLoading}
+            >
+              Nouveau bulletin
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setStudentSearchTerm('');
+                setStudentFilters({ class_id: 'all', academic_year: 'all' });
+              }}
+              disabled={bulletinLoading}
+            >
+              Réinitialiser filtres
+            </Button>
+            {bulletinLoading && <span className="text-sm text-muted-foreground">Chargement...</span>}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

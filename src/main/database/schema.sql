@@ -129,6 +129,34 @@ CREATE TABLE IF NOT EXISTS teacher_payments (
   FOREIGN KEY (teacher_id) REFERENCES teachers(id)
 );
 
+-- Table: bulletin_notes (Bulletin mensuel par matière)
+CREATE TABLE IF NOT EXISTS bulletin_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL,
+  academic_year TEXT NOT NULL,
+  month_key TEXT NOT NULL, -- oct, nov, dec, jan, feb, mar, apr, may, jun
+  subject TEXT NOT NULL,
+  note DECIMAL(4,2) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  UNIQUE(student_id, academic_year, month_key, subject)
+);
+
+-- Table: bulletin_meta (Visas/observations/décision)
+CREATE TABLE IF NOT EXISTS bulletin_meta (
+  student_id INTEGER NOT NULL,
+  academic_year TEXT NOT NULL,
+  rang TEXT,
+  decision TEXT, -- pass | repeat | excluded
+  observations_generales TEXT,
+  visas_json TEXT, -- JSON: {oct:{...}, ...}
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(student_id, academic_year),
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
 -- Index pour améliorer les performances
 CREATE UNIQUE INDEX IF NOT EXISTS idx_students_matricule ON students(matricule);
  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -138,3 +166,5 @@ CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_student_payments_student ON student_payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_teacher ON teacher_payments(teacher_id);
+
+CREATE INDEX IF NOT EXISTS idx_bulletin_notes_student_year ON bulletin_notes(student_id, academic_year);

@@ -254,15 +254,17 @@ function setupIPCHandlers(ipcMain) {
     const payload = {
       version: 1,
       exportedAt: new Date().toISOString(),
-      data: {
-        classes: query('SELECT * FROM classes'),
+      tables: {
         students: query('SELECT * FROM students'),
         guardians: query('SELECT * FROM guardians'),
+        classes: query('SELECT * FROM classes'),
         teachers: query('SELECT * FROM teachers'),
         subjects: query('SELECT * FROM subjects'),
         grades: query('SELECT * FROM grades'),
         student_payments: query('SELECT * FROM student_payments'),
         teacher_payments: query('SELECT * FROM teacher_payments'),
+        bulletin_notes: query('SELECT * FROM bulletin_notes'),
+        bulletin_meta: query('SELECT * FROM bulletin_meta'),
       },
     };
 
@@ -291,31 +293,35 @@ function setupIPCHandlers(ipcMain) {
       return { success: false, error: 'Fichier JSON invalide' };
     }
 
-    const data = parsed && parsed.data ? parsed.data : null;
+    const data = parsed && parsed.tables ? parsed.tables : null;
     if (!data || typeof data !== 'object') {
       return { success: false, error: 'Format de sauvegarde invalide' };
     }
 
     const getArr = (k) => (Array.isArray(data[k]) ? data[k] : []);
-    const classes = getArr('classes');
     const students = getArr('students');
     const guardians = getArr('guardians');
+    const classes = getArr('classes');
     const teachers = getArr('teachers');
     const subjects = getArr('subjects');
     const grades = getArr('grades');
     const studentPayments = getArr('student_payments');
     const teacherPayments = getArr('teacher_payments');
+    const bulletinNotes = getArr('bulletin_notes');
+    const bulletinMeta = getArr('bulletin_meta');
 
     const statements = [];
     // Nettoyer les tables métier (ne touche pas users)
     statements.push({ sql: 'DELETE FROM grades' });
     statements.push({ sql: 'DELETE FROM student_payments' });
     statements.push({ sql: 'DELETE FROM teacher_payments' });
+    statements.push({ sql: 'DELETE FROM bulletin_notes' });
+    statements.push({ sql: 'DELETE FROM bulletin_meta' });
     statements.push({ sql: 'DELETE FROM guardians' });
     statements.push({ sql: 'DELETE FROM students' });
     statements.push({ sql: 'DELETE FROM subjects' });
-    statements.push({ sql: 'DELETE FROM classes' });
     statements.push({ sql: 'DELETE FROM teachers' });
+    statements.push({ sql: 'DELETE FROM classes' });
 
     // Important: insérer dans un ordre compatible avec les FKs
     for (const t of teachers) {
@@ -453,6 +459,40 @@ function setupIPCHandlers(ipcMain) {
       });
     }
 
+    for (const n of bulletinNotes) {
+      statements.push({
+        sql: `INSERT INTO bulletin_notes (id, student_id, academic_year, month_key, subject, note, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          n.id,
+          n.student_id,
+          n.academic_year,
+          n.month_key,
+          n.subject,
+          n.note,
+          n.created_at,
+          n.updated_at,
+        ],
+      });
+    }
+
+    for (const m of bulletinMeta) {
+      statements.push({
+        sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          m.student_id,
+          m.academic_year,
+          m.rang,
+          m.decision,
+          m.observations_generales,
+          m.visas_json,
+          m.created_at,
+          m.updated_at,
+        ],
+      });
+    }
+
     // exécution transactionnelle
     try {
       runMany(statements);
@@ -473,9 +513,81 @@ function setupIPCHandlers(ipcMain) {
           grades: grades.length,
           student_payments: studentPayments.length,
           teacher_payments: teacherPayments.length,
+          bulletin_notes: bulletinNotes.length,
+          bulletin_meta: bulletinMeta.length,
         },
       },
     };
+  });
+
+  // ==================== BULLETIN ====================
+  handle('bulletin:get', { auth: true }, (event, studentId, academicYear) => {
+    const sid = Number(studentId);
+    const year = String(academicYear || '').trim();
+    if (!sid || !year) return { success: false, error: 'Paramètres bulletin invalides' };
+
+    const notes = query(
+      `SELECT month_key, subject, note
+       FROM bulletin_notes
+       WHERE student_id = ? AND academic_year = ?`,
+      [sid, year]
+    );
+
+    const metaRow = query(
+      `SELECT rang, decision, observations_generales, visas_json
+       FROM bulletin_meta
+       WHERE student_id = ? AND academic_year = ?
+       LIMIT 1`,
+      [sid, year]
+    );
+
+    const meta = metaRow && metaRow[0] ? metaRow[0] : null;
+    return { success: true, data: { notes, meta } };
+  });
+
+  handle('bulletin:save', { auth: true }, (event, studentId, academicYear, payload) => {
+    const sid = Number(studentId);
+    const year = String(academicYear || '').trim();
+    if (!sid || !year) return { success: false, error: 'Paramètres bulletin invalides' };
+
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const notes = Array.isArray(p.notes) ? p.notes : [];
+    const meta = p.meta && typeof p.meta === 'object' ? p.meta : {};
+
+    const statements = [];
+    statements.push({ sql: 'DELETE FROM bulletin_notes WHERE student_id = ? AND academic_year = ?', params: [sid, year] });
+    statements.push({ sql: 'DELETE FROM bulletin_meta WHERE student_id = ? AND academic_year = ?', params: [sid, year] });
+
+    for (const n of notes) {
+      if (!n) continue;
+      const monthKey = String(n.month_key || '').trim();
+      const subject = String(n.subject || '').trim();
+      const note = Number(n.note);
+      if (!monthKey || !subject) continue;
+      if (Number.isNaN(note) || note < 0 || note > 10) continue;
+      statements.push({
+        sql: `INSERT INTO bulletin_notes (student_id, academic_year, month_key, subject, note, updated_at)
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        params: [sid, year, monthKey, subject, note],
+      });
+    }
+
+    const visasJson = meta.visas_json != null ? String(meta.visas_json) : null;
+    statements.push({
+      sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      params: [
+        sid,
+        year,
+        meta.rang || null,
+        meta.decision || null,
+        meta.observations_generales || null,
+        visasJson,
+      ],
+    });
+
+    runMany(statements);
+    return { success: true };
   });
 
   // ==================== STUDENTS ====================
