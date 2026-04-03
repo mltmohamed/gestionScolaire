@@ -67,6 +67,9 @@ class DatabaseManager {
       ensureColumn('teachers', 'gender', 'TEXT');
       ensureColumn('students', 'matricule', 'TEXT');
 
+      ensureColumn('bulletin_meta', 'bulletin_type', 'TEXT');
+      ensureColumn('bulletin_meta', 'data_json', 'TEXT');
+
       // Table guardians (tuteur)
       this.db.run(`
         CREATE TABLE IF NOT EXISTS guardians (

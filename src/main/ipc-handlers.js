@@ -534,7 +534,7 @@ function setupIPCHandlers(ipcMain) {
     );
 
     const metaRow = query(
-      `SELECT rang, decision, observations_generales, visas_json
+      `SELECT rang, decision, observations_generales, visas_json, bulletin_type, data_json
        FROM bulletin_meta
        WHERE student_id = ? AND academic_year = ?
        LIMIT 1`,
@@ -554,28 +554,33 @@ function setupIPCHandlers(ipcMain) {
     const notes = Array.isArray(p.notes) ? p.notes : [];
     const meta = p.meta && typeof p.meta === 'object' ? p.meta : {};
 
+    const bulletinType = meta.bulletin_type != null ? String(meta.bulletin_type) : null;
+
     const statements = [];
-    statements.push({ sql: 'DELETE FROM bulletin_notes WHERE student_id = ? AND academic_year = ?', params: [sid, year] });
     statements.push({ sql: 'DELETE FROM bulletin_meta WHERE student_id = ? AND academic_year = ?', params: [sid, year] });
 
-    for (const n of notes) {
-      if (!n) continue;
-      const monthKey = String(n.month_key || '').trim();
-      const subject = String(n.subject || '').trim();
-      const note = Number(n.note);
-      if (!monthKey || !subject) continue;
-      if (Number.isNaN(note) || note < 0 || note > 10) continue;
-      statements.push({
-        sql: `INSERT INTO bulletin_notes (student_id, academic_year, month_key, subject, note, updated_at)
-              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        params: [sid, year, monthKey, subject, note],
-      });
+    if (bulletinType !== 'college') {
+      statements.push({ sql: 'DELETE FROM bulletin_notes WHERE student_id = ? AND academic_year = ?', params: [sid, year] });
+      for (const n of notes) {
+        if (!n) continue;
+        const monthKey = String(n.month_key || '').trim();
+        const subject = String(n.subject || '').trim();
+        const note = Number(n.note);
+        if (!monthKey || !subject) continue;
+        if (Number.isNaN(note) || note < 0 || note > 10) continue;
+        statements.push({
+          sql: `INSERT INTO bulletin_notes (student_id, academic_year, month_key, subject, note, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          params: [sid, year, monthKey, subject, note],
+        });
+      }
     }
 
     const visasJson = meta.visas_json != null ? String(meta.visas_json) : null;
+    const dataJson = meta.data_json != null ? String(meta.data_json) : null;
     statements.push({
-      sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, bulletin_type, data_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
       params: [
         sid,
         year,
@@ -583,6 +588,8 @@ function setupIPCHandlers(ipcMain) {
         meta.decision || null,
         meta.observations_generales || null,
         visasJson,
+        bulletinType,
+        dataJson,
       ],
     });
 

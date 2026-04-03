@@ -41,6 +41,24 @@ const SUBJECTS = [
   'Conduite',
 ];
 
+const COLLEGE_SUBJECTS = [
+  'Rédaction',
+  'Dictée et questions',
+  'Mathématiques',
+  'Physique-Chimie',
+  'Anglais',
+  'Bio',
+  'Hist-Géo',
+  'ECM',
+  'EPS',
+  'Musique',
+  'EF',
+  'Dessin',
+  'Lecture',
+  'Récitation',
+  'Conduite',
+];
+
 function clampNote(value) {
   if (value === '' || value === null || value === undefined) return '';
   const n = Number(String(value).replace(',', '.'));
@@ -66,6 +84,7 @@ export default function Bulletin() {
 
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
+  const [bulletinType, setBulletinType] = useState('primary');
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [studentFilters, setStudentFilters] = useState({
     class_id: 'all',
@@ -106,6 +125,26 @@ export default function Bulletin() {
   const [moyennePremier, setMoyennePremier] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printPortalEl, setPrintPortalEl] = useState(null);
+
+  const [collegeTrimestreLabel, setCollegeTrimestreLabel] = useState('COMPOSITION DU 2e TRIMESTRE');
+  const [collegeNotes, setCollegeNotes] = useState(() => {
+    const base = {};
+    for (const s of COLLEGE_SUBJECTS) {
+      base[s] = {
+        note_classe: '',
+        comp_x2: '',
+        moyenne: '',
+        coeff: '1',
+        appreciation: '',
+      };
+    }
+    return base;
+  });
+  const [collegeDecision, setCollegeDecision] = useState('');
+  const [collegeRang, setCollegeRang] = useState('');
+  const [collegeEffectif, setCollegeEffectif] = useState('');
+  const [collegeMoyenne1, setCollegeMoyenne1] = useState('');
+  const [collegeMoyenneDernier, setCollegeMoyenneDernier] = useState('');
 
   useEffect(() => {
     let el = document.getElementById('bulletin-print-portal');
@@ -197,114 +236,199 @@ export default function Bulletin() {
     setRangByMonth(baseRang);
     setRangGeneral('');
     setMoyennePremier('');
+
+    const baseCollege = {};
+    for (const s of COLLEGE_SUBJECTS) {
+      baseCollege[s] = {
+        note_classe: '',
+        comp_x2: '',
+        moyenne: '',
+        coeff: '1',
+        appreciation: '',
+      };
+    }
+    setCollegeNotes(baseCollege);
+    setCollegeDecision('');
+    setCollegeRang('');
+    setCollegeEffectif('');
+    setCollegeMoyenne1('');
+    setCollegeMoyenneDernier('');
+    setCollegeTrimestreLabel('COMPOSITION DU 2e TRIMESTRE');
   }, []);
 
   const loadBulletin = useCallback(async () => {
-      if (!selectedStudentId || !academicYear) {
-        resetBulletinState();
-        return;
-      }
+    if (!selectedStudentId || !academicYear) {
+      resetBulletinState();
+      return;
+    }
 
-      const data = await getBulletin(selectedStudentId, academicYear);
-      if (!data) {
-        resetBulletinState();
-        return;
-      }
+    const data = await getBulletin(selectedStudentId, academicYear);
+    if (!data) {
+      resetBulletinState();
+      return;
+    }
 
-      const baseNotes = {};
-      for (const subject of SUBJECTS) {
-        baseNotes[subject] = {};
-        for (const m of MONTHS) {
-          baseNotes[subject][m.key] = '';
+    const baseNotes = {};
+    for (const subject of SUBJECTS) {
+      baseNotes[subject] = {};
+      for (const m of MONTHS) {
+        baseNotes[subject][m.key] = '';
+      }
+    }
+
+    for (const row of Array.isArray(data.notes) ? data.notes : []) {
+      const subject = String(row.subject || '').trim();
+      const monthKey = String(row.month_key || '').trim();
+      if (!subject || !monthKey) continue;
+      if (!baseNotes[subject] || baseNotes[subject][monthKey] === undefined) continue;
+      const v = row.note;
+      const n = v === '' || v === null || v === undefined ? '' : clampNote(v);
+      baseNotes[subject][monthKey] = n === '' ? '' : String(n);
+    }
+    setNotes(baseNotes);
+
+    let loadedVisas = null;
+    const meta = data.meta || null;
+    if (meta && meta.bulletin_type) {
+      const t = String(meta.bulletin_type || '').trim();
+      if (t === 'college' || t === 'primary') {
+        setBulletinType(t);
+      }
+    }
+
+    if (meta && meta.data_json) {
+      try {
+        const payload = JSON.parse(String(meta.data_json));
+        if (payload && typeof payload === 'object') {
+          if (payload.trimestre_label) setCollegeTrimestreLabel(String(payload.trimestre_label));
+          if (payload.notes && typeof payload.notes === 'object') {
+            const next = {};
+            for (const s of COLLEGE_SUBJECTS) {
+              const row = payload.notes[s] || {};
+              next[s] = {
+                note_classe: row.note_classe ?? '',
+                comp_x2: row.comp_x2 ?? '',
+                moyenne: row.moyenne ?? '',
+                coeff: row.coeff ?? '1',
+                appreciation: row.appreciation ?? '',
+              };
+            }
+            setCollegeNotes(next);
+          }
+          if (payload.decision != null) setCollegeDecision(String(payload.decision));
+          if (payload.rang != null) setCollegeRang(String(payload.rang));
+          if (payload.effectif != null) setCollegeEffectif(String(payload.effectif));
+          if (payload.moyenne1 != null) setCollegeMoyenne1(String(payload.moyenne1));
+          if (payload.moyenneDernier != null) setCollegeMoyenneDernier(String(payload.moyenneDernier));
         }
+      } catch {
+        // ignorer
       }
-
-      for (const row of Array.isArray(data.notes) ? data.notes : []) {
-        const subject = String(row.subject || '').trim();
-        const monthKey = String(row.month_key || '').trim();
-        if (!subject || !monthKey) continue;
-        if (!baseNotes[subject] || baseNotes[subject][monthKey] === undefined) continue;
-        const v = row.note;
-        const n = v === '' || v === null || v === undefined ? '' : clampNote(v);
-        baseNotes[subject][monthKey] = n === '' ? '' : String(n);
+    }
+    if (meta && meta.visas_json) {
+      try {
+        loadedVisas = JSON.parse(meta.visas_json);
+      } catch {
+        loadedVisas = null;
       }
-      setNotes(baseNotes);
+    }
+    if (loadedVisas && typeof loadedVisas === 'object') {
+      const nextVisas = {};
+      for (const m of MONTHS) {
+        const row = loadedVisas[m.key] || {};
+        nextVisas[m.key] = {
+          maitre: row.maitre || '',
+          directeur: row.directeur || '',
+          parents: row.parents || '',
+          observations: row.observations || '',
+        };
+      }
+      setVisas(nextVisas);
+    } else {
+      const baseVisas = {};
+      for (const m of MONTHS) {
+        baseVisas[m.key] = {
+          maitre: '',
+          directeur: '',
+          parents: '',
+          observations: '',
+        };
+      }
+      setVisas(baseVisas);
+    }
 
-      let loadedVisas = null;
-      const meta = data.meta || null;
-      if (meta && meta.visas_json) {
+    setDecision(meta && meta.decision ? String(meta.decision) : '');
+
+    const baseRang = {};
+    for (const m of MONTHS) baseRang[m.key] = '';
+    let loadedGeneral = '';
+    if (meta && meta.rang) {
+      const raw = String(meta.rang);
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
         try {
-          loadedVisas = JSON.parse(meta.visas_json);
-        } catch {
-          loadedVisas = null;
-        }
-      }
-      if (loadedVisas && typeof loadedVisas === 'object') {
-        const nextVisas = {};
-        for (const m of MONTHS) {
-          const row = loadedVisas[m.key] || {};
-          nextVisas[m.key] = {
-            maitre: row.maitre || '',
-            directeur: row.directeur || '',
-            parents: row.parents || '',
-            observations: row.observations || '',
-          };
-        }
-        setVisas(nextVisas);
-      } else {
-        const baseVisas = {};
-        for (const m of MONTHS) {
-          baseVisas[m.key] = {
-            maitre: '',
-            directeur: '',
-            parents: '',
-            observations: '',
-          };
-        }
-        setVisas(baseVisas);
-      }
-
-      setDecision(meta && meta.decision ? String(meta.decision) : '');
-
-      const baseRang = {};
-      for (const m of MONTHS) baseRang[m.key] = '';
-      let loadedGeneral = '';
-      if (meta && meta.rang) {
-        const raw = String(meta.rang);
-        const trimmed = raw.trim();
-        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-          try {
-            const parsed = JSON.parse(trimmed);
-            if (parsed && typeof parsed === 'object') {
-              // Nouveau format: { general: string, byMonth: {oct:..., ...} }
-              if (parsed.byMonth && typeof parsed.byMonth === 'object') {
-                for (const m of MONTHS) {
-                  baseRang[m.key] = parsed.byMonth[m.key] ? String(parsed.byMonth[m.key]) : '';
-                }
-                loadedGeneral = parsed.general ? String(parsed.general) : '';
-              } else {
-                // Ancien format JSON: {oct:..., nov:...}
-                for (const m of MONTHS) {
-                  baseRang[m.key] = parsed[m.key] ? String(parsed[m.key]) : '';
-                }
+          const parsed = JSON.parse(trimmed);
+          if (parsed && typeof parsed === 'object') {
+            // Nouveau format: { general: string, byMonth: {oct:..., ...} }
+            if (parsed.byMonth && typeof parsed.byMonth === 'object') {
+              for (const m of MONTHS) {
+                baseRang[m.key] = parsed.byMonth[m.key] ? String(parsed.byMonth[m.key]) : '';
+              }
+              loadedGeneral = parsed.general ? String(parsed.general) : '';
+            } else {
+              // Ancien format JSON: {oct:..., nov:...}
+              for (const m of MONTHS) {
+                baseRang[m.key] = parsed[m.key] ? String(parsed[m.key]) : '';
               }
             }
-          } catch {
-            // ignorer
           }
-        } else {
-          for (const m of MONTHS) baseRang[m.key] = raw;
+        } catch {
+          // ignorer
         }
+      } else {
+        for (const m of MONTHS) baseRang[m.key] = raw;
       }
-      setRangByMonth(baseRang);
-      setRangGeneral(loadedGeneral);
+    }
+    setRangByMonth(baseRang);
+    setRangGeneral(loadedGeneral);
 
-      setMoyennePremier(meta && meta.moyenne_premier ? String(meta.moyenne_premier) : '');
+    setMoyennePremier(meta && meta.moyenne_premier ? String(meta.moyenne_premier) : '');
   }, [academicYear, getBulletin, resetBulletinState, selectedStudentId]);
 
   useEffect(() => {
     loadBulletin();
   }, [loadBulletin]);
+
+  const collegeComputed = useMemo(() => {
+    const rows = COLLEGE_SUBJECTS.map((subject) => {
+      const r = collegeNotes?.[subject] || {};
+      const noteClasse = r.note_classe === '' ? null : Number(String(r.note_classe).replace(',', '.'));
+      const compX2 = r.comp_x2 === '' ? null : Number(String(r.comp_x2).replace(',', '.'));
+      const moyenne = r.moyenne === '' ? null : Number(String(r.moyenne).replace(',', '.'));
+      const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
+      const safeCoeff = Number.isFinite(coeff) && coeff > 0 ? coeff : 1;
+      const notesCoeff = Number.isFinite(moyenne) ? moyenne * safeCoeff : null;
+      return {
+        subject,
+        noteClasse,
+        compX2,
+        moyenne,
+        coeff: safeCoeff,
+        notesCoeff,
+        appreciation: String(r.appreciation || ''),
+      };
+    });
+
+    const totalCoeff = rows.reduce((sum, r) => sum + (Number.isFinite(r.coeff) ? r.coeff : 0), 0);
+    const totalNotesCoeff = rows.reduce((sum, r) => sum + (Number.isFinite(r.notesCoeff) ? r.notesCoeff : 0), 0);
+    const moyenneGenerale = totalCoeff > 0 ? totalNotesCoeff / totalCoeff : 0;
+    return {
+      rows,
+      totalCoeff,
+      totalNotesCoeff,
+      moyenneGenerale,
+    };
+  }, [collegeNotes]);
 
   const totalsByMonth = useMemo(() => {
     const totals = {};
@@ -390,7 +514,7 @@ export default function Bulletin() {
     return '';
   }, [decision]);
 
-  const PrintView = useMemo(() => {
+  const PrintViewPrimary = useMemo(() => {
     const studentName = selectedStudent ? `${selectedStudent.last_name || ''} ${selectedStudent.first_name || ''}`.trim() : '';
     const className = selectedClass ? selectedClass.name : selectedStudent?.class_name || '';
 
@@ -544,6 +668,86 @@ export default function Bulletin() {
     );
   }, [academicYear, averagesByMonth, decision, decisionLabel, formatNumber, moyenneAnnuelle, moyenneSemestre1, noteDisplay, notes, rangByMonth, rangGlobal, selectedClass, selectedStudent, totalsByMonth, visas]);
 
+  const PrintViewCollege = useMemo(() => {
+    const studentName = selectedStudent ? `${selectedStudent.first_name || ''} ${selectedStudent.last_name || ''}`.trim() : '';
+    const className = selectedClass ? selectedClass.name : selectedStudent?.class_name || '';
+    const totalNotes = collegeComputed.totalNotesCoeff;
+    const moy = collegeComputed.moyenneGenerale;
+    const rang = String(collegeRang || '').trim();
+    const eff = String(collegeEffectif || '').trim();
+    const rangDisplay = rang && eff ? `${rang}e/${eff}` : (rang || '');
+
+    return (
+      <div className="bulletin2-print">
+        <div className="bulletin2-header">
+          <div>Academie de Kalaban coro</div>
+          <div>CAP DE KALABANCORO</div>
+          <div>Ecole privée LA SAGESSE</div>
+        </div>
+
+        <div className="bulletin2-title">{collegeTrimestreLabel || 'COMPOSITION DU 2e TRIMESTRE'}</div>
+
+        <div className="bulletin2-meta">
+          <div>Bulletin de l'élève: <strong>{studentName}</strong></div>
+          <div>Année scolaire <strong>{academicYear || ''}</strong></div>
+          <div>CLASSE: <strong>{className}</strong></div>
+        </div>
+
+        <table className="bulletin2-table">
+          <thead>
+            <tr>
+              <th className="bulletin2-th bulletin2-th--subject">Matieres</th>
+              <th className="bulletin2-th">notes classe</th>
+              <th className="bulletin2-th">Comp x 2</th>
+              <th className="bulletin2-th">Moy. gené</th>
+              <th className="bulletin2-th">coeff</th>
+              <th className="bulletin2-th">Notes coeff</th>
+              <th className="bulletin2-th bulletin2-th--app">Appreciations</th>
+            </tr>
+          </thead>
+          <tbody>
+            {collegeComputed.rows.map((r) => (
+              <tr key={r.subject}>
+                <td className="bulletin2-td bulletin2-td--subject">{r.subject}</td>
+                <td className="bulletin2-td">{r.noteClasse ?? ''}</td>
+                <td className="bulletin2-td">{r.compX2 ?? ''}</td>
+                <td className="bulletin2-td">{r.moyenne ?? ''}</td>
+                <td className="bulletin2-td">{r.coeff ?? ''}</td>
+                <td className="bulletin2-td">{r.notesCoeff != null ? formatNumber(r.notesCoeff) : ''}</td>
+                <td className="bulletin2-td bulletin2-td--app">{r.appreciation}</td>
+              </tr>
+            ))}
+            <tr>
+              <td className="bulletin2-td bulletin2-td--subject" colSpan={4}><strong>Total coeff</strong></td>
+              <td className="bulletin2-td"><strong>{collegeComputed.totalCoeff}</strong></td>
+              <td className="bulletin2-td" colSpan={2}></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="bulletin2-bottom">
+          <div className="bulletin2-decision">{collegeDecision || ''}</div>
+          <div className="bulletin2-summary">
+            <div className="bulletin2-summary__row"><span>Total:</span> <strong>{formatNumber(totalNotes)}</strong></div>
+            <div className="bulletin2-summary__row"><span>Moyenne:</span> <strong>{formatNumber(moy)}</strong></div>
+            <div className="bulletin2-summary__row"><span>Rang:</span> <strong>{rangDisplay}</strong></div>
+            <div className="bulletin2-summary__row"><span>Moyenne du 1er:</span> <strong>{collegeMoyenne1 || ''}</strong></div>
+            <div className="bulletin2-summary__row"><span>Moyenne du dernier:</span> <strong>{collegeMoyenneDernier || ''}</strong></div>
+          </div>
+        </div>
+
+        <div className="bulletin2-sign">
+          <div>Le directeur</div>
+          <div>Les parents</div>
+        </div>
+
+        <div className="bulletin2-date">Kouralé le {new Date().toLocaleDateString('fr-FR')}</div>
+      </div>
+    );
+  }, [academicYear, collegeComputed, collegeDecision, collegeEffectif, collegeMoyenne1, collegeMoyenneDernier, collegeRang, collegeTrimestreLabel, formatNumber, selectedClass, selectedStudent]);
+
+  const PrintView = bulletinType === 'college' ? PrintViewCollege : PrintViewPrimary;
+
   const handleSave = async () => {
     if (!selectedStudentId) {
       toast.error('Sélectionne un élève avant d’enregistrer.');
@@ -566,16 +770,39 @@ export default function Bulletin() {
       }
     }
 
-    const res = await saveBulletin(selectedStudentId, academicYear, {
-      notes: payloadNotes,
-      meta: {
-        rang: JSON.stringify({ general: rangGeneral || '', byMonth: rangByMonth || {} }),
-        decision,
-        moyenne_premier: moyennePremier,
-        visas_json: JSON.stringify(visas || {}),
-      },
-    });
+    const metaPayload = {
+      bulletin_type: bulletinType,
+      decision,
+      rang: JSON.stringify({ general: rangGeneral || '', byMonth: rangByMonth || {} }),
+      visas_json: JSON.stringify(visas || {}),
+      moyenne_premier: moyennePremier || '',
+    };
 
+    let payload = {
+      notes: payloadNotes,
+      meta: metaPayload,
+    };
+
+    if (bulletinType === 'college') {
+      const collegePayload = {
+        trimestre_label: collegeTrimestreLabel,
+        notes: collegeNotes,
+        decision: collegeDecision,
+        rang: collegeRang,
+        effectif: collegeEffectif,
+        moyenne1: collegeMoyenne1,
+        moyenneDernier: collegeMoyenneDernier,
+      };
+      payload = {
+        notes: [],
+        meta: {
+          bulletin_type: 'college',
+          data_json: JSON.stringify(collegePayload),
+        },
+      };
+    }
+
+    const res = await saveBulletin(selectedStudentId, academicYear, payload);
     if (res && res.success) {
       toast.success('Bulletin enregistré.');
     } else {
@@ -630,6 +857,21 @@ export default function Bulletin() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Type de bulletin</label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={bulletinType}
+                  onChange={(e) => setBulletinType(e.target.value)}
+                  disabled={bulletinLoading}
+                >
+                  <option value="primary">3e à 6e</option>
+                  <option value="college">7e à 9e</option>
+                </select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Input
                 value={studentSearchTerm}
@@ -726,90 +968,151 @@ export default function Bulletin() {
           <CardTitle>Tableau de notes</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-border text-sm">
-              <thead>
-                <tr className="bg-muted/40">
-                  <th className="border border-border px-3 py-2 text-left">Matières/Mois</th>
-                  {MONTHS.map((m) => (
-                    <th key={m.key} className="border border-border px-3 py-2 text-center whitespace-nowrap">
-                      {m.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {SUBJECTS.map((subject) => (
-                  <tr key={subject}>
-                    <td className="border border-border px-3 py-2 font-medium whitespace-nowrap">{subject}</td>
+          {bulletinType === 'college' ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Libellé</label>
+                  <Input value={collegeTrimestreLabel} onChange={(e) => setCollegeTrimestreLabel(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Décision</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={collegeDecision}
+                    onChange={(e) => setCollegeDecision(e.target.value)}
+                  >
+                    <option value="">-</option>
+                    <option value="Passable">Passable</option>
+                    <option value="Assez bien">Assez bien</option>
+                    <option value="Bien">Bien</option>
+                    <option value="Très bien">Très bien</option>
+                    <option value="Excellent">Excellent</option>
+                    <option value="Insuffisant">Insuffisant</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Rang</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input placeholder="Rang" value={collegeRang} onChange={(e) => setCollegeRang(e.target.value)} />
+                    <Input placeholder="Effectif" value={collegeEffectif} onChange={(e) => setCollegeEffectif(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Moyenne du 1er</label>
+                  <Input value={collegeMoyenne1} onChange={(e) => setCollegeMoyenne1(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Moyenne du dernier</label>
+                  <Input value={collegeMoyenneDernier} onChange={(e) => setCollegeMoyenneDernier(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="min-w-[1100px] w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="p-2 text-left w-[220px]">Matières</th>
+                      <th className="p-2 text-center">Notes classe</th>
+                      <th className="p-2 text-center">Comp x 2</th>
+                      <th className="p-2 text-center">Moy. gené</th>
+                      <th className="p-2 text-center">Coeff</th>
+                      <th className="p-2 text-center">Notes coeff</th>
+                      <th className="p-2 text-left w-[260px]">Appréciations</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COLLEGE_SUBJECTS.map((subject) => {
+                      const r = collegeNotes?.[subject] || {};
+                      const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
+                      const safeCoeff = Number.isFinite(coeff) && coeff > 0 ? coeff : 1;
+                      const moy = r.moyenne === '' ? null : Number(String(r.moyenne).replace(',', '.'));
+                      const notesCoeff = Number.isFinite(moy) ? moy * safeCoeff : null;
+                      return (
+                        <tr key={subject} className="border-t">
+                          <td className="p-2 font-medium">{subject}</td>
+                          <td className="p-1 text-center">
+                            <Input
+                              value={r.note_classe}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_classe: e.target.value } }))}
+                              className="h-8 text-center"
+                            />
+                          </td>
+                          <td className="p-1 text-center">
+                            <Input
+                              value={r.comp_x2}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], comp_x2: e.target.value } }))}
+                              className="h-8 text-center"
+                            />
+                          </td>
+                          <td className="p-1 text-center">
+                            <Input
+                              value={r.moyenne}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], moyenne: e.target.value } }))}
+                              className="h-8 text-center"
+                            />
+                          </td>
+                          <td className="p-1 text-center">
+                            <Input
+                              value={r.coeff}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], coeff: e.target.value } }))}
+                              className="h-8 text-center"
+                            />
+                          </td>
+                          <td className="p-2 text-center font-semibold">{notesCoeff != null ? formatNumber(notesCoeff) : ''}</td>
+                          <td className="p-1">
+                            <Input
+                              value={r.appreciation}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], appreciation: e.target.value } }))}
+                              className="h-8"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-border text-sm">
+                <thead>
+                  <tr className="bg-muted/40">
+                    <th className="border border-border px-3 py-2 text-left">Matières/Mois</th>
                     {MONTHS.map((m) => (
-                      <td key={m.key} className="border border-border px-2 py-1">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={10}
-                          step="0.25"
-                          value={notes?.[subject]?.[m.key] ?? ''}
-                          onChange={(e) => handleNoteChange(subject, m.key, e.target.value)}
-                          className="h-9 text-center"
-                        />
-                      </td>
+                      <th key={m.key} className="border border-border px-3 py-2 text-center whitespace-nowrap">
+                        {m.label}
+                      </th>
                     ))}
                   </tr>
-                ))}
-
-                <tr className="bg-muted/20 font-semibold">
-                  <td className="border border-border px-3 py-2">TOTAL</td>
-                  {MONTHS.map((m) => (
-                    <td key={m.key} className="border border-border px-3 py-2 text-center">
-                      {formatNumber(totalsByMonth[m.key])}
-                    </td>
+                </thead>
+                <tbody>
+                  {SUBJECTS.map((subject) => (
+                    <tr key={subject}>
+                      <td className="border border-border px-3 py-2 font-medium whitespace-nowrap">{subject}</td>
+                      {MONTHS.map((m) => (
+                        <td key={m.key} className="border border-border px-2 py-1">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={10}
+                            step="0.25"
+                            value={notes?.[subject]?.[m.key] ?? ''}
+                            onChange={(e) => handleNoteChange(subject, m.key, e.target.value)}
+                            className="h-9 text-center"
+                          />
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-
-                <tr>
-                  <td className="border border-border px-3 py-2">Moyenne de Classe</td>
-                  {MONTHS.map((m) => (
-                    <td key={m.key} className="border border-border px-3 py-2 text-center">
-                      {formatNumber(averagesByMonth[m.key])}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr>
-                  <td className="border border-border px-3 py-2">Moyenne de Composition</td>
-                  {MONTHS.map((m) => (
-                    <td key={m.key} className="border border-border px-3 py-2 text-center">
-                      {formatNumber(averagesByMonth[m.key])}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr className="font-semibold">
-                  <td className="border border-border px-3 py-2">Moyenne Générale</td>
-                  {MONTHS.map((m) => (
-                    <td key={m.key} className="border border-border px-3 py-2 text-center">
-                      {formatNumber(averagesByMonth[m.key])}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr>
-                  <td className="border border-border px-3 py-2">Classement (Rang)</td>
-                  {MONTHS.map((m) => (
-                    <td key={m.key} className="border border-border px-2 py-1">
-                      <Input
-                        value={rangByMonth?.[m.key] ?? ''}
-                        onChange={(e) => setRangByMonth((prev) => ({ ...prev, [m.key]: e.target.value }))}
-                        className="h-9 text-center"
-                        placeholder="-"
-                      />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1112,6 +1415,103 @@ export default function Bulletin() {
 
 .bulletin-spacer {
   height: 6px;
+}
+
+.bulletin2-print {
+  width: 100%;
+  background: #fff;
+  border: 2px solid #222;
+  padding: 18px;
+  box-sizing: border-box;
+  font-size: 12px;
+  color: #111;
+}
+
+.bulletin2-header {
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.bulletin2-title {
+  margin: 10px auto 6px;
+  text-align: center;
+  font-weight: 800;
+  border: 2px solid #222;
+  padding: 3px 8px;
+  display: inline-block;
+}
+
+.bulletin2-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+  margin: 6px 0 10px;
+}
+
+.bulletin2-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.bulletin2-th,
+.bulletin2-td {
+  border: 1px solid #222;
+  padding: 3px 4px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.bulletin2-th--subject,
+.bulletin2-td--subject {
+  text-align: left;
+  width: 24%;
+  font-weight: 700;
+}
+
+.bulletin2-th--app,
+.bulletin2-td--app {
+  text-align: left;
+  width: 22%;
+}
+
+.bulletin2-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 12px;
+  gap: 10px;
+  align-items: start;
+}
+
+.bulletin2-summary {
+  border: 2px solid #222;
+  padding: 8px 10px;
+}
+
+.bulletin2-summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0;
+}
+
+.bulletin2-decision {
+  font-weight: 800;
+}
+
+.bulletin2-sign {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  font-weight: 700;
+}
+
+.bulletin2-date {
+  margin-top: 12px;
+  font-weight: 600;
 }
 
 .bulletin-bottom {

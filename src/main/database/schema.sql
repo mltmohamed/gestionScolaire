@@ -151,6 +151,8 @@ CREATE TABLE IF NOT EXISTS bulletin_meta (
   decision TEXT, -- pass | repeat | excluded
   observations_generales TEXT,
   visas_json TEXT, -- JSON: {oct:{...}, ...}
+  bulletin_type TEXT, -- 'primary' (3e-6e) | 'college' (7e-9e)
+  data_json TEXT, -- JSON pour bulletin 7e-9e
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(student_id, academic_year),
