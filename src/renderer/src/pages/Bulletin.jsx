@@ -948,7 +948,7 @@ export default function Bulletin() {
 
       <style>{`@page {
   size: A4;
-  margin: 8mm;
+  margin: 5mm;
 }
 
 @media print {
@@ -980,6 +980,23 @@ export default function Bulletin() {
     box-shadow: none !important;
     margin: 0 auto !important;
     min-height: auto !important;
+    padding: 18px !important;
+    transform: none !important;
+    zoom: 0.92;
+  }
+
+  .bulletin-signatures2 {
+    padding-bottom: 6px;
+  }
+
+  .bulletin-spacer {
+    height: 6px;
+  }
+
+  .bulletin-bottom,
+  .bulletin-signatures2 {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
@@ -1094,7 +1111,7 @@ export default function Bulletin() {
 }
 
 .bulletin-spacer {
-  height: 12px;
+  height: 6px;
 }
 
 .bulletin-bottom {
