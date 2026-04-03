@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -53,7 +54,6 @@ function formatNumber(n) {
 }
 
 export default function Bulletin() {
-  const printRef = useRef(null);
   const { students } = useStudents();
   const { classes } = useClasses();
   const { toast, ToastComponent } = useToast();
@@ -96,9 +96,26 @@ export default function Bulletin() {
     return base;
   });
 
-  const [observationsGenerales, setObservationsGenerales] = useState('');
   const [decision, setDecision] = useState('');
-  const [rang, setRang] = useState('');
+  const [rangByMonth, setRangByMonth] = useState(() => {
+    const base = {};
+    for (const m of MONTHS) base[m.key] = '';
+    return base;
+  });
+  const [rangGeneral, setRangGeneral] = useState('');
+  const [moyennePremier, setMoyennePremier] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [printPortalEl, setPrintPortalEl] = useState(null);
+
+  useEffect(() => {
+    let el = document.getElementById('bulletin-print-portal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'bulletin-print-portal';
+      document.body.appendChild(el);
+    }
+    setPrintPortalEl(el);
+  }, []);
 
   const selectedStudent = useMemo(() => {
     if (!selectedStudentId) return null;
@@ -174,9 +191,12 @@ export default function Bulletin() {
     }
     setVisas(baseVisas);
 
-    setObservationsGenerales('');
     setDecision('');
-    setRang('');
+    const baseRang = {};
+    for (const m of MONTHS) baseRang[m.key] = '';
+    setRangByMonth(baseRang);
+    setRangGeneral('');
+    setMoyennePremier('');
   }, []);
 
   const loadBulletin = useCallback(async () => {
@@ -244,9 +264,42 @@ export default function Bulletin() {
         setVisas(baseVisas);
       }
 
-      setRang(meta && meta.rang ? String(meta.rang) : '');
       setDecision(meta && meta.decision ? String(meta.decision) : '');
-      setObservationsGenerales(meta && meta.observations_generales ? String(meta.observations_generales) : '');
+
+      const baseRang = {};
+      for (const m of MONTHS) baseRang[m.key] = '';
+      let loadedGeneral = '';
+      if (meta && meta.rang) {
+        const raw = String(meta.rang);
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object') {
+              // Nouveau format: { general: string, byMonth: {oct:..., ...} }
+              if (parsed.byMonth && typeof parsed.byMonth === 'object') {
+                for (const m of MONTHS) {
+                  baseRang[m.key] = parsed.byMonth[m.key] ? String(parsed.byMonth[m.key]) : '';
+                }
+                loadedGeneral = parsed.general ? String(parsed.general) : '';
+              } else {
+                // Ancien format JSON: {oct:..., nov:...}
+                for (const m of MONTHS) {
+                  baseRang[m.key] = parsed[m.key] ? String(parsed[m.key]) : '';
+                }
+              }
+            }
+          } catch {
+            // ignorer
+          }
+        } else {
+          for (const m of MONTHS) baseRang[m.key] = raw;
+        }
+      }
+      setRangByMonth(baseRang);
+      setRangGeneral(loadedGeneral);
+
+      setMoyennePremier(meta && meta.moyenne_premier ? String(meta.moyenne_premier) : '');
   }, [academicYear, getBulletin, resetBulletinState, selectedStudentId]);
 
   useEffect(() => {
@@ -293,7 +346,16 @@ export default function Bulletin() {
     return sum / vals.length;
   }, [averagesByMonth]);
 
+  const moyennePremierDisplay = useMemo(() => {
+    if (moyennePremier !== '' && moyennePremier !== null && moyennePremier !== undefined) {
+      return String(moyennePremier);
+    }
+    return formatNumber(moyenneSemestre1);
+  }, [formatNumber, moyennePremier, moyenneSemestre1]);
+
   const moyenneAnnuelle = moyenneGenerale;
+
+  const rangGlobal = rangGeneral;
 
   const handleNoteChange = (subject, monthKey, raw) => {
     const next = clampNote(raw);
@@ -309,6 +371,178 @@ export default function Bulletin() {
   const handleExportPdf = () => {
     window.print();
   };
+
+  const noteDisplay = useCallback(
+    (subject, monthKey) => {
+      const v = notes?.[subject]?.[monthKey];
+      if (v === '' || v === null || v === undefined) return '';
+      const n = Number(v);
+      if (Number.isNaN(n)) return '';
+      return String(n);
+    },
+    [notes]
+  );
+
+  const decisionLabel = useMemo(() => {
+    if (decision === 'pass') return 'Passe en classe supérieure';
+    if (decision === 'repeat') return 'Redouble';
+    if (decision === 'excluded') return 'Exclu(e)';
+    return '';
+  }, [decision]);
+
+  const PrintView = useMemo(() => {
+    const studentName = selectedStudent ? `${selectedStudent.last_name || ''} ${selectedStudent.first_name || ''}`.trim() : '';
+    const className = selectedClass ? selectedClass.name : selectedStudent?.class_name || '';
+
+    return (
+      <div className="bulletin-print">
+        <div className="bulletin-print__title">COMPOSITIONS MENSUELLES</div>
+
+        <div className="bulletin-meta bulletin-meta--top">
+          <div className="bulletin-meta__line"><span className="bulletin-meta__label">Élève:</span> {studentName}</div>
+          <div className="bulletin-meta__line"><span className="bulletin-meta__label">Classe:</span> {className}</div>
+          <div className="bulletin-meta__line"><span className="bulletin-meta__label">Année:</span> {academicYear || ''}</div>
+        </div>
+
+        <table className="bulletin-table">
+          <thead>
+            <tr>
+              <th className="bulletin-th bulletin-th--left">Matieres/Mois</th>
+              {MONTHS.map((m) => (
+                <th key={m.key} className="bulletin-th">{m.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {SUBJECTS.map((subject) => (
+              <tr key={subject}>
+                <td className="bulletin-td bulletin-td--left">{subject}</td>
+                {MONTHS.map((m) => (
+                  <td key={m.key} className="bulletin-td">{noteDisplay(subject, m.key)}</td>
+                ))}
+              </tr>
+            ))}
+
+            <tr>
+              <td className="bulletin-td bulletin-td--left bulletin-td--strong">TOTAL</td>
+              {MONTHS.map((m) => (
+                <td key={m.key} className="bulletin-td bulletin-td--strong">{formatNumber(totalsByMonth[m.key])}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="bulletin-td bulletin-td--left">Moy. de Classe</td>
+              {MONTHS.map((m) => (
+                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="bulletin-td bulletin-td--left">Moy. de Compo.</td>
+              {MONTHS.map((m) => (
+                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="bulletin-td bulletin-td--left">Moy. Generale</td>
+              {MONTHS.map((m) => (
+                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="bulletin-td bulletin-td--left">Classement</td>
+              {MONTHS.map((m) => (
+                <td key={m.key} className="bulletin-td">{rangByMonth?.[m.key] || ''}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="bulletin-spacer" />
+
+        <table className="bulletin-table">
+          <thead>
+            <tr>
+              <th className="bulletin-th bulletin-th--left">MOIS</th>
+              <th className="bulletin-th">MAITRE</th>
+              <th className="bulletin-th">DIRECTEUR</th>
+              <th className="bulletin-th">LES PARENTS</th>
+              <th className="bulletin-th bulletin-th--left">OBSERVATIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MONTHS.map((m) => (
+              <tr key={m.key}>
+                <td className="bulletin-td bulletin-td--left">{m.label}</td>
+                <td className="bulletin-td">{visas?.[m.key]?.maitre || ''}</td>
+                <td className="bulletin-td">{visas?.[m.key]?.directeur || ''}</td>
+                <td className="bulletin-td">{visas?.[m.key]?.parents || ''}</td>
+                <td className="bulletin-td bulletin-td--left">{visas?.[m.key]?.observations || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="bulletin-spacer" />
+
+        <div className="bulletin-bottom">
+          <div className="bulletin-scores">
+            <div className="bulletin-scores__cell">
+              <span className="bulletin-scores__label">MOYENNE ANNUELLE :</span>
+              <span className="bulletin-scores__box">{formatNumber(moyenneAnnuelle)}</span>
+              <span className="bulletin-scores__unit">/10</span>
+            </div>
+            <div className="bulletin-scores__cell">
+              <span className="bulletin-scores__label">RANG :</span>
+              <span className="bulletin-scores__box bulletin-scores__box--small">{rangGlobal || ''}</span>
+            </div>
+            <div className="bulletin-scores__cell">
+              <span className="bulletin-scores__label">MOYENNE du 1er</span>
+              <span className="bulletin-scores__box">{moyennePremierDisplay}</span>
+              <span className="bulletin-scores__unit">/10</span>
+            </div>
+          </div>
+
+          <div className="bulletin-observers">
+            <div className="bulletin-observers__title">Observateurs Générales</div>
+          </div>
+
+          <div className="bulletin-decisions2">
+            <div className="bulletin-decisions2__title">Décisions</div>
+            <div className="bulletin-decisions2__content">
+              <div className="bulletin-decision2">
+                <span className="bulletin-decision2__label">Passe en classe supérieure</span>
+                <span className={`bulletin-decision2__check ${decision === 'pass' ? 'is-checked' : ''}`}>
+                  {decision === 'pass' ? '✓' : ''}
+                </span>
+              </div>
+              <div className="bulletin-decision2">
+                <span className="bulletin-decision2__label">Redouble</span>
+                <span className={`bulletin-decision2__check ${decision === 'repeat' ? 'is-checked' : ''}`}>
+                  {decision === 'repeat' ? '✓' : ''}
+                </span>
+              </div>
+              <div className="bulletin-decision2">
+                <span className="bulletin-decision2__label">Exclu(e)</span>
+                <span className={`bulletin-decision2__check ${decision === 'excluded' ? 'is-checked' : ''}`}>
+                  {decision === 'excluded' ? '✗' : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bulletin-signatures2">
+            <div className="bulletin-signature2">
+              <div className="bulletin-signature2__title">LE MAITRE</div>
+              <div className="bulletin-signature2__line" />
+            </div>
+            <div className="bulletin-signature2">
+              <div className="bulletin-signature2__title">LE DIRECTEUR</div>
+              <div className="bulletin-signature2__line" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }, [academicYear, averagesByMonth, decision, decisionLabel, formatNumber, moyenneAnnuelle, moyenneSemestre1, noteDisplay, notes, rangByMonth, rangGlobal, selectedClass, selectedStudent, totalsByMonth, visas]);
 
   const handleSave = async () => {
     if (!selectedStudentId) {
@@ -335,9 +569,9 @@ export default function Bulletin() {
     const res = await saveBulletin(selectedStudentId, academicYear, {
       notes: payloadNotes,
       meta: {
-        rang,
+        rang: JSON.stringify({ general: rangGeneral || '', byMonth: rangByMonth || {} }),
         decision,
-        observations_generales: observationsGenerales,
+        moyenne_premier: moyennePremier,
         visas_json: JSON.stringify(visas || {}),
       },
     });
@@ -358,6 +592,9 @@ export default function Bulletin() {
           <p className="text-muted-foreground">Saisie des notes, calculs automatiques, visas et décisions</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+            Aperçu
+          </Button>
           <Button variant="outline" onClick={handleExportPdf}>
             Exporter PDF
           </Button>
@@ -366,6 +603,26 @@ export default function Bulletin() {
           </Button>
         </div>
       </div>
+
+      {previewOpen && (
+        <div className="bulletin-preview" role="dialog" aria-modal="true">
+          <div className="bulletin-preview__backdrop" onClick={() => setPreviewOpen(false)} />
+          <div className="bulletin-preview__panel">
+            <div className="bulletin-preview__header">
+              <div className="bulletin-preview__title">Aperçu avant export</div>
+              <div className="bulletin-preview__actions">
+                <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+                  Fermer
+                </Button>
+                <Button onClick={handleExportPdf}>Exporter PDF</Button>
+              </div>
+            </div>
+            <div className="bulletin-preview__content">
+              <div className="bulletin-preview__page">{PrintView}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -469,7 +726,7 @@ export default function Bulletin() {
           <CardTitle>Tableau de notes</CardTitle>
         </CardHeader>
         <CardContent>
-          <div ref={printRef} className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-border text-sm">
               <thead>
                 <tr className="bg-muted/40">
@@ -539,9 +796,16 @@ export default function Bulletin() {
 
                 <tr>
                   <td className="border border-border px-3 py-2">Classement (Rang)</td>
-                  <td className="border border-border px-3 py-2" colSpan={MONTHS.length}>
-                    <Input value={rang} onChange={(e) => setRang(e.target.value)} className="h-9" placeholder="Ex: 3/25" />
-                  </td>
+                  {MONTHS.map((m) => (
+                    <td key={m.key} className="border border-border px-2 py-1">
+                      <Input
+                        value={rangByMonth?.[m.key] ?? ''}
+                        onChange={(e) => setRangByMonth((prev) => ({ ...prev, [m.key]: e.target.value }))}
+                        className="h-9 text-center"
+                        placeholder="-"
+                      />
+                    </td>
+                  ))}
                 </tr>
               </tbody>
             </table>
@@ -617,21 +881,22 @@ export default function Bulletin() {
             </div>
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Rang</div>
-              <div className="text-2xl font-bold">{rang || '-'}</div>
+              <Input
+                value={rangGeneral}
+                onChange={(e) => setRangGeneral(e.target.value)}
+                placeholder="Ex: 3/25"
+                className="h-10"
+              />
             </div>
             <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Moyenne du 1er Semestre (/10)</div>
-              <div className="text-2xl font-bold">{formatNumber(moyenneSemestre1)}</div>
+              <div className="text-sm text-muted-foreground">Moyenne du premier (/10)</div>
+              <Input
+                value={moyennePremier}
+                onChange={(e) => setMoyennePremier(e.target.value)}
+                placeholder={formatNumber(moyenneSemestre1)}
+                className="h-10"
+              />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Observations Générales</div>
-            <textarea
-              value={observationsGenerales}
-              onChange={(e) => setObservationsGenerales(e.target.value)}
-              className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
           </div>
 
           <div className="space-y-2">
@@ -677,11 +942,299 @@ export default function Bulletin() {
         </CardContent>
       </Card>
 
-      <style>{`@media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  nav, aside, button { display: none !important; }
-  .space-y-6 > * { break-inside: avoid; }
-}`}</style>
+      {printPortalEl
+        ? createPortal(<div className="bulletin-print-only">{PrintView}</div>, printPortalEl)
+        : null}
+
+      <style>{`@page {
+  size: A4;
+  margin: 8mm;
+}
+
+@media print {
+  html, body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Ne rien imprimer sauf le bulletin */
+  .bulletin-preview { display: none !important; }
+  #root { display: none !important; }
+  #bulletin-print-portal { display: block !important; }
+
+  .bulletin-print-only {
+    display: block !important;
+    position: static !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .bulletin-print {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    min-height: auto !important;
+  }
+}
+
+.bulletin-print-only { display: none; }
+
+#bulletin-print-portal { display: none; }
+
+.bulletin-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.bulletin-preview__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.bulletin-preview__panel {
+  position: relative;
+  margin: 24px auto;
+  width: min(1100px, calc(100vw - 32px));
+  height: calc(100vh - 48px);
+  background: white;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bulletin-preview__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bulletin-preview__title {
+  font-weight: 700;
+}
+
+.bulletin-preview__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulletin-preview__content {
+  padding: 16px;
+  overflow: auto;
+  background: hsl(var(--muted));
+  display: flex;
+  justify-content: center;
+}
+
+.bulletin-preview__page {
+  width: 794px; /* ~ A4 @96dpi */
+  min-height: 1123px;
+  margin: 0 auto;
+  background: white;
+  padding: 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+.bulletin-print {
+  width: 100%;
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 18px;
+  box-sizing: border-box;
+  color: #111;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+}
+
+.bulletin-print__title {
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  margin: 2px 0 10px;
+  letter-spacing: 0.5px;
+}
+
+.bulletin-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.bulletin-th,
+.bulletin-td {
+  border: 1px solid #222;
+  padding: 3px 4px;
+  text-align: center;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bulletin-th--left,
+.bulletin-td--left {
+  text-align: left;
+  width: 170px;
+  white-space: nowrap;
+}
+
+.bulletin-td--strong {
+  font-weight: 700;
+}
+
+.bulletin-spacer {
+  height: 12px;
+}
+
+.bulletin-bottom {
+  border: 1px solid #222;
+  padding: 0;
+}
+
+.bulletin-scores {
+  display: grid;
+  grid-template-columns: 1.3fr 0.8fr 1.1fr;
+  border-bottom: 1px solid #222;
+}
+
+.bulletin-scores__cell {
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.bulletin-scores__cell + .bulletin-scores__cell {
+  border-left: 1px solid #222;
+}
+
+.bulletin-scores__label {
+  font-weight: 700;
+}
+
+.bulletin-scores__box {
+  display: inline-block;
+  min-width: 46px;
+  padding: 2px 6px;
+  border: 1px solid #222;
+  text-align: center;
+  font-weight: 700;
+}
+
+.bulletin-scores__box--small {
+  min-width: 34px;
+}
+
+.bulletin-scores__unit {
+  font-weight: 700;
+}
+
+.bulletin-observers {
+  border-bottom: 1px solid #222;
+}
+
+.bulletin-observers__title {
+  font-weight: 700;
+  text-align: center;
+  padding: 6px;
+  font-size: 12px;
+}
+
+.bulletin-decisions2 {
+  border-bottom: 1px solid #222;
+}
+
+.bulletin-decisions2__title {
+  font-weight: 700;
+  text-align: center;
+  padding: 6px;
+  border-bottom: 1px solid #222;
+  font-size: 12px;
+}
+
+.bulletin-decisions2__content {
+  display: grid;
+  grid-template-columns: 1fr 0.7fr 0.7fr;
+  gap: 10px;
+  padding: 12px 10px;
+  font-size: 11px;
+}
+
+.bulletin-decision2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulletin-decision2__check {
+  width: 60px;
+  height: 18px;
+  border: 1px solid #222;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.bulletin-decision2__check.is-checked {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.bulletin-signatures2 {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 10px 16px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.bulletin-signature2 {
+  width: 46%;
+}
+
+.bulletin-signature2__title {
+  text-transform: uppercase;
+}
+
+.bulletin-signature2__line {
+  margin-top: 18px;
+  border-top: 1px solid #222;
+  height: 0;
+}
+
+.bulletin-meta {
+  margin-top: 10px;
+  font-size: 10px;
+  color: #333;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.bulletin-meta--top {
+  margin: 0 0 10px;
+}
+
+.bulletin-meta__label {
+  font-weight: 700;
+}
+`}</style>
     </div>
   );
 }
