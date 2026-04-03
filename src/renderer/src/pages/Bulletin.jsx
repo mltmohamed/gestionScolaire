@@ -1328,6 +1328,15 @@ export default function Bulletin() {
     zoom: 0.92;
   }
 
+  .bulletin2-print {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    min-height: auto !important;
+    padding: 50px 18px 10px !important;
+    transform: none !important;
+    zoom: 0.98;
+  }
+
   .bulletin-signatures2 {
     padding-bottom: 6px;
   }
@@ -1459,22 +1468,30 @@ export default function Bulletin() {
 
 .bulletin2-print {
   width: 100%;
+  min-height: 1123px;
   background: #fff;
   border: 2px solid #222;
-  padding: 18px;
+  padding: 50px 18px 10px;
   box-sizing: border-box;
   font-size: 12px;
   color: #111;
+  display: flex;
+  flex-direction: column;
 }
 
 .bulletin2-header {
   text-align: center;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.bulletin2-header > div + div {
+  margin-top: 6px;
 }
 
 .bulletin2-title {
-  margin: 10px auto 6px;
+  margin: 18px auto 12px;
   text-align: center;
   font-weight: 800;
   border: 2px solid #222;
@@ -1487,7 +1504,7 @@ export default function Bulletin() {
   justify-content: space-between;
   gap: 10px;
   font-weight: 600;
-  margin: 6px 0 10px;
+  margin: 14px 0 14px;
 }
 
 .bulletin2-table {
@@ -1495,6 +1512,7 @@ export default function Bulletin() {
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 12px;
+  margin-top: 10px;
 }
 
 .bulletin2-th,
@@ -1521,7 +1539,7 @@ export default function Bulletin() {
 .bulletin2-bottom {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  margin-top: 12px;
+  margin-top: 20px;
   gap: 10px;
   align-items: start;
 }
@@ -1545,12 +1563,13 @@ export default function Bulletin() {
 .bulletin2-sign {
   display: flex;
   justify-content: space-between;
-  margin-top: 16px;
+  margin-top: 10px;
   font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .bulletin2-date {
-  margin-top: 12px;
+  margin-top: 34px;
   font-weight: 600;
 }
 
