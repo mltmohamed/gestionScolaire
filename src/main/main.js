@@ -5,6 +5,23 @@ const setupIPCHandlers = require('./ipc-handlers');
 
 let mainWindow;
 
+async function loadDevServerUrl(win) {
+  const ports = [5173, 5174, 5175];
+  for (let i = 0; i < ports.length; i += 1) {
+    const port = ports[i];
+    const url = `http://localhost:${port}`;
+    try {
+      if (!win || win.isDestroyed()) return;
+      await win.loadURL(url);
+      return;
+    } catch {
+      if (i < ports.length - 1) {
+        console.log(`Port ${port} non disponible, essai ${ports[i + 1]}...`);
+      }
+    }
+  }
+}
+
 function getCspHeaderValue({ isDev }) {
   if (isDev) {
     return [
@@ -91,16 +108,8 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   
   if (isDev) {
-    // Essayer plusieurs ports possibles
-    mainWindow.loadURL('http://localhost:5173')
-      .catch(() => {
-        console.log('Port 5173 non disponible, essai 5174...');
-        mainWindow.loadURL('http://localhost:5174')
-          .catch(() => {
-            console.log('Port 5174 non disponible, essai 5175...');
-            mainWindow.loadURL('http://localhost:5175');
-          });
-      });
+    // Essayer plusieurs ports possibles (Vite bascule automatiquement si 5173 est occupé)
+    loadDevServerUrl(mainWindow);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
