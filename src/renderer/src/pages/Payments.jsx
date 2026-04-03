@@ -104,6 +104,67 @@ export default function Payments() {
     description: '',
   });
 
+  const [studentDialogFilters, setStudentDialogFilters] = useState({
+    search: '',
+    class_id: 'all',
+    academic_year: 'all',
+  });
+
+  const [teacherDialogSearch, setTeacherDialogSearch] = useState('');
+
+  const classById = React.useMemo(() => {
+    const map = new Map();
+    for (const c of classes) {
+      if (c && c.id != null) map.set(String(c.id), c);
+    }
+    return map;
+  }, [classes]);
+
+  const classAcademicYearOptions = React.useMemo(() => {
+    const values = new Set();
+    for (const c of classes) {
+      const y = String(c.academic_year || '').trim();
+      if (y) values.add(y);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [classes]);
+
+  const filteredStudentsForDialog = React.useMemo(() => {
+    const q = String(studentDialogFilters.search || '').trim().toLowerCase();
+    return students.filter((s) => {
+      const first = String(s.first_name || '').toLowerCase();
+      const last = String(s.last_name || '').toLowerCase();
+      const mat = String(s.matricule || '').toLowerCase();
+      const matchSearch = !q
+        ? true
+        : first.includes(q) || last.includes(q) || mat.includes(q) || `${last} ${first}`.includes(q);
+
+      const matchClass =
+        studentDialogFilters.class_id === 'all'
+          ? true
+          : String(s.class_id || '') === String(studentDialogFilters.class_id);
+
+      const cls = s.class_id != null ? classById.get(String(s.class_id)) : null;
+      const matchYear =
+        studentDialogFilters.academic_year === 'all'
+          ? true
+          : String(cls?.academic_year || '').trim() === String(studentDialogFilters.academic_year || '').trim();
+
+      return matchSearch && matchClass && matchYear;
+    });
+  }, [students, studentDialogFilters, classById]);
+
+  const filteredTeachersForDialog = React.useMemo(() => {
+    const q = String(teacherDialogSearch || '').trim().toLowerCase();
+    return teachers.filter((t) => {
+      if (!q) return true;
+      const first = String(t.first_name || '').toLowerCase();
+      const last = String(t.last_name || '').toLowerCase();
+      const spec = String(t.specialty || '').toLowerCase();
+      return first.includes(q) || last.includes(q) || `${last} ${first}`.includes(q) || spec.includes(q);
+    });
+  }, [teachers, teacherDialogSearch]);
+
   const paymentMethodOptions = React.useMemo(() => {
     const values = new Set();
     for (const p of studentPayments) {
@@ -169,6 +230,11 @@ export default function Payments() {
   const handleOpenStudentDialog = (type) => {
     setEditingPayment(null);
     setActiveTab(type);
+    setStudentDialogFilters({
+      search: '',
+      class_id: 'all',
+      academic_year: 'all',
+    });
     setStudentFormData({
       ...studentFormData,
       type: type,
@@ -182,6 +248,7 @@ export default function Payments() {
 
   const handleOpenTeacherDialog = () => {
     setEditingPayment(null);
+    setTeacherDialogSearch('');
     setTeacherFormData({
       teacher_id: '',
       amount: '',
@@ -690,6 +757,47 @@ export default function Payments() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid gap-3">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Rechercher un élève (nom / matricule)..."
+                    className="pl-8"
+                    value={studentDialogFilters.search}
+                    onChange={(e) => setStudentDialogFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select
+                    value={studentDialogFilters.class_id}
+                    onChange={(e) => setStudentDialogFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les classes</option>
+                    <option value="">Non assigné</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={studentDialogFilters.academic_year}
+                    onChange={(e) => setStudentDialogFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">Toutes les années</option>
+                    {classAcademicYearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Élève</label>
                 <select
@@ -699,8 +807,10 @@ export default function Payments() {
                   required
                 >
                   <option value="">Sélectionner un élève</option>
-                  {students.map(s => (
-                    <option key={s.id} value={s.id}>{s.first_name} {s.last_name} - {s.class_name}</option>
+                  {filteredStudentsForDialog.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.first_name} {s.last_name} - {s.class_name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -777,6 +887,16 @@ export default function Payments() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher un enseignant (nom / spécialité)..."
+                  className="pl-8"
+                  value={teacherDialogSearch}
+                  onChange={(e) => setTeacherDialogSearch(e.target.value)}
+                />
+              </div>
+
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Enseignant</label>
                 <select
@@ -786,8 +906,10 @@ export default function Payments() {
                   required
                 >
                   <option value="">Sélectionner un enseignant</option>
-                  {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{t.first_name} {t.last_name} - {t.specialty}</option>
+                  {filteredTeachersForDialog.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.first_name} {t.last_name} - {t.specialty}
+                    </option>
                   ))}
                 </select>
               </div>
