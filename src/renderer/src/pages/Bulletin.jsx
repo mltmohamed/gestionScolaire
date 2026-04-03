@@ -178,6 +178,30 @@ export default function Bulletin() {
     return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
   }, [classes]);
 
+  const classMatchesBulletinType = useCallback(
+    (cls) => {
+      const raw = String(cls?.name || '').trim();
+      if (!raw) return true;
+
+      // Normaliser pour matcher aussi: 7ème / 7eme / 7eA / 6e B ...
+      const name = raw
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+      const match = name.match(/(^|\D)([3-9])\s*(e|eme)?/);
+      const level = match ? Number(match[2]) : null;
+
+      // Si on ne détecte pas le niveau dans le nom de la classe, on ne filtre pas.
+      if (!level) return true;
+
+      if (bulletinType === 'college') return level >= 7 && level <= 9;
+      if (bulletinType === 'primary') return level >= 3 && level <= 6;
+      return true;
+    },
+    [bulletinType]
+  );
+
   const filteredStudents = useMemo(() => {
     const q = String(studentSearchTerm || '').trim().toLowerCase();
     return students.filter((s) => {
@@ -200,9 +224,21 @@ export default function Bulletin() {
           ? true
           : String(cls?.academic_year || '').trim() === String(studentFilters.academic_year || '').trim();
 
-      return matchSearch && matchClass && matchYear;
+      const matchBulletinType = classMatchesBulletinType(cls);
+
+      return matchSearch && matchClass && matchYear && matchBulletinType;
     });
-  }, [students, studentSearchTerm, studentFilters, classById]);
+  }, [students, studentSearchTerm, studentFilters, classById, classMatchesBulletinType]);
+
+  useEffect(() => {
+    if (!selectedStudentId) return;
+    const s = students.find((st) => String(st.id) === String(selectedStudentId));
+    if (!s) return;
+    const cls = s.class_id != null ? classById.get(String(s.class_id)) : null;
+    if (!classMatchesBulletinType(cls)) {
+      setSelectedStudentId('');
+    }
+  }, [bulletinType, classById, classMatchesBulletinType, selectedStudentId, students]);
 
   const selectedClass = useMemo(() => {
     if (!selectedStudent || !selectedStudent.class_id) return null;
@@ -1116,134 +1152,138 @@ export default function Bulletin() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Suivi et observations (Visas mensuels)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-border text-sm">
-              <thead>
-                <tr className="bg-muted/40">
-                  <th className="border border-border px-3 py-2 text-left">MOIS</th>
-                  <th className="border border-border px-3 py-2 text-left">MAITRE</th>
-                  <th className="border border-border px-3 py-2 text-left">DIRECTEUR</th>
-                  <th className="border border-border px-3 py-2 text-left">LES PARENTS</th>
-                  <th className="border border-border px-3 py-2 text-left">OBSERVATIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MONTHS.map((m) => (
-                  <tr key={m.key}>
-                    <td className="border border-border px-3 py-2 font-medium">{m.label}</td>
-                    <td className="border border-border px-3 py-2">
-                      <Input
-                        value={visas[m.key].maitre}
-                        onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], maitre: e.target.value } }))}
-                        className="h-9"
-                      />
-                    </td>
-                    <td className="border border-border px-3 py-2">
-                      <Input
-                        value={visas[m.key].directeur}
-                        onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], directeur: e.target.value } }))}
-                        className="h-9"
-                      />
-                    </td>
-                    <td className="border border-border px-3 py-2">
-                      <Input
-                        value={visas[m.key].parents}
-                        onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], parents: e.target.value } }))}
-                        className="h-9"
-                      />
-                    </td>
-                    <td className="border border-border px-3 py-2">
-                      <Input
-                        value={visas[m.key].observations}
-                        onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], observations: e.target.value } }))}
-                        className="h-9"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {bulletinType === 'primary' ? (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Suivi et observations (Visas mensuels)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-border text-sm">
+                  <thead>
+                    <tr className="bg-muted/40">
+                      <th className="border border-border px-3 py-2 text-left">MOIS</th>
+                      <th className="border border-border px-3 py-2 text-left">MAITRE</th>
+                      <th className="border border-border px-3 py-2 text-left">DIRECTEUR</th>
+                      <th className="border border-border px-3 py-2 text-left">LES PARENTS</th>
+                      <th className="border border-border px-3 py-2 text-left">OBSERVATIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {MONTHS.map((m) => (
+                      <tr key={m.key}>
+                        <td className="border border-border px-3 py-2 font-medium">{m.label}</td>
+                        <td className="border border-border px-3 py-2">
+                          <Input
+                            value={visas[m.key].maitre}
+                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], maitre: e.target.value } }))}
+                            className="h-9"
+                          />
+                        </td>
+                        <td className="border border-border px-3 py-2">
+                          <Input
+                            value={visas[m.key].directeur}
+                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], directeur: e.target.value } }))}
+                            className="h-9"
+                          />
+                        </td>
+                        <td className="border border-border px-3 py-2">
+                          <Input
+                            value={visas[m.key].parents}
+                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], parents: e.target.value } }))}
+                            className="h-9"
+                          />
+                        </td>
+                        <td className="border border-border px-3 py-2">
+                          <Input
+                            value={visas[m.key].observations}
+                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], observations: e.target.value } }))}
+                            className="h-9"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Synthèse et décisions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Moyenne Annuelle (/10)</div>
-              <div className="text-2xl font-bold">{formatNumber(moyenneAnnuelle)}</div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Rang</div>
-              <Input
-                value={rangGeneral}
-                onChange={(e) => setRangGeneral(e.target.value)}
-                placeholder="Ex: 3/25"
-                className="h-10"
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Moyenne du premier (/10)</div>
-              <Input
-                value={moyennePremier}
-                onChange={(e) => setMoyennePremier(e.target.value)}
-                placeholder={formatNumber(moyenneSemestre1)}
-                className="h-10"
-              />
-            </div>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Synthèse et décisions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Moyenne Annuelle (/10)</div>
+                  <div className="text-2xl font-bold">{formatNumber(moyenneAnnuelle)}</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Rang</div>
+                  <Input
+                    value={rangGeneral}
+                    onChange={(e) => setRangGeneral(e.target.value)}
+                    placeholder="Ex: 3/25"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Moyenne du premier (/10)</div>
+                  <Input
+                    value={moyennePremier}
+                    onChange={(e) => setMoyennePremier(e.target.value)}
+                    placeholder={formatNumber(moyenneSemestre1)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Décisions</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={decision === 'pass'}
-                  onChange={(e) => setDecision(e.target.checked ? 'pass' : '')}
-                />
-                Passe en classe supérieure
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={decision === 'repeat'}
-                  onChange={(e) => setDecision(e.target.checked ? 'repeat' : '')}
-                />
-                Redouble
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={decision === 'excluded'}
-                  onChange={(e) => setDecision(e.target.checked ? 'excluded' : '')}
-                />
-                Exclu(e)
-              </label>
-            </div>
-          </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Décisions</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={decision === 'pass'}
+                      onChange={(e) => setDecision(e.target.checked ? 'pass' : '')}
+                    />
+                    Passe en classe supérieure
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={decision === 'repeat'}
+                      onChange={(e) => setDecision(e.target.checked ? 'repeat' : '')}
+                    />
+                    Redouble
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={decision === 'excluded'}
+                      onChange={(e) => setDecision(e.target.checked ? 'excluded' : '')}
+                    />
+                    Exclu(e)
+                  </label>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-md border border-input p-4">
-              <div className="text-sm font-medium">LE MAITRE</div>
-              <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
-            </div>
-            <div className="rounded-md border border-input p-4">
-              <div className="text-sm font-medium">LE DIRECTEUR</div>
-              <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-md border border-input p-4">
+                  <div className="text-sm font-medium">LE MAITRE</div>
+                  <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
+                </div>
+                <div className="rounded-md border border-input p-4">
+                  <div className="text-sm font-medium">LE DIRECTEUR</div>
+                  <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
 
       {printPortalEl
         ? createPortal(<div className="bulletin-print-only">{PrintView}</div>, printPortalEl)

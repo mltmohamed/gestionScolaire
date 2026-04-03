@@ -5,19 +5,31 @@ const setupIPCHandlers = require('./ipc-handlers');
 
 let mainWindow;
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function loadDevServerUrl(win) {
+  // Vite peut être lent à démarrer: on retente plusieurs fois avant de changer de port.
   const ports = [5173, 5174, 5175];
+  const retriesPerPort = 60; // 60 * 500ms = ~30s
+  const retryDelayMs = 500;
+
   for (let i = 0; i < ports.length; i += 1) {
     const port = ports[i];
     const url = `http://localhost:${port}`;
-    try {
-      if (!win || win.isDestroyed()) return;
-      await win.loadURL(url);
-      return;
-    } catch {
-      if (i < ports.length - 1) {
-        console.log(`Port ${port} non disponible, essai ${ports[i + 1]}...`);
+
+    for (let attempt = 0; attempt < retriesPerPort; attempt += 1) {
+      try {
+        if (!win || win.isDestroyed()) return;
+        await win.loadURL(url);
+        return;
+      } catch {
+        if (!win || win.isDestroyed()) return;
+        await wait(retryDelayMs);
       }
+    }
+
+    if (i < ports.length - 1) {
+      console.log(`Port ${port} non disponible, essai ${ports[i + 1]}...`);
     }
   }
 }
@@ -50,7 +62,7 @@ function getCspHeaderValue({ isDev }) {
   ].join('; ');
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -109,7 +121,7 @@ function createWindow() {
   
   if (isDev) {
     // Essayer plusieurs ports possibles (Vite bascule automatiquement si 5173 est occupé)
-    loadDevServerUrl(mainWindow);
+    await loadDevServerUrl(mainWindow);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
@@ -134,7 +146,7 @@ app.whenReady().then(async () => {
     setupIPCHandlers(ipcMain);
     
     // Créer la fenêtre principale
-    createWindow();
+    await createWindow();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
