@@ -2,7 +2,7 @@
   "appId": "com.schoolmanage.app",
   "productName": "SchoolManage",
   "directories": {
-    "output": "dist"
+    "output": "release"
   },
   "files": [
     "src/**/*",
@@ -10,8 +10,10 @@
     "package.json"
   ],
   "win": {
-    "target": ["nsis"],
-    "icon": "src/resources/icons/icon.ico"
+    "target": ["nsis", "portable"],
+    "sign": null,
+    "signDlls": false,
+    "signAndEditExecutable": false
   },
   "mac": {
     "target": ["dmg"],

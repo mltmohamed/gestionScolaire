@@ -1,5 +1,8 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+// Electron charge l'UI en file:// : le pathname n'est pas "/" comme sur le web → BrowserRouter casse le routage (écran vide).
+const Router = typeof window !== 'undefined' && window.location.protocol === 'file:' ? HashRouter : BrowserRouter;
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProfileProvider } from './context/ProfileContext';
@@ -16,7 +19,13 @@ import Bulletin from './pages/Bulletin';
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   
-  if (loading) return null; // Ou un spinner
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-400">
+        Chargement…
+      </div>
+    );
+  }
   
   if (!user) {
     return <Navigate to="/login" replace />;

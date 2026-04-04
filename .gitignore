@@ -31,3 +31,4 @@ dist-ssr
 # Build
 out/
 build/
+release/

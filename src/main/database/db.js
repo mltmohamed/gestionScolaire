@@ -141,10 +141,25 @@ class DatabaseManager {
     this._saving = true;
     try {
       let data;
-      try {
-        data = this.db.export();
-      } catch (error) {
-        console.error('Erreur lors de l\'export de la base de données:', error);
+      const sleepSync = (ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          /* attente synchrone courte entre tentatives (sql.js / wasm peut lancer ErrnoError 44) */
+        }
+      };
+      let lastExportError = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          if (attempt > 0) sleepSync(25);
+          data = this.db.export();
+          lastExportError = null;
+          break;
+        } catch (error) {
+          lastExportError = error;
+        }
+      }
+      if (!data) {
+        console.error('Erreur lors de l\'export de la base de données:', lastExportError);
         return;
       }
 
