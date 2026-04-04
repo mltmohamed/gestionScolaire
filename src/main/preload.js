@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createStudent: (data) => ipcRenderer.invoke('students:create', data),
   updateStudent: (id, data) => ipcRenderer.invoke('students:update', id, data),
   deleteStudent: (id) => ipcRenderer.invoke('students:delete', id),
+  deactivateStudent: (id) => ipcRenderer.invoke('students:deactivate', id),
+  activateStudent: (id) => ipcRenderer.invoke('students:activate', id),
+  hardDeleteStudent: (id) => ipcRenderer.invoke('students:hardDelete', id),
   
   // Teachers
   getTeachers: () => ipcRenderer.invoke('teachers:getAll'),
@@ -30,6 +33,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createTeacher: (data) => ipcRenderer.invoke('teachers:create', data),
   updateTeacher: (id, data) => ipcRenderer.invoke('teachers:update', id, data),
   deleteTeacher: (id) => ipcRenderer.invoke('teachers:delete', id),
+  deactivateTeacher: (id) => ipcRenderer.invoke('teachers:deactivate', id),
+  activateTeacher: (id) => ipcRenderer.invoke('teachers:activate', id),
+  hardDeleteTeacher: (id) => ipcRenderer.invoke('teachers:hardDelete', id),
   
   // Classes
   getClasses: () => ipcRenderer.invoke('classes:getAll'),

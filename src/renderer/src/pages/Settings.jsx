@@ -76,12 +76,6 @@ export default function Settings() {
     }
   }, [theme]);
 
-  useEffect(() => {
-    if (preferences && preferences.theme && preferences.theme !== theme) {
-      setTheme(preferences.theme);
-    }
-  }, [preferences.theme, setTheme, theme]);
-
   const handleSave = () => {
     try {
       localStorage.setItem('settings.preferences', JSON.stringify(preferences));

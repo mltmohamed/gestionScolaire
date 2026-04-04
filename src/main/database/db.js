@@ -67,6 +67,13 @@ class DatabaseManager {
       ensureColumn('teachers', 'gender', 'TEXT');
       ensureColumn('students', 'matricule', 'TEXT');
 
+      ensureColumn('students', 'is_deleted', 'INTEGER DEFAULT 0');
+      ensureColumn('students', 'deleted_at', 'DATETIME');
+      ensureColumn('teachers', 'is_deleted', 'INTEGER DEFAULT 0');
+      ensureColumn('teachers', 'deleted_at', 'DATETIME');
+      ensureColumn('classes', 'is_deleted', 'INTEGER DEFAULT 0');
+      ensureColumn('classes', 'deleted_at', 'DATETIME');
+
       ensureColumn('bulletin_meta', 'bulletin_type', 'TEXT');
       ensureColumn('bulletin_meta', 'data_json', 'TEXT');
 

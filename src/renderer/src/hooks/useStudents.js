@@ -47,6 +47,30 @@ export function useStudents() {
     return result;
   };
 
+  const deactivateStudent = async (id) => {
+    const result = await studentAPI.deactivate(id);
+    if (result.success) {
+      await loadStudents();
+    }
+    return result;
+  };
+
+  const activateStudent = async (id) => {
+    const result = await studentAPI.activate(id);
+    if (result.success) {
+      await loadStudents();
+    }
+    return result;
+  };
+
+  const hardDeleteStudent = async (id) => {
+    const result = await studentAPI.hardDelete(id);
+    if (result.success) {
+      await loadStudents();
+    }
+    return result;
+  };
+
   return {
     students,
     loading,
@@ -54,6 +78,9 @@ export function useStudents() {
     createStudent,
     updateStudent,
     deleteStudent,
+    deactivateStudent,
+    activateStudent,
+    hardDeleteStudent,
     refresh: loadStudents,
   };
 }

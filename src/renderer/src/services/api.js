@@ -25,6 +25,21 @@ export const studentAPI = {
     const result = await window.electronAPI.deleteStudent(id);
     return result;
   },
+
+  deactivate: async (id) => {
+    const result = await window.electronAPI.deactivateStudent(id);
+    return result;
+  },
+
+  activate: async (id) => {
+    const result = await window.electronAPI.activateStudent(id);
+    return result;
+  },
+
+  hardDelete: async (id) => {
+    const result = await window.electronAPI.hardDeleteStudent(id);
+    return result;
+  },
 };
 
 export const teacherAPI = {
@@ -50,6 +65,21 @@ export const teacherAPI = {
   
   delete: async (id) => {
     const result = await window.electronAPI.deleteTeacher(id);
+    return result;
+  },
+
+  deactivate: async (id) => {
+    const result = await window.electronAPI.deactivateTeacher(id);
+    return result;
+  },
+
+  activate: async (id) => {
+    const result = await window.electronAPI.activateTeacher(id);
+    return result;
+  },
+
+  hardDelete: async (id) => {
+    const result = await window.electronAPI.hardDeleteTeacher(id);
     return result;
   },
 };

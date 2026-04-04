@@ -15,7 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, Users, Eye, School } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Users, Eye, School, AlertTriangle } from 'lucide-react';
+import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Classes() {
   const { classes, loading, createClass, updateClass, deleteClass } = useClasses();
@@ -38,6 +39,7 @@ export default function Classes() {
     max_students: 30,
     teacher_id: '',
   });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
   const levelOptions = React.useMemo(() => {
     const values = new Set();
@@ -138,14 +140,26 @@ export default function Classes() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette classe ?')) {
-      try {
-        await deleteClass(id);
-      } catch (error) {
-        console.error('Erreur:', error);
+  const handleDeleteClick = (cls) => {
+    setDeleteDialog({ open: true, cls });
+  };
+
+  const handleConfirmDelete = async () => {
+    const cls = deleteDialog.cls;
+    if (!cls) return;
+
+    try {
+      const result = await deleteClass(cls.id);
+      if (result.success) {
+        toast.success('Classe et toutes les données associées supprimées définitivement');
+      } else {
+        toast.error(result.error || 'Erreur lors de la suppression');
       }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la suppression');
     }
+    setDeleteDialog({ open: false, cls: null });
   };
 
   if (loading) {
@@ -304,9 +318,10 @@ export default function Classes() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(cls.id)}
+                          onClick={() => handleDeleteClick(cls)}
+                          title="⚠️ Supprimer définitivement (toutes les données)"
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -479,6 +494,20 @@ export default function Classes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Dialog de confirmation de suppression définitive */}
+      <ConfirmHardDeleteDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ open, cls: open ? deleteDialog.cls : null })}
+        onConfirm={handleConfirmDelete}
+        itemName={deleteDialog.cls ? deleteDialog.cls.name : ''}
+        warnings={[
+          'Tous les élèves de la classe',
+          'Paiements des élèves',
+          'Notes et bulletins',
+          'Tuteurs des élèves (si non partagés)',
+          'Données de la classe'
+        ]}
+      />
     </div>
   );
 }

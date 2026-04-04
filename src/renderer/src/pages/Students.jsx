@@ -15,16 +15,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, User, UserCircle, Eye } from 'lucide-react';
+import { Plus, Search, Pencil, User, UserCircle, Eye, Power, AlertTriangle } from 'lucide-react';
+import { ConfirmDeactivateDialog, ConfirmActivateDialog, ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Students() {
-  const { students, loading, createStudent, updateStudent, deleteStudent } = useStudents();
+  const { students, loading, createStudent, updateStudent, deleteStudent, deactivateStudent, activateStudent, hardDeleteStudent } = useStudents();
   const { classes } = useClasses();
   const { toast, ToastComponent } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [viewingStudent, setViewingStudent] = useState(null);
+  const [deactivateDialog, setDeactivateDialog] = useState({ open: false, student: null });
+  const [activateDialog, setActivateDialog] = useState({ open: false, student: null });
+  const [hardDeleteDialog, setHardDeleteDialog] = useState({ open: false, student: null });
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     class_id: 'all',
@@ -188,13 +192,85 @@ export default function Students() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet élève ?')) {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet élève ? Les données seront masquées mais conservées.')) {
       try {
-        await deleteStudent(id);
+        const result = await deleteStudent(id);
+        if (result.success) {
+          toast.success('Élève supprimé (données conservées)');
+        } else {
+          toast.error(result.error || 'Erreur lors de la suppression');
+        }
       } catch (error) {
         console.error('Erreur:', error);
+        toast.error('Erreur lors de la suppression');
       }
     }
+  };
+
+  const handleDeactivateClick = (student) => {
+    setDeactivateDialog({ open: true, student });
+  };
+
+  const handleActivateClick = (student) => {
+    setActivateDialog({ open: true, student });
+  };
+
+  const handleConfirmActivate = async () => {
+    const student = activateDialog.student;
+    if (!student) return;
+    
+    try {
+      const result = await activateStudent(student.id);
+      if (result.success) {
+        toast.success('Élève réactivé avec succès');
+      } else {
+        toast.error(result.error || 'Erreur lors de la réactivation');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la réactivation');
+    }
+    setActivateDialog({ open: false, student: null });
+  };
+
+  const handleConfirmDeactivate = async () => {
+    const student = deactivateDialog.student;
+    if (!student) return;
+    
+    try {
+      const result = await deactivateStudent(student.id);
+      if (result.success) {
+        toast.success('Élève désactivé avec succès');
+      } else {
+        toast.error(result.error || 'Erreur lors de la désactivation');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la désactivation');
+    }
+    setDeactivateDialog({ open: false, student: null });
+  };
+
+  const handleHardDeleteClick = (student) => {
+    setHardDeleteDialog({ open: true, student });
+  };
+
+  const handleConfirmHardDelete = async () => {
+    const student = hardDeleteDialog.student;
+    if (!student) return;
+    
+    try {
+      const result = await hardDeleteStudent(student.id);
+      if (result.success) {
+        toast.success('Élève et données associées supprimés définitivement');
+      } else {
+        toast.error(result.error || 'Erreur lors de la suppression définitive');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la suppression définitive');
+    }
+    setHardDeleteDialog({ open: false, student: null });
   };
 
   if (loading) {
@@ -331,7 +407,7 @@ export default function Students() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -344,15 +420,36 @@ export default function Students() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenDialog(student)}
+                          title="Modifier"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {student.status === 'active' ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeactivateClick(student)}
+                            title="Désactiver (conserver les données)"
+                          >
+                            <Power className="h-4 w-4 text-orange-500" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleActivateClick(student)}
+                            title="Réactiver"
+                          >
+                            <Power className="h-4 w-4 text-green-500" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(student.id)}
+                          onClick={() => handleHardDeleteClick(student)}
+                          title="⚠️ Supprimer définitivement (toutes les données)"
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -706,6 +803,36 @@ export default function Students() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de confirmation de désactivation */}
+      <ConfirmDeactivateDialog
+        open={deactivateDialog.open}
+        onOpenChange={(open) => setDeactivateDialog({ open, student: open ? deactivateDialog.student : null })}
+        onConfirm={handleConfirmDeactivate}
+        itemName={deactivateDialog.student ? `${deactivateDialog.student.first_name} ${deactivateDialog.student.last_name}` : ''}
+      />
+
+      {/* Dialog de confirmation de réactivation */}
+      <ConfirmActivateDialog
+        open={activateDialog.open}
+        onOpenChange={(open) => setActivateDialog({ open, student: open ? activateDialog.student : null })}
+        onConfirm={handleConfirmActivate}
+        itemName={activateDialog.student ? `${activateDialog.student.first_name} ${activateDialog.student.last_name}` : ''}
+      />
+
+      {/* Dialog de confirmation de suppression définitive */}
+      <ConfirmHardDeleteDialog
+        open={hardDeleteDialog.open}
+        onOpenChange={(open) => setHardDeleteDialog({ open, student: open ? hardDeleteDialog.student : null })}
+        onConfirm={handleConfirmHardDelete}
+        itemName={hardDeleteDialog.student ? `${hardDeleteDialog.student.first_name} ${hardDeleteDialog.student.last_name}` : ''}
+        warnings={[
+          'Paiements de scolarité',
+          'Notes et bulletins',
+          'Historique complet',
+          'Toutes les données associées'
+        ]}
+      />
     </div>
   );
 }

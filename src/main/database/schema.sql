@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS students (
   enrollment_date DATE DEFAULT CURRENT_DATE,
   status TEXT DEFAULT 'active',
   photo TEXT, -- Chemin ou Base64 de la photo
+  is_deleted INTEGER DEFAULT 0,
+  deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (class_id) REFERENCES classes(id)
@@ -59,6 +61,8 @@ CREATE TABLE IF NOT EXISTS teachers (
   status TEXT DEFAULT 'active',
   gender TEXT, -- Ajout du sexe pour les enseignants aussi
   photo TEXT, -- Chemin ou Base64 de la photo
+  is_deleted INTEGER DEFAULT 0,
+  deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,6 +75,8 @@ CREATE TABLE IF NOT EXISTS classes (
   academic_year TEXT NOT NULL,
   max_students INTEGER DEFAULT 30,
   teacher_id INTEGER,
+  is_deleted INTEGER DEFAULT 0,
+  deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (teacher_id) REFERENCES teachers(id)

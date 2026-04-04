@@ -14,15 +14,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, User, UserCircle, Eye } from 'lucide-react';
+import { Plus, Search, Pencil, User, UserCircle, Eye, AlertTriangle } from 'lucide-react';
+import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Teachers() {
-  const { teachers, loading, createTeacher, updateTeacher, deleteTeacher } = useTeachers();
+  const { teachers, loading, createTeacher, updateTeacher, hardDeleteTeacher } = useTeachers();
   const { toast, ToastComponent } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [viewingTeacher, setViewingTeacher] = useState(null);
+  const [hardDeleteDialog, setHardDeleteDialog] = useState({ open: false, teacher: null });
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     specialty: 'all',
@@ -160,13 +162,41 @@ export default function Teachers() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce professeur ?')) {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce professeur ? Les données seront masquées mais conservées.')) {
       try {
-        await deleteTeacher(id);
+        const result = await deleteTeacher(id);
+        if (result.success) {
+          toast.success('Professeur supprimé (données conservées)');
+        } else {
+          toast.error(result.error || 'Erreur lors de la suppression');
+        }
       } catch (error) {
         console.error('Erreur:', error);
+        toast.error('Erreur lors de la suppression');
       }
     }
+  };
+
+  const handleHardDeleteClick = (teacher) => {
+    setHardDeleteDialog({ open: true, teacher });
+  };
+
+  const handleConfirmHardDelete = async () => {
+    const teacher = hardDeleteDialog.teacher;
+    if (!teacher) return;
+    
+    try {
+      const result = await hardDeleteTeacher(teacher.id);
+      if (result.success) {
+        toast.success('Professeur et données associées supprimés définitivement');
+      } else {
+        toast.error(result.error || 'Erreur lors de la suppression définitive');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la suppression définitive');
+    }
+    setHardDeleteDialog({ open: false, teacher: null });
   };
 
   if (loading) {
@@ -302,7 +332,7 @@ export default function Teachers() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -315,15 +345,17 @@ export default function Teachers() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenDialog(teacher)}
+                          title="Modifier"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(teacher.id)}
+                          onClick={() => handleHardDeleteClick(teacher)}
+                          title="⚠️ Supprimer définitivement (toutes les données)"
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -533,6 +565,20 @@ export default function Teachers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de confirmation de suppression définitive */}
+      <ConfirmHardDeleteDialog
+        open={hardDeleteDialog.open}
+        onOpenChange={(open) => setHardDeleteDialog({ open, teacher: open ? hardDeleteDialog.teacher : null })}
+        onConfirm={handleConfirmHardDelete}
+        itemName={hardDeleteDialog.teacher ? `${hardDeleteDialog.teacher.first_name} ${hardDeleteDialog.teacher.last_name}` : ''}
+        warnings={[
+          'Paiements de salaire',
+          'Assignations aux classes',
+          'Historique complet',
+          'Toutes les données associées'
+        ]}
+      />
     </div>
   );
 }

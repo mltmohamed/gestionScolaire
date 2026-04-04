@@ -607,6 +607,7 @@ function setupIPCHandlers(ipcMain) {
       FROM students s 
       LEFT JOIN classes c ON s.class_id = c.id 
       LEFT JOIN guardians g ON g.student_id = s.id
+      WHERE COALESCE(s.is_deleted, 0) = 0
       ORDER BY s.last_name ASC
     `;
     return { success: true, data: query(sql) };
@@ -621,7 +622,7 @@ function setupIPCHandlers(ipcMain) {
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN guardians g ON g.student_id = s.id
-      WHERE s.id = ?
+      WHERE s.id = ? AND COALESCE(s.is_deleted, 0) = 0
     `;
     const result = query(sql, [id]);
     return { success: true, data: result[0] };
@@ -752,19 +753,25 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('students:delete', { auth: true }, (event, id) => {
-    const sql = 'DELETE FROM students WHERE id = ?';
-    query(sql, [id]);
+    const sql = `
+      UPDATE students
+      SET is_deleted = 1,
+          deleted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `;
+    run(sql, [id]);
     return { success: true };
   });
 
   // ==================== TEACHERS ====================
   handle('teachers:getAll', { auth: true }, () => {
-    const sql = 'SELECT * FROM teachers ORDER BY last_name ASC';
+    const sql = 'SELECT * FROM teachers WHERE COALESCE(is_deleted, 0) = 0 ORDER BY last_name ASC';
     return { success: true, data: query(sql) };
   });
 
   handle('teachers:getById', { auth: true }, (event, id) => {
-    const sql = 'SELECT * FROM teachers WHERE id = ?';
+    const sql = 'SELECT * FROM teachers WHERE id = ? AND COALESCE(is_deleted, 0) = 0';
     const result = query(sql, [id]);
     return { success: true, data: result[0] };
   });
@@ -781,7 +788,7 @@ function setupIPCHandlers(ipcMain) {
       data.phone || null,
       data.address || null,
       data.specialty || null,
-      data.status || 'active',
+      data.status || 'inactive',
       data.gender || null,
       data.photo || null
     ]);
@@ -818,9 +825,159 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('teachers:delete', { auth: true }, (event, id) => {
-    const sql = 'DELETE FROM teachers WHERE id = ?';
-    query(sql, [id]);
+    const sql = `
+      UPDATE teachers
+      SET is_deleted = 1,
+          deleted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `;
+    run(sql, [id]);
     return { success: true };
+  });
+
+  // ==================== HARD DELETE - SUPPRESSION DÉFINITIVE ====================
+  // Suppression permanente avec nettoyage de toutes les données associées
+
+  handle('students:hardDelete', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si l'élève existe
+      const student = query('SELECT id FROM students WHERE id = ?', [id])[0];
+      if (!student) {
+        return { success: false, error: 'Élève introuvable' };
+      }
+
+      // Supprimer toutes les données associées dans l'ordre (respecter les contraintes FK si présentes)
+      run('DELETE FROM student_payments WHERE student_id = ?', [id]);
+      run('DELETE FROM grades WHERE student_id = ?', [id]);
+      run('DELETE FROM bulletin_notes WHERE student_id = ?', [id]);
+      run('DELETE FROM bulletin_meta WHERE student_id = ?', [id]);
+      
+      // Supprimer le tuteur associé (s'il n'est pas partagé avec d'autres élèves)
+      const guardianResult = query('SELECT guardian_id FROM students WHERE id = ?', [id])[0];
+      if (guardianResult && guardianResult.guardian_id) {
+        const otherStudents = query('SELECT COUNT(*) as count FROM students WHERE guardian_id = ? AND id != ?', [guardianResult.guardian_id, id])[0].count;
+        if (otherStudents === 0) {
+          run('DELETE FROM guardians WHERE id = ?', [guardianResult.guardian_id]);
+        }
+      }
+
+      // Supprimer l'élève définitivement
+      run('DELETE FROM students WHERE id = ?', [id]);
+
+      return { success: true, message: 'Élève et toutes ses données supprimés définitivement' };
+    } catch (error) {
+      console.error('Erreur hardDelete student:', error);
+      return { success: false, error: 'Erreur lors de la suppression définitive: ' + error.message };
+    }
+  });
+
+  handle('teachers:hardDelete', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si le professeur existe
+      const teacher = query('SELECT id FROM teachers WHERE id = ?', [id])[0];
+      if (!teacher) {
+        return { success: false, error: 'Professeur introuvable' };
+      }
+
+      // Vérifier s'il est assigné à une classe
+      const assignedClasses = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0].count;
+      if (assignedClasses > 0) {
+        return { success: false, error: `Impossible de supprimer : ce professeur est assigné à ${assignedClasses} classe(s). Veuillez d'abord les réassigner.` };
+      }
+
+      // Supprimer tous les paiements associés
+      run('DELETE FROM teacher_payments WHERE teacher_id = ?', [id]);
+
+      // Supprimer le professeur définitivement
+      run('DELETE FROM teachers WHERE id = ?', [id]);
+
+      return { success: true, message: 'Professeur et toutes ses données supprimés définitivement' };
+    } catch (error) {
+      console.error('Erreur hardDelete teacher:', error);
+      return { success: false, error: 'Erreur lors de la suppression définitive: ' + error.message };
+    }
+  });
+
+  // ==================== DEACTIVATE - DÉSACTIVATION ====================
+  // Désactivation simple qui ne met à jour que le statut
+
+  handle('students:deactivate', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si l'élève existe
+      const student = query('SELECT id FROM students WHERE id = ?', [id])[0];
+      if (!student) {
+        return { success: false, error: 'Élève introuvable' };
+      }
+
+      // Mettre à jour uniquement le statut
+      run("UPDATE students SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+      return { success: true, message: 'Élève désactivé avec succès' };
+    } catch (error) {
+      console.error('Erreur deactivate student:', error);
+      return { success: false, error: 'Erreur lors de la désactivation: ' + error.message };
+    }
+  });
+
+  handle('teachers:deactivate', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si le professeur existe
+      const teacher = query('SELECT id FROM teachers WHERE id = ?', [id])[0];
+      if (!teacher) {
+        return { success: false, error: 'Professeur introuvable' };
+      }
+
+      // Vérifier s'il est assigné à une classe
+      const assignedClasses = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0]?.count || 0;
+      if (assignedClasses > 0) {
+        return { success: false, error: 'Impossible de désactiver ce professeur: il est assigné à une classe' };
+      }
+
+      // Mettre à jour uniquement le statut
+      run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+      return { success: true, message: 'Professeur désactivé avec succès' };
+    } catch (error) {
+      console.error('Erreur deactivate teacher:', error);
+      return { success: false, error: 'Erreur lors de la désactivation: ' + error.message };
+    }
+  });
+
+  handle('students:activate', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si l'élève existe
+      const student = query('SELECT id FROM students WHERE id = ?', [id])[0];
+      if (!student) {
+        return { success: false, error: 'Élève introuvable' };
+      }
+
+      // Mettre à jour uniquement le statut
+      run("UPDATE students SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+      return { success: true, message: 'Élève réactivé avec succès' };
+    } catch (error) {
+      console.error('Erreur activate student:', error);
+      return { success: false, error: 'Erreur lors de la réactivation: ' + error.message };
+    }
+  });
+
+  handle('teachers:activate', { auth: true }, (event, id) => {
+    try {
+      // Vérifier si le professeur existe
+      const teacher = query('SELECT id FROM teachers WHERE id = ?', [id])[0];
+      if (!teacher) {
+        return { success: false, error: 'Professeur introuvable' };
+      }
+
+      // Mettre à jour uniquement le statut
+      run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+      return { success: true, message: 'Professeur réactivé avec succès' };
+    } catch (error) {
+      console.error('Erreur activate teacher:', error);
+      return { success: false, error: 'Erreur lors de la réactivation: ' + error.message };
+    }
   });
 
   // ==================== CLASSES ====================
@@ -830,13 +987,14 @@ function setupIPCHandlers(ipcMain) {
              (SELECT COUNT(*) FROM students WHERE class_id = c.id) as student_count
       FROM classes c
       LEFT JOIN teachers t ON c.teacher_id = t.id
+      WHERE COALESCE(c.is_deleted, 0) = 0
       ORDER BY c.name ASC
     `;
     return { success: true, data: query(sql) };
   });
 
   handle('classes:getById', { auth: true }, (event, id) => {
-    const sql = 'SELECT * FROM classes WHERE id = ?';
+    const sql = 'SELECT * FROM classes WHERE id = ? AND COALESCE(is_deleted, 0) = 0';
     const result = query(sql, [id]);
     return { success: true, data: result[0] };
   });
@@ -890,9 +1048,56 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('classes:delete', { auth: true }, (event, id) => {
-    const sql = 'DELETE FROM classes WHERE id = ?';
-    query(sql, [id]);
-    return { success: true };
+    try {
+      // Récupérer l'enseignant assigné avant la suppression
+      const classData = query('SELECT teacher_id FROM classes WHERE id = ?', [id])[0];
+      const teacherId = classData?.teacher_id || null;
+
+      // Récupérer tous les élèves de cette classe
+      const students = query('SELECT id, guardian_id FROM students WHERE class_id = ?', [id]);
+
+      // Pour chaque élève, supprimer toutes ses données associées
+      for (const student of students) {
+        const studentId = student.id;
+
+        // Supprimer les paiements de l'élève
+        run('DELETE FROM student_payments WHERE student_id = ?', [studentId]);
+
+        // Supprimer les notes de l'élève
+        run('DELETE FROM grades WHERE student_id = ?', [studentId]);
+
+        // Supprimer les bulletins de l'élève
+        run('DELETE FROM bulletin_notes WHERE student_id = ?', [studentId]);
+        run('DELETE FROM bulletin_meta WHERE student_id = ?', [studentId]);
+
+        // Supprimer le tuteur si non partagé
+        if (student.guardian_id) {
+          const otherStudents = query('SELECT COUNT(*) as count FROM students WHERE guardian_id = ? AND id != ?', [student.guardian_id, studentId])[0].count;
+          if (otherStudents === 0) {
+            run('DELETE FROM guardians WHERE id = ?', [student.guardian_id]);
+          }
+        }
+
+        // Supprimer l'élève
+        run('DELETE FROM students WHERE id = ?', [studentId]);
+      }
+
+      // Supprimer la classe définitivement
+      run('DELETE FROM classes WHERE id = ?', [id]);
+
+      // Si un enseignant était assigné, vérifier s'il a d'autres classes et mettre à jour son statut
+      if (teacherId) {
+        const stillAssigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [teacherId])[0]?.count || 0;
+        if (stillAssigned === 0) {
+          run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [teacherId]);
+        }
+      }
+
+      return { success: true, message: 'Classe et toutes les données associées supprimées définitivement' };
+    } catch (error) {
+      console.error('Erreur suppression classe:', error);
+      return { success: false, error: 'Erreur lors de la suppression: ' + error.message };
+    }
   });
 
   // ==================== DASHBOARD STATS ====================

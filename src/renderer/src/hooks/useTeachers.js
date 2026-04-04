@@ -47,6 +47,30 @@ export function useTeachers() {
     return result;
   };
 
+  const deactivateTeacher = async (id) => {
+    const result = await teacherAPI.deactivate(id);
+    if (result.success) {
+      await loadTeachers();
+    }
+    return result;
+  };
+
+  const activateTeacher = async (id) => {
+    const result = await teacherAPI.activate(id);
+    if (result.success) {
+      await loadTeachers();
+    }
+    return result;
+  };
+
+  const hardDeleteTeacher = async (id) => {
+    const result = await teacherAPI.hardDelete(id);
+    if (result.success) {
+      await loadTeachers();
+    }
+    return result;
+  };
+
   return {
     teachers,
     loading,
@@ -54,6 +78,9 @@ export function useTeachers() {
     createTeacher,
     updateTeacher,
     deleteTeacher,
+    deactivateTeacher,
+    activateTeacher,
+    hardDeleteTeacher,
     refresh: loadTeachers,
   };
 }

@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign, Pencil, Trash2 } from 'lucide-react';
+import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Payments() {
   const {
@@ -42,6 +43,7 @@ export default function Payments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingPayment, setViewingPayment] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, payment: null });
 
   const [editingPayment, setEditingPayment] = useState(null);
 
@@ -290,9 +292,14 @@ export default function Payments() {
     setIsStudentDialogOpen(true);
   };
 
-  const handleDeletePayment = async (payment) => {
+  const handleDeletePayment = (payment) => {
     if (!payment || !payment.id) return;
-    if (!window.confirm('Voulez-vous vraiment supprimer ce paiement ?')) return;
+    setDeleteDialog({ open: true, payment });
+  };
+
+  const handleConfirmDelete = async () => {
+    const payment = deleteDialog.payment;
+    if (!payment || !payment.id) return;
 
     try {
       let result;
@@ -310,6 +317,7 @@ export default function Payments() {
     } catch (error) {
       toast.error(error.message || 'Erreur suppression');
     }
+    setDeleteDialog({ open: false, payment: null });
   };
 
   const handleViewPayment = (payment) => {
@@ -974,6 +982,19 @@ export default function Payments() {
           </form>
         </DialogContent>
       </Dialog>
+      
+      {/* Dialog de confirmation de suppression */}
+      <ConfirmHardDeleteDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ open, payment: open ? deleteDialog.payment : null })}
+        onConfirm={handleConfirmDelete}
+        title="Supprimer le paiement"
+        itemName={deleteDialog.payment ? `${deleteDialog.payment.first_name} ${deleteDialog.payment.last_name} - ${Number(deleteDialog.payment.amount).toLocaleString()} FCFA` : ''}
+        warnings={[
+          'Ce paiement sera définitivement supprimé',
+          'Cette action est irréversible'
+        ]}
+      />
       
       {ToastComponent}
     </div>
