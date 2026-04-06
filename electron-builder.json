@@ -6,6 +6,9 @@
   },
   "files": [
     "src/**/*",
+    "!**/*.db",
+    "!**/*.sqlite",
+    "!**/*.sqlite3",
     "dist/**/*",
     "package.json"
   ],

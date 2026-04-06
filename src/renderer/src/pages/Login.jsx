@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/useToast.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { APP_LOGO_PNG } from '@/config/appLogo';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -39,7 +40,7 @@ export default function Login() {
       <div className="relative z-10 min-h-screen flex flex-col items-center">
         <div className="pt-20" />
 
-        <img src="/assets/images/logo.png" alt="Logo" className="h-44 w-44 object-contain" />
+        <img src={APP_LOGO_PNG} alt="Logo" className="h-44 w-44 object-contain drop-shadow-md" />
 
         <div className="mt-10 relative">
           <Card className="relative z-10 w-[520px] bg-[#e9e9e9] border border-black/20 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.15)]">
@@ -51,6 +52,8 @@ export default function Login() {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    placeholder="admin"
+                    autoComplete="username"
                     className="h-12 rounded-full bg-white shadow-inner border border-black/10 px-5 text-black caret-black placeholder:text-black/30"
                     required
                   />
@@ -62,6 +65,8 @@ export default function Login() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    placeholder="admin"
+                    autoComplete="current-password"
                     className="h-12 rounded-full bg-white shadow-inner border border-black/10 px-5 text-black caret-black placeholder:text-black/30"
                     required
                   />
@@ -76,6 +81,10 @@ export default function Login() {
                     {loading ? '...' : 'Se connecter'}
                   </Button>
                 </div>
+                <p className="pt-4 text-center text-xs text-black/45">
+                  Première installation : identifiant <span className="font-semibold">admin</span>, mot de passe{' '}
+                  <span className="font-semibold">admin</span> (à modifier dans les paramètres).
+                </p>
               </form>
             </CardContent>
           </Card>

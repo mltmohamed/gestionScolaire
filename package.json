@@ -8,6 +8,7 @@
     "build": "vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"cross-env NODE_ENV=development electron .\"",
+    "electron:dev:reset-admin": "concurrently \"vite\" \"cross-env NODE_ENV=development SCHOOLMANAGE_RESET_ADMIN=1 electron .\"",
     "electron:build": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
   },
   "keywords": [

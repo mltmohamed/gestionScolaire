@@ -13,6 +13,7 @@ import {
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
+import { APP_LOGO_PNG } from '@/config/appLogo';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -45,7 +46,7 @@ export default function Sidebar() {
             <div className="absolute inset-0 bg-gradient-to-br from-[#0066CC] to-[#003399] rounded-xl blur-md opacity-40 group-hover:opacity-60 transition-opacity"></div>
             <div className="relative p-2 bg-gradient-to-br from-[#0066CC] to-[#003399] rounded-xl">
               <div className="bg-white/95 rounded-lg p-1 shadow-sm ring-1 ring-black/10">
-                <img src="/assets/images/logo.png" alt="LA SAGESSE" className="h-9 w-9 object-contain" />
+                <img src={APP_LOGO_PNG} alt="LA SAGESSE" className="h-9 w-9 object-contain" />
               </div>
             </div>
           </div>

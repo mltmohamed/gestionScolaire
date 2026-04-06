@@ -1,5 +1,21 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+
+// Définir userData AVANT require('./database/db') (sinon mauvais chemin pour schoolmanage.db).
+//
+// Dev : …/app-gestion-scolaire-dev  → ne mélange pas avec l’exe installé.
+// Installé : …/app-gestion-scolaire/schoolmanage-files  → ignore l’ancienne …/schoolmanage.db
+// à la racine du userData (celle que l’exe utilisait avant), donc même sensation « comme neuf » qu’en dev.
+if (!app.isPackaged) {
+  const base = app.getPath('userData');
+  app.setPath('userData', `${base}-dev`);
+  console.log('Mode développement : données utilisateur dans', app.getPath('userData'));
+} else {
+  const root = app.getPath('userData');
+  app.setPath('userData', path.join(root, 'schoolmanage-files'));
+  console.log('Application packagée : données dans', app.getPath('userData'));
+}
+
 const { initializeDatabase, closeDatabase } = require('./database/db');
 const setupIPCHandlers = require('./ipc-handlers');
 
@@ -139,6 +155,7 @@ async function createWindow() {
 // Initialisation de l'application
 app.whenReady().then(async () => {
   try {
+    console.log('[SchoolManage] userData =', app.getPath('userData'), '| packagé =', app.isPackaged);
     // Initialiser la base de données
     await initializeDatabase();
     

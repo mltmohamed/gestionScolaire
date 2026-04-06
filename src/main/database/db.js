@@ -8,17 +8,65 @@ class DatabaseManager {
   constructor() {
     this.db = null;
     this._saving = false;
-    const legacyDbPath = path.join(__dirname, '../../../schoolmanage.db');
     this.dbPath = path.join(app.getPath('userData'), 'schoolmanage.db');
     try {
       fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
-      if (!fs.existsSync(this.dbPath) && fs.existsSync(legacyDbPath)) {
-        fs.copyFileSync(legacyDbPath, this.dbPath);
+      // Ne plus copier automatiquement schoolmanage.db depuis la racine du projet : ça réinjectait
+      // toute l’ancienne base (élèves + mot de passe admin modifié) dans un dossier censé être « neuf ».
+      // Pour une migration manuelle uniquement : SCHOOLMANAGE_USE_LEGACY_DB=1
+      if (!app.isPackaged && process.env.SCHOOLMANAGE_USE_LEGACY_DB === '1') {
+        const legacyDbPath = path.join(__dirname, '../../../schoolmanage.db');
+        if (!fs.existsSync(this.dbPath) && fs.existsSync(legacyDbPath)) {
+          fs.copyFileSync(legacyDbPath, this.dbPath);
+          console.log('Copie de la base legacy (SCHOOLMANAGE_USE_LEGACY_DB=1) :', legacyDbPath);
+        }
       }
     } catch (error) {
       console.error('Erreur lors de la préparation du chemin de la base de données:', error);
     }
     console.log('Chemin de la base de données:', this.dbPath);
+  }
+
+  /**
+   * Crée admin / admin uniquement s’il n’existe aucun utilisateur avec le nom « admin ».
+   * Ne réinitialise pas le mot de passe si vous avez déjà un compte admin (évite d’écraser un mot de passe changé).
+   */
+  ensureDefaultAdminUser() {
+    if (!this.db) return;
+    const rows = this.query(
+      `SELECT id FROM users WHERE lower(trim(username)) = ? LIMIT 1`,
+      ['admin']
+    );
+    if (rows && rows.length > 0) {
+      return;
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync('admin', salt, 100000, 64, 'sha512').toString('hex');
+    this.db.run(
+      'INSERT INTO users (username, password_hash, password_salt, role) VALUES (?, ?, ?, ?)',
+      ['admin', hash, salt, 'administrator']
+    );
+    console.log('Compte par défaut créé : utilisateur « admin », mot de passe « admin ».');
+  }
+
+  /** Réinitialise le mot de passe du compte admin à « admin » (support / dépannage). */
+  resetAdminPasswordToDefault() {
+    if (!this.db) return;
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync('admin', salt, 100000, 64, 'sha512').toString('hex');
+    const rows = this.query(`SELECT id FROM users WHERE lower(trim(username)) = ? LIMIT 1`, ['admin']);
+    if (rows && rows[0]) {
+      this.db.run(
+        'UPDATE users SET password_hash = ?, password_salt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [hash, salt, rows[0].id]
+      );
+    } else {
+      this.db.run(
+        'INSERT INTO users (username, password_hash, password_salt, role) VALUES (?, ?, ?, ?)',
+        ['admin', hash, salt, 'administrator']
+      );
+    }
+    console.log('Mot de passe du compte « admin » réinitialisé à « admin » (SCHOOLMANAGE_RESET_ADMIN=1).');
   }
 
   async initialize() {
@@ -115,14 +163,11 @@ class DatabaseManager {
       `);
       this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
 
-      const usersCount = this.query('SELECT COUNT(*) as count FROM users')[0]?.count || 0;
-      if (usersCount === 0) {
-        const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.pbkdf2Sync('admin', salt, 100000, 64, 'sha512').toString('hex');
-        this.db.run(
-          'INSERT INTO users (username, password_hash, password_salt, role) VALUES (?, ?, ?, ?)',
-          ['admin', hash, salt, 'administrator']
-        );
+      // sql.js peut renvoyer COUNT(*) comme nombre ou chaîne ; "0" est truthy en JS → l’ancien `count === 0` échouait
+      // et aucun compte admin n’était créé. On garantit l’existence d’un utilisateur `admin` si absent.
+      this.ensureDefaultAdminUser();
+      if (process.env.SCHOOLMANAGE_RESET_ADMIN === '1') {
+        this.resetAdminPasswordToDefault();
       }
       
       console.log('Schéma de base de données initialisé');
