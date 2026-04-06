@@ -1004,8 +1004,26 @@ function setupIPCHandlers(ipcMain) {
       LEFT JOIN teachers t ON c.teacher_id = t.id
       WHERE c.id = ? AND COALESCE(c.is_deleted, 0) = 0
     `;
-    const result = query(sql, [id]);
-    return { success: true, data: result[0] };
+    const classResult = query(sql, [id]);
+    if (!classResult[0]) return { success: false, error: 'Classe non trouvée' };
+
+    // Fetch multiple teachers if any
+    const teachersSql = `
+      SELECT t.id, t.first_name, t.last_name, t.specialty
+      FROM class_teachers ct
+      JOIN teachers t ON ct.teacher_id = t.id
+      WHERE ct.class_id = ?
+    `;
+    const teachersResult = query(teachersSql, [id]);
+    
+    return { 
+      success: true, 
+      data: { 
+        ...classResult[0], 
+        teacher_ids: teachersResult.map(t => t.id),
+        teachers: teachersResult
+      } 
+    };
   });
 
   handle('classes:create', { auth: true }, (event, data) => {
@@ -1020,15 +1038,28 @@ function setupIPCHandlers(ipcMain) {
       data.max_students || 30,
       data.teacher_id || null
     ]);
+    const classId = result.lastInsertRowid;
+
+    // Handle multiple teachers
+    if (data.teacher_ids && Array.isArray(data.teacher_ids)) {
+      for (const tId of data.teacher_ids) {
+        run('INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)', [classId, tId]);
+        run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+      }
+    }
 
     if (data.teacher_id) {
       run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [data.teacher_id]);
     }
-    return { success: true, data: { id: result.lastInsertRowid } };
+    return { success: true, data: { id: classId } };
   });
 
   handle('classes:update', { auth: true }, (event, id, data) => {
     const previousTeacherId = query('SELECT teacher_id FROM classes WHERE id = ?', [id])[0]?.teacher_id || null;
+    
+    // Get previous multiple teachers to update their status if needed
+    const prevTeachers = query('SELECT teacher_id FROM class_teachers WHERE class_id = ?', [id]).map(r => r.teacher_id);
+
     const sql = `
       UPDATE classes 
       SET name = ?, level = ?, academic_year = ?, max_students = ?, teacher_id = ?,
@@ -1044,15 +1075,33 @@ function setupIPCHandlers(ipcMain) {
       id
     ]);
 
+    // Update multiple teachers
+    run('DELETE FROM class_teachers WHERE class_id = ?', [id]);
+    if (data.teacher_ids && Array.isArray(data.teacher_ids)) {
+      for (const tId of data.teacher_ids) {
+        run('INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)', [id, tId]);
+        run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+      }
+    }
+
     if (data.teacher_id) {
       run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [data.teacher_id]);
     }
-    if (previousTeacherId && String(previousTeacherId) !== String(data.teacher_id || '')) {
-      const stillAssigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [previousTeacherId])[0]?.count || 0;
-      if (stillAssigned === 0) {
-        run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [previousTeacherId]);
+
+    // Update status for teachers who are no longer assigned
+    const allAssignedTeachers = new Set([data.teacher_id, ...(data.teacher_ids || [])].filter(Boolean).map(String));
+    const potentialInactive = new Set([...prevTeachers, previousTeacherId].filter(Boolean).map(String));
+    
+    for (const tId of potentialInactive) {
+      if (!allAssignedTeachers.has(tId)) {
+        const stillAssigned1 = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [tId])[0]?.count || 0;
+        const stillAssigned2 = query('SELECT COUNT(*) as count FROM class_teachers WHERE teacher_id = ?', [tId])[0]?.count || 0;
+        if (stillAssigned1 === 0 && stillAssigned2 === 0) {
+          run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+        }
       }
     }
+
     return { success: true };
   });
 

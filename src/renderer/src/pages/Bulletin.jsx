@@ -189,19 +189,14 @@ export default function Bulletin() {
 
   const classMatchesBulletinType = useCallback(
     (cls) => {
-      const raw = String(cls?.name || '').trim();
-      if (!raw) return true;
+      if (!cls) return true;
+      const levelStr = String(cls.level || '').trim();
+      if (!levelStr) return true;
 
-      // Normaliser pour matcher aussi: 7ème / 7eme / 7eA / 6e B ...
-      const name = raw
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
+      // Extraire le chiffre (ex: "7ème année" -> 7)
+      const match = levelStr.match(/(\d+)/);
+      const level = match ? Number(match[1]) : null;
 
-      const match = name.match(/(^|\D)([3-9])\s*(e|eme)?/);
-      const level = match ? Number(match[2]) : null;
-
-      // Si on ne détecte pas le niveau dans le nom de la classe, on ne filtre pas.
       if (!level) return true;
 
       if (bulletinType === 'college') return level >= 7 && level <= 9;
@@ -544,6 +539,22 @@ export default function Bulletin() {
   }, [formatNumber, moyennePremier, moyenneSemestre1]);
 
   const moyenneAnnuelle = moyenneGenerale;
+
+  // Calcul automatique du résumé primaire
+  useEffect(() => {
+    if (bulletinType === 'primary') {
+      const annualTotal = Object.values(totalsByMonth).reduce((a, b) => a + b, 0) / (Object.values(totalsByMonth).filter(v => v > 0).length || 1);
+      const annualAvg = moyenneAnnuelle;
+      
+      setPrimarySummary(prev => ({
+        ...prev,
+        total: formatNumber(annualTotal),
+        moy_classe: formatNumber(annualAvg),
+        moy_compo: formatNumber(annualAvg),
+        moy_generale: formatNumber(annualAvg),
+      }));
+    }
+  }, [totalsByMonth, moyenneAnnuelle, bulletinType, formatNumber]);
 
   const rangGlobal = rangGeneral;
 
@@ -1226,32 +1237,36 @@ export default function Bulletin() {
                   <label className="text-sm font-medium">TOTAL</label>
                   <Input 
                     value={primarySummary.total} 
-                    onChange={(e) => setPrimarySummary(prev => ({...prev, total: e.target.value}))}
-                    placeholder="Total"
+                    readOnly
+                    className="bg-muted"
+                    placeholder="Auto"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Moy. de Classe</label>
                   <Input 
                     value={primarySummary.moy_classe} 
-                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_classe: e.target.value}))}
-                    placeholder="Moy. Classe"
+                    readOnly
+                    className="bg-muted"
+                    placeholder="Auto"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Moy. de Compo</label>
                   <Input 
                     value={primarySummary.moy_compo} 
-                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_compo: e.target.value}))}
-                    placeholder="Moy. Compo"
+                    readOnly
+                    className="bg-muted"
+                    placeholder="Auto"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Moy. Générale</label>
                   <Input 
                     value={primarySummary.moy_generale} 
-                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_generale: e.target.value}))}
-                    placeholder="Moy. Générale"
+                    readOnly
+                    className="bg-muted"
+                    placeholder="Auto"
                   />
                 </div>
                 <div className="space-y-1">

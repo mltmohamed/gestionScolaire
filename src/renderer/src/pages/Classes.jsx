@@ -35,9 +35,10 @@ export default function Classes() {
   const [formData, setFormData] = useState({
     name: '',
     level: '',
-    academic_year: '',
+    academic_year: '2025-2026',
     max_students: 30,
     teacher_id: '',
+    teacher_ids: [],
   });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
@@ -78,24 +79,52 @@ export default function Classes() {
     return matchSearch && matchLevel && matchYear && matchTeacher;
   });
 
-  const handleOpenDialog = (cls = null) => {
+  const handleOpenDialog = async (cls = null) => {
     if (cls) {
       setEditingClass(cls);
-      setFormData({
-        name: cls.name || '',
-        level: cls.level || '',
-        academic_year: cls.academic_year || '',
-        max_students: cls.max_students || 30,
-        teacher_id: cls.teacher_id || '',
-      });
+      try {
+        const result = await classAPI.getById(cls.id);
+        if (result && result.success) {
+          const d = result.data;
+          setFormData({
+            name: d.name || '',
+            level: d.level || '',
+            academic_year: d.academic_year || '',
+            max_students: d.max_students || 30,
+            teacher_id: d.teacher_id || '',
+            teacher_ids: d.teacher_ids || [],
+          });
+        } else {
+          const d = result || cls;
+          setFormData({
+            name: d.name || '',
+            level: d.level || '',
+            academic_year: d.academic_year || '',
+            max_students: d.max_students || 30,
+            teacher_id: d.teacher_id || '',
+            teacher_ids: d.teacher_ids || [],
+          });
+        }
+      } catch (error) {
+        console.error('Erreur chargement classe:', error);
+        setFormData({
+          name: cls.name || '',
+          level: cls.level || '',
+          academic_year: cls.academic_year || '',
+          max_students: cls.max_students || 30,
+          teacher_id: cls.teacher_id || '',
+          teacher_ids: [],
+        });
+      }
     } else {
       setEditingClass(null);
       setFormData({
         name: '',
         level: '',
-        academic_year: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+        academic_year: '2025-2026',
         max_students: 30,
         teacher_id: '',
+        teacher_ids: [],
       });
     }
     setIsDialogOpen(true);
@@ -103,37 +132,37 @@ export default function Classes() {
 
   const handleViewClass = async (cls) => {
     try {
-      const fetched = await classAPI.getById(cls.id);
-      setViewingClass(fetched || cls);
+      const result = await classAPI.getById(cls.id);
+      if (result.success) {
+        setViewingClass(result.data);
+      } else {
+        setViewingClass(cls);
+      }
       setIsViewDialogOpen(true);
     } catch (error) {
-      console.error('Erreur chargement classe:', error);
-      toast.error(error.message || 'Erreur lors du chargement');
+      setViewingClass(cls);
+      setIsViewDialogOpen(true);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Soumission formulaire classe:', formData);
+    if (!formData.name || !formData.level || !formData.academic_year) {
+      toast.error('Veuillez remplir les champs obligatoires');
+      return;
+    }
+
     try {
-      if (editingClass) {
-        const result = await updateClass(editingClass.id, formData);
-        console.log('Résultat modification:', result);
-        if (!result.success) {
-          toast.error(result.error || 'Erreur lors de la modification');
-          return;
-        }
-        toast.success('Classe modifiée avec succès !');
+      const result = editingClass
+        ? await updateClass(editingClass.id, formData)
+        : await createClass(formData);
+
+      if (result.success) {
+        toast.success(editingClass ? 'Classe modifiée' : 'Classe créée');
+        setIsDialogOpen(false);
       } else {
-        const result = await createClass(formData);
-        console.log('Résultat création:', result);
-        if (!result.success) {
-          toast.error(result.error || 'Erreur lors de la création');
-          return;
-        }
-        toast.success('Classe ajoutée avec succès !');
+        toast.error(result.error || 'Erreur lors de l\'enregistrement');
       }
-      setIsDialogOpen(false);
     } catch (error) {
       console.error('Erreur complète:', error);
       toast.error(error.message || 'Une erreur est survenue');
@@ -421,6 +450,38 @@ export default function Classes() {
                   ))}
                 </select>
               </div>
+
+              {['7ème année', '8ème année', '9ème année'].includes(formData.level) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Professeurs intervenants (Collège)</label>
+                  <div className="grid grid-cols-2 gap-2 border rounded-md p-3 max-h-40 overflow-y-auto bg-muted/20">
+                    {teachers.map((teacher) => (
+                      <div key={teacher.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`teacher-${teacher.id}`}
+                          checked={formData.teacher_ids.includes(teacher.id)}
+                          onChange={(e) => {
+                            const ids = [...formData.teacher_ids];
+                            if (e.target.checked) {
+                              ids.push(teacher.id);
+                            } else {
+                              const index = ids.indexOf(teacher.id);
+                              if (index > -1) ids.splice(index, 1);
+                            }
+                            setFormData({ ...formData, teacher_ids: ids });
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor={`teacher-${teacher.id}`} className="text-xs truncate">
+                          {teacher.first_name} {teacher.last_name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">Sélectionnez les professeurs qui interviennent dans cette classe.</p>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
@@ -476,12 +537,30 @@ export default function Classes() {
 
               <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-gray-900 p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm font-bold text-black dark:text-white">Professeur principal</p>
+                  <p className="text-sm font-bold text-black dark:text-white">Professeurs</p>
                   <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#FF6600] to-[#FF3300]" />
                 </div>
-                <div className="rounded-xl border border-black/10 dark:border-white/10 p-3">
-                  <p className="text-[11px] text-muted-foreground">Nom</p>
-                  <p className="text-sm font-semibold">{viewingClass.teacher_name || 'Non assigné'}</p>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-[#0066CC]/20 bg-[#0066CC]/5 p-3">
+                    <p className="text-[11px] text-[#0066CC] font-bold uppercase tracking-wider">Professeur principal</p>
+                    <p className="text-sm font-semibold">{viewingClass.teacher_name || 'Non assigné'}</p>
+                  </div>
+                  
+                  {viewingClass.teachers && viewingClass.teachers.length > 0 && (
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-2">
+                      <p className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Intervenants ({viewingClass.teachers.length})</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {viewingClass.teachers.map((t) => (
+                          <div key={t.id} className="flex items-center gap-2 text-sm">
+                            <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px]">
+                              {t.first_name?.[0]}{t.last_name?.[0]}
+                            </div>
+                            <span>{t.first_name} {t.last_name} {t.specialty ? `(${t.specialty})` : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

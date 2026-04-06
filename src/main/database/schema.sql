@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS classes (
   FOREIGN KEY (teacher_id) REFERENCES teachers(id)
 );
 
+-- Table: class_teachers (Pour assigner plusieurs professeurs à une classe, surtout au collège)
+CREATE TABLE IF NOT EXISTS class_teachers (
+  class_id INTEGER NOT NULL,
+  teacher_id INTEGER NOT NULL,
+  subject_id INTEGER, -- Optionnel: pour lier un prof à une matière dans cette classe
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(class_id, teacher_id),
+  FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+  FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
+);
+
 -- Table: subjects (Matières)
 CREATE TABLE IF NOT EXISTS subjects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
