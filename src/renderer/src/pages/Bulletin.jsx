@@ -132,13 +132,22 @@ export default function Bulletin() {
     for (const s of COLLEGE_SUBJECTS) {
       base[s] = {
         note_classe: '',
-        comp_x2: '',
-        moyenne: '',
+        note_compo: '', // Saisi par l'utilisateur
+        comp_x2: '',    // Calculé ou saisi
+        moyenne: '',    // Calculé : (classe + compo*2)/3
         coeff: '1',
         appreciation: '',
       };
     }
     return base;
+  });
+
+  const [primarySummary, setPrimarySummary] = useState({
+    total: '',
+    moy_classe: '',
+    moy_compo: '',
+    moy_generale: '',
+    classement: '',
   });
   const [collegeDecision, setCollegeDecision] = useState('');
   const [collegeRang, setCollegeRang] = useState('');
@@ -277,6 +286,7 @@ export default function Bulletin() {
     for (const s of COLLEGE_SUBJECTS) {
       baseCollege[s] = {
         note_classe: '',
+        note_compo: '',
         comp_x2: '',
         moyenne: '',
         coeff: '1',
@@ -284,6 +294,13 @@ export default function Bulletin() {
       };
     }
     setCollegeNotes(baseCollege);
+    setPrimarySummary({
+      total: '',
+      moy_classe: '',
+      moy_compo: '',
+      moy_generale: '',
+      classement: '',
+    });
     setCollegeDecision('');
     setCollegeRang('');
     setCollegeEffectif('');
@@ -343,6 +360,7 @@ export default function Bulletin() {
               const row = payload.notes[s] || {};
               next[s] = {
                 note_classe: row.note_classe ?? '',
+                note_compo: row.note_compo ?? '',
                 comp_x2: row.comp_x2 ?? '',
                 moyenne: row.moyenne ?? '',
                 coeff: row.coeff ?? '1',
@@ -411,6 +429,18 @@ export default function Bulletin() {
                 baseRang[m.key] = parsed.byMonth[m.key] ? String(parsed.byMonth[m.key]) : '';
               }
               loadedGeneral = parsed.general ? String(parsed.general) : '';
+              
+              if (parsed.primarySummary) {
+                setPrimarySummary(parsed.primarySummary);
+              } else {
+                setPrimarySummary({
+                  total: '',
+                  moy_classe: '',
+                  moy_compo: '',
+                  moy_generale: '',
+                  classement: '',
+                });
+              }
             } else {
               // Ancien format JSON: {oct:..., nov:...}
               for (const m of MONTHS) {
@@ -586,31 +616,41 @@ export default function Bulletin() {
             <tr>
               <td className="bulletin-td bulletin-td--left bulletin-td--strong">TOTAL</td>
               {MONTHS.map((m) => (
-                <td key={m.key} className="bulletin-td bulletin-td--strong">{formatNumber(totalsByMonth[m.key])}</td>
+                <td key={m.key} className="bulletin-td bulletin-td--strong">
+                  {primarySummary.total || formatNumber(totalsByMonth[m.key])}
+                </td>
               ))}
             </tr>
             <tr>
               <td className="bulletin-td bulletin-td--left">Moy. de Classe</td>
               {MONTHS.map((m) => (
-                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+                <td key={m.key} className="bulletin-td">
+                  {primarySummary.moy_classe || formatNumber(averagesByMonth[m.key])}
+                </td>
               ))}
             </tr>
             <tr>
               <td className="bulletin-td bulletin-td--left">Moy. de Compo.</td>
               {MONTHS.map((m) => (
-                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+                <td key={m.key} className="bulletin-td">
+                  {primarySummary.moy_compo || formatNumber(averagesByMonth[m.key])}
+                </td>
               ))}
             </tr>
             <tr>
               <td className="bulletin-td bulletin-td--left">Moy. Generale</td>
               {MONTHS.map((m) => (
-                <td key={m.key} className="bulletin-td">{formatNumber(averagesByMonth[m.key])}</td>
+                <td key={m.key} className="bulletin-td">
+                  {primarySummary.moy_generale || formatNumber(averagesByMonth[m.key])}
+                </td>
               ))}
             </tr>
             <tr>
               <td className="bulletin-td bulletin-td--left">Classement</td>
               {MONTHS.map((m) => (
-                <td key={m.key} className="bulletin-td">{rangByMonth?.[m.key] || ''}</td>
+                <td key={m.key} className="bulletin-td">
+                  {primarySummary.classement || rangByMonth?.[m.key] || ''}
+                </td>
               ))}
             </tr>
           </tbody>
@@ -734,6 +774,7 @@ export default function Bulletin() {
             <tr>
               <th className="bulletin2-th bulletin2-th--subject">Matieres</th>
               <th className="bulletin2-th">notes classe</th>
+              <th className="bulletin2-th">Note compo</th>
               <th className="bulletin2-th">Comp x 2</th>
               <th className="bulletin2-th">Moy. gené</th>
               <th className="bulletin2-th">coeff</th>
@@ -746,6 +787,7 @@ export default function Bulletin() {
               <tr key={r.subject}>
                 <td className="bulletin2-td bulletin2-td--subject">{r.subject}</td>
                 <td className="bulletin2-td">{r.noteClasse ?? ''}</td>
+                <td className="bulletin2-td">{collegeNotes[r.subject]?.note_compo ?? ''}</td>
                 <td className="bulletin2-td">{r.compX2 ?? ''}</td>
                 <td className="bulletin2-td">{r.moyenne ?? ''}</td>
                 <td className="bulletin2-td">{r.coeff ?? ''}</td>
@@ -754,7 +796,7 @@ export default function Bulletin() {
               </tr>
             ))}
             <tr>
-              <td className="bulletin2-td bulletin2-td--subject" colSpan={4}><strong>Total coeff</strong></td>
+              <td className="bulletin2-td bulletin2-td--subject" colSpan={5}><strong>Total coeff</strong></td>
               <td className="bulletin2-td"><strong>{collegeComputed.totalCoeff}</strong></td>
               <td className="bulletin2-td" colSpan={2}></td>
             </tr>
@@ -809,7 +851,7 @@ export default function Bulletin() {
     const metaPayload = {
       bulletin_type: bulletinType,
       decision,
-      rang: JSON.stringify({ general: rangGeneral || '', byMonth: rangByMonth || {} }),
+      rang: JSON.stringify({ general: rangGeneral || '', byMonth: rangByMonth || {}, primarySummary }),
       visas_json: JSON.stringify(visas || {}),
       moyenne_premier: moyennePremier || '',
     };
@@ -1053,6 +1095,7 @@ export default function Bulletin() {
                     <tr>
                       <th className="p-2 text-left w-[220px]">Matières</th>
                       <th className="p-2 text-center">Notes classe</th>
+                      <th className="p-2 text-center">Note compo</th>
                       <th className="p-2 text-center">Comp x 2</th>
                       <th className="p-2 text-center">Moy. gené</th>
                       <th className="p-2 text-center">Coeff</th>
@@ -1065,8 +1108,19 @@ export default function Bulletin() {
                       const r = collegeNotes?.[subject] || {};
                       const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
                       const safeCoeff = Number.isFinite(coeff) && coeff > 0 ? coeff : 1;
-                      const moy = r.moyenne === '' ? null : Number(String(r.moyenne).replace(',', '.'));
-                      const notesCoeff = Number.isFinite(moy) ? moy * safeCoeff : null;
+                      
+                      // Calcul automatique
+                      const nClasse = r.note_classe === '' ? 0 : Number(String(r.note_classe).replace(',', '.'));
+                      const nCompo = r.note_compo === '' ? 0 : Number(String(r.note_compo).replace(',', '.'));
+                      const compX2 = nCompo * 2;
+                      const moyAuto = (nClasse + compX2) / 3;
+                      
+                      const displayMoy = r.moyenne !== '' ? r.moyenne : formatNumber(moyAuto);
+                      const displayCompX2 = r.comp_x2 !== '' ? r.comp_x2 : formatNumber(compX2);
+                      
+                      const moyValue = Number(String(displayMoy).replace(',', '.'));
+                      const notesCoeff = Number.isFinite(moyValue) ? moyValue * safeCoeff : null;
+
                       return (
                         <tr key={subject} className="border-t">
                           <td className="p-2 font-medium">{subject}</td>
@@ -1079,16 +1133,24 @@ export default function Bulletin() {
                           </td>
                           <td className="p-1 text-center">
                             <Input
-                              value={r.comp_x2}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], comp_x2: e.target.value } }))}
+                              value={r.note_compo}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_compo: e.target.value } }))}
                               className="h-8 text-center"
+                              placeholder="Note"
                             />
                           </td>
                           <td className="p-1 text-center">
                             <Input
-                              value={r.moyenne}
+                              value={r.comp_x2 || displayCompX2}
+                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], comp_x2: e.target.value } }))}
+                              className="h-8 text-center bg-muted/30"
+                            />
+                          </td>
+                          <td className="p-1 text-center">
+                            <Input
+                              value={r.moyenne || displayMoy}
                               onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], moyenne: e.target.value } }))}
-                              className="h-8 text-center"
+                              className="h-8 text-center font-bold bg-muted/30"
                             />
                           </td>
                           <td className="p-1 text-center">
@@ -1098,7 +1160,7 @@ export default function Bulletin() {
                               className="h-8 text-center"
                             />
                           </td>
-                          <td className="p-2 text-center font-semibold">{notesCoeff != null ? formatNumber(notesCoeff) : ''}</td>
+                          <td className="p-2 text-center font-semibold text-primary">{notesCoeff != null ? formatNumber(notesCoeff) : ''}</td>
                           <td className="p-1">
                             <Input
                               value={r.appreciation}
@@ -1154,6 +1216,56 @@ export default function Bulletin() {
 
       {bulletinType === 'primary' ? (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Récapitulatif (TOTAL, Moyennes, Classement)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">TOTAL</label>
+                  <Input 
+                    value={primarySummary.total} 
+                    onChange={(e) => setPrimarySummary(prev => ({...prev, total: e.target.value}))}
+                    placeholder="Total"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Moy. de Classe</label>
+                  <Input 
+                    value={primarySummary.moy_classe} 
+                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_classe: e.target.value}))}
+                    placeholder="Moy. Classe"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Moy. de Compo</label>
+                  <Input 
+                    value={primarySummary.moy_compo} 
+                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_compo: e.target.value}))}
+                    placeholder="Moy. Compo"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Moy. Générale</label>
+                  <Input 
+                    value={primarySummary.moy_generale} 
+                    onChange={(e) => setPrimarySummary(prev => ({...prev, moy_generale: e.target.value}))}
+                    placeholder="Moy. Générale"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Classement</label>
+                  <Input 
+                    value={primarySummary.classement} 
+                    onChange={(e) => setPrimarySummary(prev => ({...prev, classement: e.target.value}))}
+                    placeholder="Ex: 1er, 2e..."
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Suivi et observations (Visas mensuels)</CardTitle>

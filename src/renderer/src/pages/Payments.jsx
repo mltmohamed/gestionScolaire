@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign, Pencil, Trash2 } from 'lucide-react';
+import { Search, GraduationCap, Shirt, Users, TrendingUp, CheckCircle, XCircle, Eye, DollarSign, Pencil, Trash2, Printer } from 'lucide-react';
 import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Payments() {
@@ -56,11 +56,26 @@ export default function Payments() {
     period_month: 'all',
   });
 
-  // Statistiques calculées
+  // Statistiques calculées basées sur les données filtrées
   const stats = React.useMemo(() => {
     if (activeTab === 'teachers') {
-      const totalPaid = teacherPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const uniqueTeachersPaid = new Set(teacherPayments.map(p => p.teacher_id)).size;
+      const filtered = teacherPayments.filter((p) => {
+        const q = (searchTerm || '').trim().toLowerCase();
+        const matchSearch = !q
+          ? true
+          : (`${p.first_name || ''} ${p.last_name || ''}`).toLowerCase().includes(q);
+
+        const matchTeacher = filters.teacher_id === 'all' ? true : String(p.teacher_id || '') === String(filters.teacher_id);
+        const matchMethod =
+          filters.payment_method === 'all' ? true : String(p.payment_method || '').trim() === String(filters.payment_method || '').trim();
+        const matchYear = filters.period_year === 'all' ? true : String(p.period_year || '') === String(filters.period_year);
+        const matchMonth = filters.period_month === 'all' ? true : String(p.period_month || '') === String(filters.period_month);
+
+        return matchSearch && matchTeacher && matchMethod && matchYear && matchMonth;
+      });
+
+      const totalPaid = filtered.reduce((sum, p) => sum + Number(p.amount), 0);
+      const uniqueTeachersPaid = new Set(filtered.map(p => p.teacher_id)).size;
       const totalTeachers = teachers.length;
       return {
         totalAmount: totalPaid,
@@ -71,9 +86,24 @@ export default function Payments() {
         unpaidLabel: "Restants"
       };
     } else {
-      const currentPayments = studentPayments.filter(p => p.type === activeTab);
-      const totalAmount = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const studentsWhoPaid = new Set(currentPayments.map(p => p.student_id)).size;
+      const filtered = studentPayments.filter((p) => {
+        const q = (searchTerm || '').trim().toLowerCase();
+        const matchSearch = !q
+          ? true
+          : (`${p.first_name || ''} ${p.last_name || ''}`).toLowerCase().includes(q);
+
+        const matchType = p.type === (activeTab === 'tuition' ? 'tuition' : 'uniform');
+        const matchClass = filters.class_id === 'all' ? true : String(p.class_id || '') === String(filters.class_id);
+        const matchMethod =
+          filters.payment_method === 'all' ? true : String(p.payment_method || '').trim() === String(filters.payment_method || '').trim();
+        const matchYear =
+          filters.academic_year === 'all' ? true : String(p.academic_year || '').trim() === String(filters.academic_year || '').trim();
+
+        return matchSearch && matchType && matchClass && matchMethod && matchYear;
+      });
+
+      const totalAmount = filtered.reduce((sum, p) => sum + Number(p.amount), 0);
+      const studentsWhoPaid = new Set(filtered.map(p => p.student_id)).size;
       const totalStudents = students.length;
       return {
         totalAmount,
@@ -84,7 +114,7 @@ export default function Payments() {
         unpaidLabel: "N'ayant pas payé"
       };
     }
-  }, [activeTab, studentPayments, teacherPayments, students, teachers]);
+  }, [activeTab, studentPayments, teacherPayments, students, teachers, filters, searchTerm]);
 
   const [studentFormData, setStudentFormData] = useState({
     student_id: '',
@@ -323,6 +353,15 @@ export default function Payments() {
   const handleViewPayment = (payment) => {
     setViewingPayment({ ...payment, _kind: activeTab === 'teachers' ? 'teacher' : 'student' });
     setIsViewDialogOpen(true);
+  };
+
+  const handlePrintReceipt = (payment) => {
+    const p = { ...payment, _kind: activeTab === 'teachers' ? 'teacher' : 'student' };
+    setViewingPayment(p);
+    // On attend un court instant que le state se mette à jour pour le rendu d'impression
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const handleStudentSubmit = async (e) => {
@@ -612,11 +651,11 @@ export default function Payments() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-10">Chargement...</TableCell>
+                    <TableCell colSpan={7} className="text-center py-10">Chargement...</TableCell>
                   </TableRow>
                 ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-10">Aucun paiement trouvé</TableCell>
+                    <TableCell colSpan={7} className="text-center py-10">Aucun paiement trouvé</TableCell>
                   </TableRow>
                 ) : (activeTab === 'teachers' ? filteredTeacherPayments : filteredStudentPayments).map((p) => (
                   <TableRow key={p.id}>
@@ -630,30 +669,40 @@ export default function Payments() {
                     )}
                     <TableCell>{p.description || '-'}</TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleViewPayment(p)}
-                        title="Voir"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditPayment(p)}
-                        title="Modifier"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeletePayment(p)}
-                        title="Supprimer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleViewPayment(p)}
+                          title="Voir"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePrintReceipt(p)}
+                          title="Imprimer reçu"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditPayment(p)}
+                          title="Modifier"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeletePayment(p)}
+                          title="Supprimer"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -997,6 +1046,81 @@ export default function Payments() {
       />
       
       {ToastComponent}
+
+      {/* Style pour l'impression */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * { visibility: hidden; }
+          #receipt-print, #receipt-print * { visibility: visible; }
+          #receipt-print {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: white !important;
+            color: black !important;
+            padding: 20px;
+          }
+          .no-print { display: none !important; }
+        }
+      `}} />
+
+      {/* Composant de Reçu Invisible (visible uniquement à l'impression) */}
+      {viewingPayment && (
+        <div id="receipt-print" className="hidden print:block font-serif">
+          <div className="border-4 border-double border-black p-8 max-w-2xl mx-auto">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold uppercase underline">Reçu de Paiement</h1>
+              <p className="text-sm mt-1">Ecole Privée LA SAGESSE - Kalabancoro</p>
+              <p className="text-xs italic">"L'éducation est la clé du futur"</p>
+            </div>
+
+            <div className="flex justify-between mb-8 text-sm">
+              <div>
+                <p><strong>N° Reçu:</strong> {String(viewingPayment.id).padStart(6, '0')}</p>
+                <p><strong>Date:</strong> {new Date(viewingPayment.payment_date).toLocaleDateString('fr-FR')}</p>
+              </div>
+              <div className="text-right">
+                <p><strong>Année Scolaire:</strong> {viewingPayment.academic_year || '-'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-lg">
+              <p>Reçu de : <span className="font-bold border-b border-dotted border-black px-2">{viewingPayment.first_name} {viewingPayment.last_name}</span></p>
+              
+              <p>La somme de (en chiffres) : <span className="font-bold border border-black bg-gray-100 px-4 py-1">{Number(viewingPayment.amount).toLocaleString()} FCFA</span></p>
+              
+              <p>Motif du paiement : <span className="font-bold italic">
+                {viewingPayment._kind === 'teacher' 
+                  ? `Salaire - ${months[(viewingPayment.period_month || 1) - 1]} ${viewingPayment.period_year}`
+                  : (viewingPayment.type === 'uniform' ? 'Achat de tenue scolaire' : 'Frais de scolarité')}
+              </span></p>
+
+              <p>Méthode : <span className="font-medium">{viewingPayment.payment_method || 'Espèces'}</span></p>
+              
+              {viewingPayment.description && (
+                <p className="text-sm italic">Observation : {viewingPayment.description}</p>
+              )}
+            </div>
+
+            <div className="mt-12 flex justify-between">
+              <div className="text-center">
+                <p className="underline font-bold">Le Parent / Bénéficiaire</p>
+                <div className="h-20"></div>
+              </div>
+              <div className="text-center">
+                <p className="underline font-bold">Le Comptable / Direction</p>
+                <div className="h-20"></div>
+                <p className="text-xs italic">(Cachet et Signature)</p>
+              </div>
+            </div>
+
+            <div className="mt-8 text-[10px] text-center text-gray-500 border-t pt-2">
+              Imprimé le {new Date().toLocaleString('fr-FR')} via SchoolManage
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

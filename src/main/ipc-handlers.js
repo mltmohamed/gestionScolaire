@@ -781,7 +781,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO teachers (first_name, last_name, email, phone, address, specialty, status, gender, photo)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    const result = run(sql, [
       data.first_name,
       data.last_name,
       data.email || null,
@@ -792,7 +792,10 @@ function setupIPCHandlers(ipcMain) {
       data.gender || null,
       data.photo || null
     ]);
-    return { success: true, data: { id: result.lastInsertRowid } };
+    // Note: run() doesn't return the result like query() did in previous implementation, 
+    // but my db.js run() doesn't return anything. I need to get the last ID.
+    const lastId = query('SELECT last_insert_rowid() as id')[0].id;
+    return { success: true, data: { id: lastId } };
   });
 
   handle('teachers:update', { auth: true }, (event, id, data) => {
@@ -809,7 +812,7 @@ function setupIPCHandlers(ipcMain) {
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
-    query(sql, [
+    run(sql, [
       data.first_name,
       data.last_name,
       data.email,
@@ -994,7 +997,13 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('classes:getById', { auth: true }, (event, id) => {
-    const sql = 'SELECT * FROM classes WHERE id = ? AND COALESCE(is_deleted, 0) = 0';
+    const sql = `
+      SELECT c.*, t.first_name || ' ' || t.last_name as teacher_name,
+             (SELECT COUNT(*) FROM students WHERE class_id = c.id AND COALESCE(is_deleted, 0) = 0) as student_count
+      FROM classes c
+      LEFT JOIN teachers t ON c.teacher_id = t.id
+      WHERE c.id = ? AND COALESCE(c.is_deleted, 0) = 0
+    `;
     const result = query(sql, [id]);
     return { success: true, data: result[0] };
   });
