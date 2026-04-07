@@ -87,7 +87,7 @@ export default function Bulletin() {
   const [viewMode, setViewMode] = useState('welcome'); // 'welcome', 'entry', 'generate'
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
-  const [bulletinType, setBulletinType] = useState('primary');
+  const [bulletinType, setBulletinType] = useState('all');
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [studentFilters, setStudentFilters] = useState({
     class_id: 'all',
@@ -128,6 +128,7 @@ export default function Bulletin() {
   const [moyennePremier, setMoyennePremier] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printPortalEl, setPrintPortalEl] = useState(null);
+  const [bulkPortalEl, setBulkPortalEl] = useState(null);
 
   const [bulkExporting, setBulkExporting] = useState(false);
   const [bulkData, setBulkData] = useState([]);
@@ -175,6 +176,14 @@ export default function Bulletin() {
       document.body.appendChild(el);
     }
     setPrintPortalEl(el);
+
+    let bel = document.getElementById('bulletin-bulk-portal');
+    if (!bel) {
+      bel = document.createElement('div');
+      bel.id = 'bulletin-bulk-portal';
+      document.body.appendChild(bel);
+    }
+    setBulkPortalEl(bel);
   }, []);
 
   const selectedStudent = useMemo(() => {
@@ -213,6 +222,7 @@ export default function Bulletin() {
 
       if (bulletinType === 'college') return level >= 7 && level <= 9;
       if (bulletinType === 'primary') return level >= 3 && level <= 6;
+      if (bulletinType === 'all') return level >= 3 && level <= 9;
       return true;
     },
     [bulletinType]
@@ -873,6 +883,44 @@ export default function Bulletin() {
                 <span className="bulletin-scores__unit">/10</span>
               </div>
             </div>
+
+            <div className="bulletin-footer-table-container">
+              <table className="bulletin-footer-table">
+                <tbody>
+                  <tr>
+                    <td className="bulletin-footer-td label-td">Observateurs Générales</td>
+                    <td className="bulletin-footer-td content-td"></td>
+                    <td className="bulletin-footer-td label-td">Décisions</td>
+                    <td className="bulletin-footer-td check-td">
+                      <div className="check-item">
+                        <div className={`check-box ${meta.decision === 'pass' ? 'checked' : ''}`}>{meta.decision === 'pass' ? '✓' : ''}</div>
+                        <span>Passe en classe supérieure</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="bulletin-footer-td no-border-top" colSpan={2} rowSpan={2}></td>
+                    <td className="bulletin-footer-td label-td no-border-top"></td>
+                    <td className="bulletin-footer-td check-td no-border-top">
+                      <div className="check-item">
+                        <div className={`check-box ${meta.decision === 'repeat' ? 'checked' : ''}`}>{meta.decision === 'repeat' ? '✓' : ''}</div>
+                        <span>Redouble</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="bulletin-footer-td label-td no-border-top"></td>
+                    <td className="bulletin-footer-td check-td no-border-top">
+                      <div className="check-item">
+                        <div className={`check-box ${meta.decision === 'excluded' ? 'checked' : ''}`}>{meta.decision === 'excluded' ? '✗' : ''}</div>
+                        <span>Exclu(e)</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <div className="bulletin-signatures2">
               <div className="bulletin-signature2"><div className="bulletin-signature2__title">LE MAITRE</div><div className="bulletin-signature2__line" /></div>
               <div className="bulletin-signature2"><div className="bulletin-signature2__title">LE DIRECTEUR</div><div className="bulletin-signature2__line" /></div>
@@ -1022,32 +1070,41 @@ export default function Bulletin() {
             </div>
           </div>
 
-          <div className="bulletin-observers">
-            <div className="bulletin-observers__title">Observateurs Générales</div>
-          </div>
-
-          <div className="bulletin-decisions2">
-            <div className="bulletin-decisions2__title">Décisions</div>
-            <div className="bulletin-decisions2__content">
-              <div className="bulletin-decision2">
-                <span className="bulletin-decision2__label">Passe en classe supérieure</span>
-                <span className={`bulletin-decision2__check ${decision === 'pass' ? 'is-checked' : ''}`}>
-                  {decision === 'pass' ? '✓' : ''}
-                </span>
-              </div>
-              <div className="bulletin-decision2">
-                <span className="bulletin-decision2__label">Redouble</span>
-                <span className={`bulletin-decision2__check ${decision === 'repeat' ? 'is-checked' : ''}`}>
-                  {decision === 'repeat' ? '✓' : ''}
-                </span>
-              </div>
-              <div className="bulletin-decision2">
-                <span className="bulletin-decision2__label">Exclu(e)</span>
-                <span className={`bulletin-decision2__check ${decision === 'excluded' ? 'is-checked' : ''}`}>
-                  {decision === 'excluded' ? '✗' : ''}
-                </span>
-              </div>
-            </div>
+          <div className="bulletin-footer-table-container">
+            <table className="bulletin-footer-table">
+              <tbody>
+                <tr>
+                  <td className="bulletin-footer-td label-td">Observateurs Générales</td>
+                  <td className="bulletin-footer-td content-td"></td>
+                  <td className="bulletin-footer-td label-td">Décisions</td>
+                  <td className="bulletin-footer-td check-td">
+                    <div className="check-item">
+                      <div className={`check-box ${decision === 'pass' ? 'checked' : ''}`}>{decision === 'pass' ? '✓' : ''}</div>
+                      <span>Passe en classe supérieure</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="bulletin-footer-td no-border-top" colSpan={2} rowSpan={2}></td>
+                  <td className="bulletin-footer-td label-td no-border-top"></td>
+                  <td className="bulletin-footer-td check-td no-border-top">
+                    <div className="check-item">
+                      <div className={`check-box ${decision === 'repeat' ? 'checked' : ''}`}>{decision === 'repeat' ? '✓' : ''}</div>
+                      <span>Redouble</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="bulletin-footer-td label-td no-border-top"></td>
+                  <td className="bulletin-footer-td check-td no-border-top">
+                    <div className="check-item">
+                      <div className={`check-box ${decision === 'excluded' ? 'checked' : ''}`}>{decision === 'excluded' ? '✗' : ''}</div>
+                      <span>Exclu(e)</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div className="bulletin-signatures2">
@@ -1780,14 +1837,17 @@ export default function Bulletin() {
         </div>
       )}
 
-      {/* Rendu des bulletins pour l'export groupé */}
-      {bulkExporting && (
-        <div className="fixed inset-0 bg-white z-[9999] overflow-auto print:static print:z-auto">
-          {bulkData.map((bulletin, idx) => (
-            <SingleBulletinPrintView key={bulletin.student.id} bulletin={bulletin} />
-          ))}
-        </div>
-      )}
+      {/* Rendu des bulletins pour l'export groupé via Portal */}
+      {bulkExporting && bulkPortalEl
+        ? createPortal(
+            <div className="bulletin-bulk-print-container">
+              {bulkData.map((bulletin, idx) => (
+                <SingleBulletinPrintView key={bulletin.student.id} bulletin={bulletin} />
+              ))}
+            </div>,
+            bulkPortalEl
+          )
+        : null}
 
       {previewOpen && (
         <div className="bulletin-preview" role="dialog" aria-modal="true">
@@ -1819,27 +1879,88 @@ export default function Bulletin() {
           margin: 10mm;
         }
         @media print {
-          body {
-            background: white !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .bulletin-print-only {
-            display: block !important;
-          }
-        }
-        .bulletin-print-only {
-          display: none;
-        }
-        .bulletin-print, .bulletin2-print {
-          font-family: 'Times New Roman', serif;
-          color: black;
-          background: white;
-          padding: 20px;
-          max-width: 800px;
-          margin: 0 auto;
-        }
+           body {
+             background: white !important;
+           }
+           /* Masquer l'application React entière pendant l'impression */
+           #root {
+             display: none !important;
+           }
+           /* Afficher uniquement les portails de bulletin */
+           #bulletin-print-portal, #bulletin-bulk-portal {
+             display: block !important;
+             position: static !important;
+             width: 100% !important;
+             height: auto !important;
+             overflow: visible !important;
+           }
+           .no-print {
+             display: none !important;
+           }
+         }
+         #bulletin-print-portal, #bulletin-bulk-portal {
+           display: none;
+         }
+         @media print {
+           #bulletin-print-portal:not(:empty), #bulletin-bulk-portal:not(:empty) {
+             display: block !important;
+           }
+         }
+         .bulletin-print, .bulletin2-print {
+           font-family: 'Times New Roman', serif;
+           color: black;
+           background: white;
+           padding: 10px;
+           max-width: 800px;
+           margin: 0 auto;
+           page-break-after: always;
+         }
+         .bulletin-footer-table-container {
+           margin-top: 20px;
+         }
+         .bulletin-footer-table {
+           width: 100%;
+           border-collapse: collapse;
+         }
+         .bulletin-footer-td {
+           border: 1px solid black;
+           padding: 8px;
+           vertical-align: top;
+           font-size: 11px;
+         }
+         .bulletin-footer-td.label-td {
+           font-weight: bold;
+           width: 150px;
+           background: #f9f9f9;
+         }
+         .bulletin-footer-td.content-td {
+           width: 200px;
+         }
+         .bulletin-footer-td.check-td {
+           width: 250px;
+         }
+         .bulletin-footer-td.no-border-top {
+           border-top: none;
+         }
+         .check-item {
+           display: flex;
+           align-items: center;
+           gap: 10px;
+           margin-bottom: 4px;
+         }
+         .check-box {
+           width: 16px;
+           height: 16px;
+           border: 1.5px solid black;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           font-weight: bold;
+           font-size: 12px;
+         }
+         .check-box.checked {
+           background: #eee;
+         }
         .bulletin-print__title, .bulletin2-title {
           text-align: center;
           font-size: 20px;
