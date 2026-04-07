@@ -434,22 +434,24 @@ export default function Classes() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Professeur principal</label>
-                <select
-                  value={formData.teacher_id}
-                  onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">Non assigné</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.first_name} {teacher.last_name}
-                      {teacher.specialty ? ` - ${teacher.specialty}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {!['7ème année', '8ème année', '9ème année'].includes(formData.level) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Professeur principal</label>
+                  <select
+                    value={formData.teacher_id}
+                    onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Non assigné</option>
+                    {teachers.map((teacher) => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.first_name} {teacher.last_name}
+                        {teacher.specialty ? ` - ${teacher.specialty}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {['7ème année', '8ème année', '9ème année'].includes(formData.level) && (
                 <div className="space-y-2">
@@ -541,10 +543,12 @@ export default function Classes() {
                   <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#FF6600] to-[#FF3300]" />
                 </div>
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-[#0066CC]/20 bg-[#0066CC]/5 p-3">
-                    <p className="text-[11px] text-[#0066CC] font-bold uppercase tracking-wider">Professeur principal</p>
-                    <p className="text-sm font-semibold">{viewingClass.teacher_name || 'Non assigné'}</p>
-                  </div>
+                  {!['7ème année', '8ème année', '9ème année'].includes(viewingClass.level) && (
+                    <div className="rounded-xl border border-[#0066CC]/20 bg-[#0066CC]/5 p-3">
+                      <p className="text-[11px] text-[#0066CC] font-bold uppercase tracking-wider">Professeur principal</p>
+                      <p className="text-sm font-semibold">{viewingClass.teacher_name || 'Non assigné'}</p>
+                    </div>
+                  )}
                   
                   {viewingClass.teachers && viewingClass.teachers.length > 0 && (
                     <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-2">

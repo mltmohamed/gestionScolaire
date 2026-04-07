@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
+import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2 } from 'lucide-react';
+import { cn } from '@/utils/cn';
 
 const MONTHS = [
   { key: 'oct', label: 'OCT.' },
@@ -82,6 +84,7 @@ export default function Bulletin() {
     return `${y}-${y + 1}`;
   }, []);
 
+  const [viewMode, setViewMode] = useState('welcome'); // 'welcome', 'entry', 'generate'
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
   const [bulletinType, setBulletinType] = useState('primary');
@@ -126,6 +129,9 @@ export default function Bulletin() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printPortalEl, setPrintPortalEl] = useState(null);
 
+  const [bulkExporting, setBulkExporting] = useState(false);
+  const [bulkData, setBulkData] = useState([]);
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [collegeTrimestreLabel, setCollegeTrimestreLabel] = useState('COMPOSITION DU 2e TRIMESTRE');
   const [collegeNotes, setCollegeNotes] = useState(() => {
     const base = {};
@@ -142,12 +148,18 @@ export default function Bulletin() {
     return base;
   });
 
-  const [primarySummary, setPrimarySummary] = useState({
-    total: '',
-    moy_classe: '',
-    moy_compo: '',
-    moy_generale: '',
-    classement: '',
+  const [primarySummary, setPrimarySummary] = useState(() => {
+    const base = {};
+    for (const m of MONTHS) {
+      base[m.key] = {
+        total: '',
+        moy_classe: '',
+        moy_compo: '',
+        moy_generale: '',
+        classement: '',
+      };
+    }
+    return base;
   });
   const [collegeDecision, setCollegeDecision] = useState('');
   const [collegeRang, setCollegeRang] = useState('');
@@ -235,14 +247,26 @@ export default function Bulletin() {
   }, [students, studentSearchTerm, studentFilters, classById, classMatchesBulletinType]);
 
   useEffect(() => {
-    if (!selectedStudentId) return;
-    const s = students.find((st) => String(st.id) === String(selectedStudentId));
-    if (!s) return;
-    const cls = s.class_id != null ? classById.get(String(s.class_id)) : null;
-    if (!classMatchesBulletinType(cls)) {
-      setSelectedStudentId('');
+    if (selectedStudentId && students.length > 0) {
+      const s = students.find((st) => String(st.id) === String(selectedStudentId));
+      if (s && s.class_id) {
+        const cls = classById.get(String(s.class_id));
+        if (cls && cls.level) {
+          const levelStr = String(cls.level).trim();
+          const match = levelStr.match(/(\d+)/);
+          const levelNum = match ? Number(match[1]) : null;
+          
+          if (levelNum) {
+            if (levelNum >= 7 && levelNum <= 9) {
+              setBulletinType('college');
+            } else if (levelNum >= 3 && levelNum <= 6) {
+              setBulletinType('primary');
+            }
+          }
+        }
+      }
     }
-  }, [bulletinType, classById, classMatchesBulletinType, selectedStudentId, students]);
+  }, [selectedStudentId, students, classById]);
 
   const selectedClass = useMemo(() => {
     if (!selectedStudent || !selectedStudent.class_id) return null;
@@ -289,13 +313,17 @@ export default function Bulletin() {
       };
     }
     setCollegeNotes(baseCollege);
-    setPrimarySummary({
-      total: '',
-      moy_classe: '',
-      moy_compo: '',
-      moy_generale: '',
-      classement: '',
-    });
+    const baseSummary = {};
+    for (const m of MONTHS) {
+      baseSummary[m.key] = {
+        total: '',
+        moy_classe: '',
+        moy_compo: '',
+        moy_generale: '',
+        classement: '',
+      };
+    }
+    setPrimarySummary(baseSummary);
     setCollegeDecision('');
     setCollegeRang('');
     setCollegeEffectif('');
@@ -428,13 +456,17 @@ export default function Bulletin() {
               if (parsed.primarySummary) {
                 setPrimarySummary(parsed.primarySummary);
               } else {
-                setPrimarySummary({
-                  total: '',
-                  moy_classe: '',
-                  moy_compo: '',
-                  moy_generale: '',
-                  classement: '',
-                });
+                const baseSummary = {};
+                for (const m of MONTHS) {
+                  baseSummary[m.key] = {
+                    total: '',
+                    moy_classe: '',
+                    moy_compo: '',
+                    moy_generale: '',
+                    classement: '',
+                  };
+                }
+                setPrimarySummary(baseSummary);
               }
             } else {
               // Ancien format JSON: {oct:..., nov:...}
@@ -493,43 +525,59 @@ export default function Bulletin() {
 
   const totalsByMonth = useMemo(() => {
     const totals = {};
-    for (const m of MONTHS) totals[m.key] = 0;
-
-    for (const subject of SUBJECTS) {
-      for (const m of MONTHS) {
+    for (const m of MONTHS) {
+      // Vérifier si toutes les matières ont une note pour ce mois
+      let complete = true;
+      let monthTotal = 0;
+      for (const subject of SUBJECTS) {
         const v = notes?.[subject]?.[m.key];
-        const n = v === '' ? null : Number(v);
-        if (n !== null && !Number.isNaN(n)) {
-          totals[m.key] += n;
+        if (v === '' || v === null || v === undefined) {
+          complete = false;
+          break;
         }
+        const n = Number(v);
+        if (Number.isNaN(n)) {
+          complete = false;
+          break;
+        }
+        monthTotal += n;
       }
+      totals[m.key] = complete ? monthTotal : null;
     }
-
     return totals;
   }, [notes]);
 
   const averagesByMonth = useMemo(() => {
     const avgs = {};
     for (const m of MONTHS) {
-      avgs[m.key] = totalsByMonth[m.key] / SUBJECTS.length;
+      const total = totalsByMonth[m.key];
+      avgs[m.key] = total !== null ? total / SUBJECTS.length : null;
     }
     return avgs;
   }, [totalsByMonth]);
 
   const moyenneGenerale = useMemo(() => {
+    // Vérifier si tous les mois sont complets
+    const allMonthsComplete = MONTHS.every(m => totalsByMonth[m.key] !== null);
+    if (!allMonthsComplete) return null;
+
     const vals = MONTHS.map((m) => averagesByMonth[m.key]).filter((v) => typeof v === 'number' && !Number.isNaN(v));
     if (vals.length === 0) return 0;
     const sum = vals.reduce((a, b) => a + b, 0);
     return sum / vals.length;
-  }, [averagesByMonth]);
+  }, [averagesByMonth, totalsByMonth]);
 
   const moyenneSemestre1 = useMemo(() => {
     const keys = ['oct', 'nov', 'dec', 'jan'];
+    // Vérifier si les mois du semestre 1 sont complets
+    const s1Complete = keys.every(k => totalsByMonth[k] !== null);
+    if (!s1Complete) return null;
+
     const vals = keys.map((k) => averagesByMonth[k]).filter((v) => typeof v === 'number' && !Number.isNaN(v));
     if (vals.length === 0) return 0;
     const sum = vals.reduce((a, b) => a + b, 0);
     return sum / vals.length;
-  }, [averagesByMonth]);
+  }, [averagesByMonth, totalsByMonth]);
 
   const moyennePremierDisplay = useMemo(() => {
     if (moyennePremier !== '' && moyennePremier !== null && moyennePremier !== undefined) {
@@ -540,21 +588,34 @@ export default function Bulletin() {
 
   const moyenneAnnuelle = moyenneGenerale;
 
-  // Calcul automatique du résumé primaire
+  // Calcul automatique du résumé primaire pour chaque mois
   useEffect(() => {
     if (bulletinType === 'primary') {
-      const annualTotal = Object.values(totalsByMonth).reduce((a, b) => a + b, 0) / (Object.values(totalsByMonth).filter(v => v > 0).length || 1);
-      const annualAvg = moyenneAnnuelle;
-      
-      setPrimarySummary(prev => ({
-        ...prev,
-        total: formatNumber(annualTotal),
-        moy_classe: formatNumber(annualAvg),
-        moy_compo: formatNumber(annualAvg),
-        moy_generale: formatNumber(annualAvg),
-      }));
+      setPrimarySummary(prev => {
+        const next = { ...prev };
+        let changed = false;
+        for (const m of MONTHS) {
+          const monthTotal = totalsByMonth[m.key] || 0;
+          const monthAvg = averagesByMonth[m.key] || 0;
+          
+          const newTotal = formatNumber(monthTotal);
+          const newAvg = formatNumber(monthAvg);
+
+          if (next[m.key]?.total !== newTotal || next[m.key]?.moy_classe !== newAvg) {
+            next[m.key] = {
+              ...next[m.key],
+              total: newTotal,
+              moy_classe: newAvg,
+              moy_compo: newAvg,
+              moy_generale: newAvg,
+            };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     }
-  }, [totalsByMonth, moyenneAnnuelle, bulletinType, formatNumber]);
+  }, [totalsByMonth, averagesByMonth, bulletinType, formatNumber]);
 
   const rangGlobal = rangGeneral;
 
@@ -571,6 +632,255 @@ export default function Bulletin() {
 
   const handleExportPdf = () => {
     window.print();
+  };
+
+  const handleBulkExport = async (classId) => {
+    if (classId === 'all') return;
+    setIsBulkLoading(true);
+    try {
+      // 1. Récupérer tous les élèves de la classe
+      const classStudents = students.filter(s => String(s.class_id) === String(classId));
+      
+      // 2. Charger les données de bulletin pour chaque élève
+      const bulletinsWithData = await Promise.all(classStudents.map(async (student) => {
+        const data = await getBulletin(student.id, academicYear);
+        if (!data) return null;
+
+        // Calculer les moyennes pour le tri
+        let moyenneTri = 0;
+        const meta = data.meta || {};
+        const bType = meta.bulletin_type || (student.level >= 7 ? 'college' : 'primary');
+
+        if (bType === 'college' && meta.data_json) {
+          try {
+            const payload = JSON.parse(meta.data_json);
+            const notesObj = payload.notes || {};
+            let totalCoeff = 0;
+            let totalNotesCoeff = 0;
+            for (const s of COLLEGE_SUBJECTS) {
+              const r = notesObj[s] || {};
+              const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
+              const moyValue = r.moyenne === '' ? 0 : Number(String(r.moyenne).replace(',', '.'));
+              totalCoeff += coeff;
+              totalNotesCoeff += (moyValue * coeff);
+            }
+            moyenneTri = totalCoeff > 0 ? totalNotesCoeff / totalCoeff : 0;
+          } catch (e) { moyenneTri = 0; }
+        } else {
+          // Primaire - utiliser la moyenne annuelle calculée
+          let sumAvgs = 0;
+          let countMonths = 0;
+          const notesData = data.notes || [];
+          for (const m of MONTHS) {
+            let monthTotal = 0;
+            let complete = true;
+            for (const subject of SUBJECTS) {
+              const noteRow = notesData.find(n => n.subject === subject && n.month_key === m.key);
+              if (!noteRow || noteRow.note === null || noteRow.note === '') {
+                complete = false;
+                break;
+              }
+              monthTotal += Number(noteRow.note);
+            }
+            if (complete) {
+              sumAvgs += (monthTotal / SUBJECTS.length);
+              countMonths++;
+            }
+          }
+          moyenneTri = countMonths > 0 ? sumAvgs / countMonths : 0;
+        }
+
+        return {
+          student,
+          data,
+          moyenneTri,
+          bulletinType: bType
+        };
+      }));
+
+      // Filtrer les nulls et trier du premier au dernier
+      const sortedBulletins = bulletinsWithData
+        .filter(b => b !== null)
+        .sort((a, b) => b.moyenneTri - a.moyenneTri);
+
+      if (sortedBulletins.length === 0) {
+        toast.error("Aucun bulletin trouvé pour cette classe.");
+        return;
+      }
+
+      setBulkData(sortedBulletins);
+      setBulkExporting(true);
+      
+      // Laisser le temps au DOM de se mettre à jour avant d'imprimer
+      setTimeout(() => {
+        window.print();
+        setBulkExporting(false);
+      }, 500);
+
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur lors de la préparation de l'exportation.");
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  // Composant pour le rendu d'un bulletin unique dans l'export groupé
+  const SingleBulletinPrintView = ({ bulletin }) => {
+    const { student, data, bulletinType: bType } = bulletin;
+    const cls = classes.find(c => String(c.id) === String(student.class_id));
+    const studentName = `${student.last_name || ''} ${student.first_name || ''}`.trim();
+    const className = cls ? cls.name : (student.class_name || '');
+
+    if (bType === 'college') {
+      let collegePayload = {};
+      try { collegePayload = JSON.parse(data.meta?.data_json || '{}'); } catch(e) {}
+      
+      const cNotes = collegePayload.notes || {};
+      const rows = COLLEGE_SUBJECTS.map(subject => {
+        const r = cNotes[subject] || {};
+        const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
+        const moy = r.moyenne === '' ? 0 : Number(String(r.moyenne).replace(',', '.'));
+        return { subject, ...r, coeff, notesCoeff: moy * coeff };
+      });
+      const totalCoeff = rows.reduce((s, r) => s + r.coeff, 0);
+      const totalNotes = rows.reduce((s, r) => s + (r.notesCoeff || 0), 0);
+      const moyGen = totalCoeff > 0 ? totalNotes / totalCoeff : 0;
+
+      return (
+        <div className="bulletin2-print" style={{ pageBreakAfter: 'always' }}>
+          <div className="bulletin2-header">
+            <div>Academie de Kalaban coro</div>
+            <div>CAP DE KALABANCORO</div>
+            <div>Ecole privée LA SAGESSE</div>
+          </div>
+          <div className="bulletin2-title">{collegePayload.trimestre_label || 'COMPOSITION'}</div>
+          <div className="bulletin2-meta">
+            <div>Bulletin de l'élève: <strong>{studentName}</strong></div>
+            <div>Année scolaire <strong>{academicYear}</strong></div>
+            <div>CLASSE: <strong>{className}</strong></div>
+          </div>
+          <table className="bulletin2-table">
+            <thead>
+              <tr>
+                <th className="bulletin2-th bulletin2-th--subject">Matieres</th>
+                <th className="bulletin2-th">notes classe</th>
+                <th className="bulletin2-th">Note compo</th>
+                <th className="bulletin2-th">Comp x 2</th>
+                <th className="bulletin2-th">Moy. gené</th>
+                <th className="bulletin2-th">coeff</th>
+                <th className="bulletin2-th">Notes coeff</th>
+                <th className="bulletin2-th bulletin2-th--app">Appreciations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.subject}>
+                  <td className="bulletin2-td bulletin2-td--subject">{r.subject}</td>
+                  <td className="bulletin2-td">{r.note_classe}</td>
+                  <td className="bulletin2-td">{r.note_compo}</td>
+                  <td className="bulletin2-td">{r.comp_x2}</td>
+                  <td className="bulletin2-td">{r.moyenne}</td>
+                  <td className="bulletin2-td">{r.coeff}</td>
+                  <td className="bulletin2-td">{formatNumber(r.notesCoeff)}</td>
+                  <td className="bulletin2-td bulletin2-td--app">{r.appreciation}</td>
+                </tr>
+              ))}
+              <tr>
+                <td className="bulletin2-td bulletin2-td--subject" colSpan={5}><strong>Total coeff</strong></td>
+                <td className="bulletin2-td"><strong>{totalCoeff}</strong></td>
+                <td className="bulletin2-td" colSpan={2}></td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="bulletin2-bottom">
+            <div className="bulletin2-decision">{collegePayload.decision || ''}</div>
+            <div className="bulletin2-summary">
+              <div className="bulletin2-summary__row"><span>Total:</span> <strong>{formatNumber(totalNotes)}</strong></div>
+              <div className="bulletin2-summary__row"><span>Moyenne:</span> <strong>{formatNumber(moyGen)}</strong></div>
+              <div className="bulletin2-summary__row"><span>Rang:</span> <strong>{collegePayload.rang || ''}/{collegePayload.effectif || ''}</strong></div>
+            </div>
+          </div>
+          <div className="bulletin2-sign"><div>Le directeur</div><div>Les parents</div></div>
+        </div>
+      );
+    } else {
+      // Primaire
+      const meta = data.meta || {};
+      let pSummary = {};
+      try { 
+        const rangData = JSON.parse(meta.rang || '{}');
+        pSummary = rangData.primarySummary || {};
+      } catch(e) {}
+
+      const getNote = (s, mk) => {
+        const row = data.notes?.find(n => n.subject === s && n.month_key === mk);
+        return row ? row.note : '';
+      };
+
+      // Calcul moyenne annuelle pour l'affichage
+      let sumAvgs = 0;
+      let countMonths = 0;
+      MONTHS.forEach(m => {
+        if (pSummary[m.key]?.moy_generale) {
+          sumAvgs += Number(pSummary[m.key].moy_generale);
+          countMonths++;
+        }
+      });
+      const moyAnnuelle = countMonths > 0 ? sumAvgs / countMonths : 0;
+
+      return (
+        <div className="bulletin-print" style={{ pageBreakAfter: 'always' }}>
+          <div className="bulletin-print__title">COMPOSITIONS MENSUELLES</div>
+          <div className="bulletin-meta bulletin-meta--top">
+            <div className="bulletin-meta__line"><span className="bulletin-meta__label">Élève:</span> {studentName}</div>
+            <div className="bulletin-meta__line"><span className="bulletin-meta__label">Classe:</span> {className}</div>
+            <div className="bulletin-meta__line"><span className="bulletin-meta__label">Année:</span> {academicYear}</div>
+          </div>
+          <table className="bulletin-table">
+            <thead>
+              <tr>
+                <th className="bulletin-th bulletin-th--left">Matieres/Mois</th>
+                {MONTHS.map(m => <th key={m.key} className="bulletin-th">{m.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {SUBJECTS.map(subject => (
+                <tr key={subject}>
+                  <td className="bulletin-td bulletin-td--left">{subject}</td>
+                  {MONTHS.map(m => <td key={m.key} className="bulletin-td">{getNote(subject, m.key)}</td>)}
+                </tr>
+              ))}
+              <tr>
+                <td className="bulletin-td bulletin-td--left bulletin-td--strong">TOTAL</td>
+                {MONTHS.map(m => <td key={m.key} className="bulletin-td bulletin-td--strong">{pSummary[m.key]?.total || ''}</td>)}
+              </tr>
+              <tr>
+                <td className="bulletin-td bulletin-td--left">Moy. Generale</td>
+                {MONTHS.map(m => <td key={m.key} className="bulletin-td">{pSummary[m.key]?.moy_generale || ''}</td>)}
+              </tr>
+              <tr>
+                <td className="bulletin-td bulletin-td--left">Classement</td>
+                {MONTHS.map(m => <td key={m.key} className="bulletin-td">{pSummary[m.key]?.classement || ''}</td>)}
+              </tr>
+            </tbody>
+          </table>
+          <div className="bulletin-bottom">
+            <div className="bulletin-scores">
+              <div className="bulletin-scores__cell">
+                <span className="bulletin-scores__label">MOYENNE ANNUELLE :</span>
+                <span className="bulletin-scores__box">{formatNumber(moyAnnuelle)}</span>
+                <span className="bulletin-scores__unit">/10</span>
+              </div>
+            </div>
+            <div className="bulletin-signatures2">
+              <div className="bulletin-signature2"><div className="bulletin-signature2__title">LE MAITRE</div><div className="bulletin-signature2__line" /></div>
+              <div className="bulletin-signature2"><div className="bulletin-signature2__title">LE DIRECTEUR</div><div className="bulletin-signature2__line" /></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
   };
 
   const noteDisplay = useCallback(
@@ -628,7 +938,7 @@ export default function Bulletin() {
               <td className="bulletin-td bulletin-td--left bulletin-td--strong">TOTAL</td>
               {MONTHS.map((m) => (
                 <td key={m.key} className="bulletin-td bulletin-td--strong">
-                  {primarySummary.total || formatNumber(totalsByMonth[m.key])}
+                  {primarySummary[m.key]?.total || ''}
                 </td>
               ))}
             </tr>
@@ -636,7 +946,7 @@ export default function Bulletin() {
               <td className="bulletin-td bulletin-td--left">Moy. de Classe</td>
               {MONTHS.map((m) => (
                 <td key={m.key} className="bulletin-td">
-                  {primarySummary.moy_classe || formatNumber(averagesByMonth[m.key])}
+                  {primarySummary[m.key]?.moy_classe || ''}
                 </td>
               ))}
             </tr>
@@ -644,7 +954,7 @@ export default function Bulletin() {
               <td className="bulletin-td bulletin-td--left">Moy. de Compo.</td>
               {MONTHS.map((m) => (
                 <td key={m.key} className="bulletin-td">
-                  {primarySummary.moy_compo || formatNumber(averagesByMonth[m.key])}
+                  {primarySummary[m.key]?.moy_compo || ''}
                 </td>
               ))}
             </tr>
@@ -652,7 +962,7 @@ export default function Bulletin() {
               <td className="bulletin-td bulletin-td--left">Moy. Generale</td>
               {MONTHS.map((m) => (
                 <td key={m.key} className="bulletin-td">
-                  {primarySummary.moy_generale || formatNumber(averagesByMonth[m.key])}
+                  {primarySummary[m.key]?.moy_generale || ''}
                 </td>
               ))}
             </tr>
@@ -660,7 +970,7 @@ export default function Bulletin() {
               <td className="bulletin-td bulletin-td--left">Classement</td>
               {MONTHS.map((m) => (
                 <td key={m.key} className="bulletin-td">
-                  {primarySummary.classement || rangByMonth?.[m.key] || ''}
+                  {primarySummary[m.key]?.classement || ''}
                 </td>
               ))}
             </tr>
@@ -753,7 +1063,7 @@ export default function Bulletin() {
         </div>
       </div>
     );
-  }, [academicYear, averagesByMonth, decision, decisionLabel, formatNumber, moyenneAnnuelle, moyenneSemestre1, noteDisplay, notes, rangByMonth, rangGlobal, selectedClass, selectedStudent, totalsByMonth, visas]);
+  }, [academicYear, averagesByMonth, decision, decisionLabel, formatNumber, moyenneAnnuelle, moyenneSemestre1, noteDisplay, notes, primarySummary, rangByMonth, rangGlobal, selectedClass, selectedStudent, totalsByMonth, visas]);
 
   const PrintViewCollege = useMemo(() => {
     const studentName = selectedStudent ? `${selectedStudent.first_name || ''} ${selectedStudent.last_name || ''}`.trim() : '';
@@ -900,25 +1210,584 @@ export default function Bulletin() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
       {ToastComponent}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Bulletin</h1>
-          <p className="text-muted-foreground">Saisie des notes, calculs automatiques, visas et décisions</p>
+      
+      {/* Barre de navigation interne */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white dark:bg-gray-900 p-4 rounded-2xl border border-black/5 dark:border-white/5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+            <FileText className="h-5 w-5 text-violet-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Gestion des Bulletins</h1>
+            <p className="text-xs text-muted-foreground">Saisie des notes et génération des documents</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setPreviewOpen(true)}>
-            Aperçu
-          </Button>
-          <Button variant="outline" onClick={handleExportPdf}>
-            Exporter PDF
-          </Button>
-          <Button onClick={handleSave} disabled={bulletinLoading}>
-            Enregistrer
-          </Button>
+        
+        <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl w-full md:w-auto">
+          <button
+            onClick={() => setViewMode('entry')}
+            className={cn(
+              "flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              viewMode === 'entry' 
+                ? "bg-white dark:bg-gray-800 text-violet-600 shadow-sm" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <PenLine className="h-4 w-4" />
+            Renseigner les notes
+          </button>
+          <button
+            onClick={() => setViewMode('generate')}
+            className={cn(
+              "flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              viewMode === 'generate' 
+                ? "bg-white dark:bg-gray-800 text-violet-600 shadow-sm" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Printer className="h-4 w-4" />
+            Générer
+          </button>
         </div>
       </div>
+
+      {viewMode === 'welcome' && (
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+          <div className="relative">
+            <div className="absolute inset-0 bg-violet-500/20 blur-3xl rounded-full"></div>
+            <LayoutGrid className="h-24 w-24 text-violet-200 relative z-10" />
+          </div>
+          <div className="max-w-md space-y-2">
+            <h2 className="text-2xl font-bold">Bienvenue dans l'espace Bulletins</h2>
+            <p className="text-muted-foreground">
+              Choisissez une action dans la barre de navigation ci-dessus pour commencer à travailler sur les notes des élèves.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <Button onClick={() => setViewMode('entry')} className="bg-violet-600 hover:bg-violet-700">
+              Commencer la saisie
+            </Button>
+            <Button variant="outline" onClick={() => setViewMode('generate')}>
+              Consulter les bulletins
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'entry' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <Card className="border-0 shadow-sm bg-white/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Search className="h-4 w-4 text-violet-500" />
+                Sélection de l'élève
+              </CardTitle>
+              <CardDescription>Recherchez un élève pour renseigner ses notes pour l'année {academicYear}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-5 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                    placeholder="Nom, prénom ou matricule..."
+                    className="pl-9 h-11 rounded-xl"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <select
+                    value={studentFilters.class_id}
+                    onChange={(e) => setStudentFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500/20"
+                  >
+                    <option value="all">Toutes les classes</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-4">
+                  <select
+                    value={selectedStudentId}
+                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                    className="flex h-11 w-full rounded-xl border border-violet-500 bg-violet-50/50 dark:bg-violet-950/20 px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-violet-500/20"
+                  >
+                    <option value="">-- Choisir l'élève dans la liste --</option>
+                    {filteredStudents.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.last_name} {s.first_name} {s.matricule ? `(${s.matricule})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              {selectedStudent && (
+                <div className="mt-4 p-3 rounded-xl bg-violet-500/5 border border-violet-500/10 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center">
+                      <GraduationCap className="h-5 w-5 text-violet-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">{selectedStudent.last_name} {selectedStudent.first_name}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Classe: {selectedClass?.name || 'N/A'} | Type: {bulletinType === 'primary' ? '3e à 6e (Primaire)' : '7e à 9e (Collège)'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSave} disabled={bulletinLoading} className="bg-violet-600">
+                      Enregistrer les notes
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {selectedStudentId ? (
+            <Card className="border-0 shadow-xl">
+              <CardHeader className="bg-muted/30 border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Saisie des notes - {bulletinType === 'primary' ? 'Primaire' : 'Collège'}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Année Scolaire:</span>
+                    <Input 
+                      value={academicYear} 
+                      onChange={(e) => setAcademicYear(e.target.value)} 
+                      className="h-8 w-28 text-center font-bold"
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {bulletinType === 'college' ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Libellé du trimestre</label>
+                        <Input value={collegeTrimestreLabel} onChange={(e) => setCollegeTrimestreLabel(e.target.value)} placeholder="Ex: COMPOSITION DU 2e TRIMESTRE" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Décision du conseil</label>
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={collegeDecision}
+                          onChange={(e) => setCollegeDecision(e.target.value)}
+                        >
+                          <option value="">-</option>
+                          <option value="Passable">Passable</option>
+                          <option value="Assez bien">Assez bien</option>
+                          <option value="Bien">Bien</option>
+                          <option value="Très bien">Très bien</option>
+                          <option value="Excellent">Excellent</option>
+                          <option value="Insuffisant">Insuffisant</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Rang & Effectif</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Rang" value={collegeRang} onChange={(e) => setCollegeRang(e.target.value)} />
+                          <Input placeholder="Effectif" value={collegeEffectif} onChange={(e) => setCollegeEffectif(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Moyenne du 1er</label>
+                        <Input value={collegeMoyenne1} onChange={(e) => setCollegeMoyenne1(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Moyenne du dernier</label>
+                        <Input value={collegeMoyenneDernier} onChange={(e) => setCollegeMoyenneDernier(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+                      <table className="min-w-[1100px] w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="p-3 text-left w-[220px]">Matières</th>
+                            <th className="p-3 text-center">Notes classe</th>
+                            <th className="p-3 text-center">Note compo</th>
+                            <th className="p-3 text-center bg-violet-500/5">Comp x 2</th>
+                            <th className="p-3 text-center bg-violet-500/5">Moy. gené</th>
+                            <th className="p-3 text-center">Coeff</th>
+                            <th className="p-3 text-center">Notes coeff</th>
+                            <th className="p-3 text-left w-[260px]">Appréciations</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {COLLEGE_SUBJECTS.map((subject) => {
+                            const r = collegeNotes?.[subject] || {};
+                            const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
+                            const safeCoeff = Number.isFinite(coeff) && coeff > 0 ? coeff : 1;
+                            
+                            const nClasse = r.note_classe === '' ? 0 : Number(String(r.note_classe).replace(',', '.'));
+                            const nCompo = r.note_compo === '' ? 0 : Number(String(r.note_compo).replace(',', '.'));
+                            const compX2 = nCompo * 2;
+                            const moyAuto = (nClasse + compX2) / 3;
+                            
+                            const displayMoy = r.moyenne !== '' ? r.moyenne : formatNumber(moyAuto);
+                            const displayCompX2 = r.comp_x2 !== '' ? r.comp_x2 : formatNumber(compX2);
+                            
+                            const moyValue = Number(String(displayMoy).replace(',', '.'));
+                            const notesCoeff = Number.isFinite(moyValue) ? moyValue * safeCoeff : null;
+
+                            return (
+                              <tr key={subject} className="border-t hover:bg-muted/20 transition-colors">
+                                <td className="p-3 font-bold">{subject}</td>
+                                <td className="p-2 text-center">
+                                  <Input
+                                    value={r.note_classe}
+                                    onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_classe: e.target.value } }))}
+                                    className="h-9 text-center rounded-lg"
+                                  />
+                                </td>
+                                <td className="p-2 text-center">
+                                  <Input
+                                    value={r.note_compo}
+                                    onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_compo: e.target.value } }))}
+                                    className="h-9 text-center rounded-lg"
+                                    placeholder="Note"
+                                  />
+                                </td>
+                                <td className="p-2 text-center bg-violet-500/5">
+                                  <Input
+                                    value={r.comp_x2 || displayCompX2}
+                                    readOnly
+                                    className="h-9 text-center bg-transparent border-none font-medium text-violet-600"
+                                  />
+                                </td>
+                                <td className="p-2 text-center bg-violet-500/5">
+                                  <Input
+                                    value={r.moyenne || displayMoy}
+                                    readOnly
+                                    className="h-9 text-center bg-transparent border-none font-bold text-violet-700"
+                                  />
+                                </td>
+                                <td className="p-2 text-center">
+                                  <Input
+                                    value={r.coeff}
+                                    onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], coeff: e.target.value } }))}
+                                    className="h-9 text-center rounded-lg"
+                                  />
+                                </td>
+                                <td className="p-3 text-center font-bold text-primary">{notesCoeff != null ? formatNumber(notesCoeff) : ''}</td>
+                                <td className="p-2">
+                                  <Input
+                                    value={r.appreciation}
+                                    onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], appreciation: e.target.value } }))}
+                                    className="h-9 rounded-lg"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            <th className="px-4 py-3 text-left font-bold border-b">Matières / Mois</th>
+                            {MONTHS.map((m) => (
+                              <th key={m.key} className="px-3 py-3 text-center font-bold border-b border-l bg-muted/30">
+                                {m.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {SUBJECTS.map((subject) => (
+                            <tr key={subject} className="border-b hover:bg-muted/10 transition-colors">
+                              <td className="px-4 py-2 font-bold whitespace-nowrap">{subject}</td>
+                              {MONTHS.map((m) => (
+                                <td key={m.key} className="p-1 border-l">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={10}
+                                    step="0.25"
+                                    value={notes?.[subject]?.[m.key] ?? ''}
+                                    onChange={(e) => handleNoteChange(subject, m.key, e.target.value)}
+                                    className="h-9 text-center border-none focus:ring-0 bg-transparent"
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          
+                          <tr className="bg-violet-500/5 font-bold">
+                            <td className="px-4 py-3 border-t-2 border-violet-500/20">TOTAL</td>
+                            {MONTHS.map((m) => (
+                              <td key={m.key} className="p-1 text-center border-l border-t-2 border-violet-500/20 text-violet-700">
+                                {primarySummary[m.key]?.total || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                          <tr className="bg-violet-500/5">
+                            <td className="px-4 py-3">Moy. de Classe</td>
+                            {MONTHS.map((m) => (
+                              <td key={m.key} className="p-1 text-center border-l text-violet-600">
+                                {primarySummary[m.key]?.moy_classe || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                          <tr className="bg-violet-500/5">
+                            <td className="px-4 py-3">Moy. de Compo</td>
+                            {MONTHS.map((m) => (
+                              <td key={m.key} className="p-1 text-center border-l text-violet-600">
+                                {primarySummary[m.key]?.moy_compo || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                          <tr className="bg-violet-500/5">
+                            <td className="px-4 py-3">Moy. Générale</td>
+                            {MONTHS.map((m) => (
+                              <td key={m.key} className="p-1 text-center border-l text-violet-700 font-bold">
+                                {primarySummary[m.key]?.moy_generale || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                          <tr className="bg-amber-500/5">
+                            <td className="px-4 py-3 text-amber-700 font-bold border-t-2 border-amber-500/20">CLASSEMENT</td>
+                            {MONTHS.map((m) => (
+                              <td key={m.key} className="p-1 border-l border-t-2 border-amber-500/20">
+                                <Input
+                                  value={primarySummary[m.key]?.classement || ''}
+                                  onChange={(e) => setPrimarySummary(prev => ({
+                                    ...prev,
+                                    [m.key]: { ...prev[m.key], classement: e.target.value }
+                                  }))}
+                                  className="h-9 text-center font-bold border-none bg-transparent text-amber-700 focus:ring-0"
+                                  placeholder="Rang"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Visas, Moyenne Annuelle, etc. */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card className="border shadow-sm">
+                        <CardHeader className="py-3 px-4 bg-muted/20">
+                          <CardTitle className="text-sm">Visas & Observations</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <div className="max-h-60 overflow-y-auto">
+                            <table className="w-full text-xs">
+                              <thead className="bg-muted sticky top-0">
+                                <tr>
+                                  <th className="p-2 text-left">Mois</th>
+                                  <th className="p-2 text-left">Maitre</th>
+                                  <th className="p-2 text-left">Obs.</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {MONTHS.map((m) => (
+                                  <tr key={m.key} className="border-t">
+                                    <td className="p-2 font-bold">{m.label}</td>
+                                    <td className="p-1">
+                                      <Input 
+                                        value={visas[m.key].maitre} 
+                                        onChange={(e) => setVisas(prev => ({...prev, [m.key]: {...prev[m.key], maitre: e.target.value}}))}
+                                        className="h-7 text-[10px]"
+                                      />
+                                    </td>
+                                    <td className="p-1">
+                                      <Input 
+                                        value={visas[m.key].observations} 
+                                        onChange={(e) => setVisas(prev => ({...prev, [m.key]: {...prev[m.key], observations: e.target.value}}))}
+                                        className="h-7 text-[10px]"
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="space-y-4">
+                        <Card className="border shadow-sm bg-violet-500/5">
+                          <CardHeader className="py-3 px-4">
+                            <CardTitle className="text-sm">Synthèse Annuelle</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Moyenne Annuelle:</span>
+                              <span className="text-xl font-bold text-violet-700">{formatNumber(moyenneAnnuelle) || 'N/A'} / 10</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground">Rang Final</label>
+                                <Input value={rangGeneral} onChange={(e) => setRangGeneral(e.target.value)} placeholder="Ex: 3/25" className="h-9" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground">Moyenne du 1er</label>
+                                <Input value={moyennePremier} onChange={(e) => setMoyennePremier(e.target.value)} placeholder="10.00" className="h-9" />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold">Décision finale</label>
+                              <div className="grid grid-cols-3 gap-2">
+                                {['pass', 'repeat', 'excluded'].map((d) => (
+                                  <button
+                                    key={d}
+                                    onClick={() => setDecision(decision === d ? '' : d)}
+                                    className={cn(
+                                      "px-2 py-2 text-[10px] font-bold rounded-lg border transition-all",
+                                      decision === d 
+                                        ? "bg-violet-600 border-violet-600 text-white" 
+                                        : "bg-white border-input hover:border-violet-300"
+                                    )}
+                                  >
+                                    {d === 'pass' ? 'PASSE' : d === 'repeat' ? 'REDOUBLE' : 'EXCLU'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed rounded-3xl bg-muted/20">
+              <Users className="h-12 w-12 text-muted-foreground/30 mb-2" />
+              <p className="text-muted-foreground font-medium">Sélectionnez un élève pour commencer la saisie</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === 'generate' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <Card className="border-0 shadow-sm bg-white/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Printer className="h-5 w-5 text-violet-500" />
+                Génération & Exportation
+              </CardTitle>
+              <CardDescription>Visualisez les bulletins individuels ou exportez toute une classe</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Filtrer par classe</label>
+                  <select
+                    value={studentFilters.class_id}
+                    onChange={(e) => setStudentFilters((prev) => ({ ...prev, class_id: e.target.value }))}
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500/20"
+                  >
+                    <option value="all">Toutes les classes</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Sélectionner l'élève</label>
+                  <select
+                    value={selectedStudentId}
+                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500/20"
+                  >
+                    <option value="">Individuel...</option>
+                    {filteredStudents.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.last_name} {s.first_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-11 flex-1 rounded-xl"
+                    disabled={!selectedStudentId}
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Visualiser
+                  </Button>
+                  <Button 
+                    className="h-11 flex-1 rounded-xl bg-violet-600 hover:bg-violet-700"
+                    disabled={studentFilters.class_id === 'all' || isBulkLoading}
+                    onClick={() => handleBulkExport(studentFilters.class_id)}
+                  >
+                    {isBulkLoading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Printer className="h-4 w-4 mr-2" />
+                    )}
+                    Tout exporter
+                  </Button>
+                </div>
+              </div>
+
+              {selectedStudentId && (
+                <div className="p-6 border-2 border-violet-500/10 rounded-3xl bg-violet-500/5 space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-16 w-16 rounded-2xl bg-violet-100 flex items-center justify-center">
+                      <GraduationCap className="h-8 w-8 text-violet-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">{selectedStudent.last_name} {selectedStudent.first_name}</h3>
+                      <p className="text-sm text-muted-foreground">Année scolaire: {academicYear}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                    <div className="p-3 bg-white rounded-xl border border-black/5 shadow-sm">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">Moy. Annuelle</p>
+                      <p className="text-lg font-bold text-violet-600">{formatNumber(moyenneAnnuelle) || 'N/A'}</p>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl border border-black/5 shadow-sm">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">Rang</p>
+                      <p className="text-lg font-bold text-amber-600">{rangGlobal || '-'}</p>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl border border-black/5 shadow-sm">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">Décision</p>
+                      <p className="text-lg font-bold uppercase">{decision || '-'}</p>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <Button onClick={handleExportPdf} className="w-full h-full rounded-xl bg-violet-600">
+                        Exporter PDF
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Rendu des bulletins pour l'export groupé */}
+      {bulkExporting && (
+        <div className="fixed inset-0 bg-white z-[9999] overflow-auto print:static print:z-auto">
+          {bulkData.map((bulletin, idx) => (
+            <SingleBulletinPrintView key={bulletin.student.id} bulletin={bulletin} />
+          ))}
+        </div>
+      )}
 
       {previewOpen && (
         <div className="bulletin-preview" role="dialog" aria-modal="true">
@@ -930,7 +1799,7 @@ export default function Bulletin() {
                 <Button variant="outline" onClick={() => setPreviewOpen(false)}>
                   Fermer
                 </Button>
-                <Button onClick={handleExportPdf}>Exporter PDF</Button>
+                <Button onClick={handleExportPdf} className="bg-violet-600">Exporter PDF</Button>
               </div>
             </div>
             <div className="bulletin-preview__content">
@@ -940,904 +1809,175 @@ export default function Bulletin() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Élève & Année</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Type de bulletin</label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={bulletinType}
-                  onChange={(e) => setBulletinType(e.target.value)}
-                  disabled={bulletinLoading}
-                >
-                  <option value="primary">3e à 6e</option>
-                  <option value="college">7e à 9e</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <Input
-                value={studentSearchTerm}
-                onChange={(e) => setStudentSearchTerm(e.target.value)}
-                placeholder="Rechercher un élève (nom, prénom, matricule)"
-                className="h-10"
-              />
-
-              <select
-                value={studentFilters.class_id}
-                onChange={(e) => setStudentFilters((prev) => ({ ...prev, class_id: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Toutes les classes</option>
-                <option value="">Non assigné</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={studentFilters.academic_year}
-                onChange={(e) => setStudentFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Toutes les années</option>
-                {classAcademicYearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Sélectionner un élève</option>
-                {filteredStudents.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.last_name} {s.first_name}
-                    {s.matricule ? ` (${s.matricule})` : ''}
-                  </option>
-                ))}
-              </select>
-
-              <Input
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                placeholder="2025-2026"
-                className="h-10"
-              />
-
-              <Input
-                value={selectedClass ? selectedClass.name : selectedStudent?.class_name || ''}
-                placeholder="Classe"
-                className="h-10"
-                readOnly
-              />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={resetBulletinState}
-              disabled={bulletinLoading}
-            >
-              Nouveau bulletin
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setStudentSearchTerm('');
-                setStudentFilters({ class_id: 'all', academic_year: 'all' });
-              }}
-              disabled={bulletinLoading}
-            >
-              Réinitialiser filtres
-            </Button>
-            {bulletinLoading && <span className="text-sm text-muted-foreground">Chargement...</span>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tableau de notes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {bulletinType === 'college' ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Libellé</label>
-                  <Input value={collegeTrimestreLabel} onChange={(e) => setCollegeTrimestreLabel(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Décision</label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={collegeDecision}
-                    onChange={(e) => setCollegeDecision(e.target.value)}
-                  >
-                    <option value="">-</option>
-                    <option value="Passable">Passable</option>
-                    <option value="Assez bien">Assez bien</option>
-                    <option value="Bien">Bien</option>
-                    <option value="Très bien">Très bien</option>
-                    <option value="Excellent">Excellent</option>
-                    <option value="Insuffisant">Insuffisant</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Rang</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input placeholder="Rang" value={collegeRang} onChange={(e) => setCollegeRang(e.target.value)} />
-                    <Input placeholder="Effectif" value={collegeEffectif} onChange={(e) => setCollegeEffectif(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Moyenne du 1er</label>
-                  <Input value={collegeMoyenne1} onChange={(e) => setCollegeMoyenne1(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Moyenne du dernier</label>
-                  <Input value={collegeMoyenneDernier} onChange={(e) => setCollegeMoyenneDernier(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-md border border-border">
-                <table className="min-w-[1100px] w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="p-2 text-left w-[220px]">Matières</th>
-                      <th className="p-2 text-center">Notes classe</th>
-                      <th className="p-2 text-center">Note compo</th>
-                      <th className="p-2 text-center">Comp x 2</th>
-                      <th className="p-2 text-center">Moy. gené</th>
-                      <th className="p-2 text-center">Coeff</th>
-                      <th className="p-2 text-center">Notes coeff</th>
-                      <th className="p-2 text-left w-[260px]">Appréciations</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {COLLEGE_SUBJECTS.map((subject) => {
-                      const r = collegeNotes?.[subject] || {};
-                      const coeff = r.coeff === '' ? 1 : Number(String(r.coeff).replace(',', '.'));
-                      const safeCoeff = Number.isFinite(coeff) && coeff > 0 ? coeff : 1;
-                      
-                      // Calcul automatique
-                      const nClasse = r.note_classe === '' ? 0 : Number(String(r.note_classe).replace(',', '.'));
-                      const nCompo = r.note_compo === '' ? 0 : Number(String(r.note_compo).replace(',', '.'));
-                      const compX2 = nCompo * 2;
-                      const moyAuto = (nClasse + compX2) / 3;
-                      
-                      const displayMoy = r.moyenne !== '' ? r.moyenne : formatNumber(moyAuto);
-                      const displayCompX2 = r.comp_x2 !== '' ? r.comp_x2 : formatNumber(compX2);
-                      
-                      const moyValue = Number(String(displayMoy).replace(',', '.'));
-                      const notesCoeff = Number.isFinite(moyValue) ? moyValue * safeCoeff : null;
-
-                      return (
-                        <tr key={subject} className="border-t">
-                          <td className="p-2 font-medium">{subject}</td>
-                          <td className="p-1 text-center">
-                            <Input
-                              value={r.note_classe}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_classe: e.target.value } }))}
-                              className="h-8 text-center"
-                            />
-                          </td>
-                          <td className="p-1 text-center">
-                            <Input
-                              value={r.note_compo}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], note_compo: e.target.value } }))}
-                              className="h-8 text-center"
-                              placeholder="Note"
-                            />
-                          </td>
-                          <td className="p-1 text-center">
-                            <Input
-                              value={r.comp_x2 || displayCompX2}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], comp_x2: e.target.value } }))}
-                              className="h-8 text-center bg-muted/30"
-                            />
-                          </td>
-                          <td className="p-1 text-center">
-                            <Input
-                              value={r.moyenne || displayMoy}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], moyenne: e.target.value } }))}
-                              className="h-8 text-center font-bold bg-muted/30"
-                            />
-                          </td>
-                          <td className="p-1 text-center">
-                            <Input
-                              value={r.coeff}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], coeff: e.target.value } }))}
-                              className="h-8 text-center"
-                            />
-                          </td>
-                          <td className="p-2 text-center font-semibold text-primary">{notesCoeff != null ? formatNumber(notesCoeff) : ''}</td>
-                          <td className="p-1">
-                            <Input
-                              value={r.appreciation}
-                              onChange={(e) => setCollegeNotes((prev) => ({ ...prev, [subject]: { ...prev[subject], appreciation: e.target.value } }))}
-                              className="h-8"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-border text-sm">
-                <thead>
-                  <tr className="bg-muted/40">
-                    <th className="border border-border px-3 py-2 text-left">Matières/Mois</th>
-                    {MONTHS.map((m) => (
-                      <th key={m.key} className="border border-border px-3 py-2 text-center whitespace-nowrap">
-                        {m.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {SUBJECTS.map((subject) => (
-                    <tr key={subject}>
-                      <td className="border border-border px-3 py-2 font-medium whitespace-nowrap">{subject}</td>
-                      {MONTHS.map((m) => (
-                        <td key={m.key} className="border border-border px-2 py-1">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={10}
-                            step="0.25"
-                            value={notes?.[subject]?.[m.key] ?? ''}
-                            onChange={(e) => handleNoteChange(subject, m.key, e.target.value)}
-                            className="h-9 text-center"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {bulletinType === 'primary' ? (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Récapitulatif (TOTAL, Moyennes, Classement)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">TOTAL</label>
-                  <Input 
-                    value={primarySummary.total} 
-                    readOnly
-                    className="bg-muted"
-                    placeholder="Auto"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Moy. de Classe</label>
-                  <Input 
-                    value={primarySummary.moy_classe} 
-                    readOnly
-                    className="bg-muted"
-                    placeholder="Auto"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Moy. de Compo</label>
-                  <Input 
-                    value={primarySummary.moy_compo} 
-                    readOnly
-                    className="bg-muted"
-                    placeholder="Auto"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Moy. Générale</label>
-                  <Input 
-                    value={primarySummary.moy_generale} 
-                    readOnly
-                    className="bg-muted"
-                    placeholder="Auto"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Classement</label>
-                  <Input 
-                    value={primarySummary.classement} 
-                    onChange={(e) => setPrimarySummary(prev => ({...prev, classement: e.target.value}))}
-                    placeholder="Ex: 1er, 2e..."
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Suivi et observations (Visas mensuels)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-border text-sm">
-                  <thead>
-                    <tr className="bg-muted/40">
-                      <th className="border border-border px-3 py-2 text-left">MOIS</th>
-                      <th className="border border-border px-3 py-2 text-left">MAITRE</th>
-                      <th className="border border-border px-3 py-2 text-left">DIRECTEUR</th>
-                      <th className="border border-border px-3 py-2 text-left">LES PARENTS</th>
-                      <th className="border border-border px-3 py-2 text-left">OBSERVATIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MONTHS.map((m) => (
-                      <tr key={m.key}>
-                        <td className="border border-border px-3 py-2 font-medium">{m.label}</td>
-                        <td className="border border-border px-3 py-2">
-                          <Input
-                            value={visas[m.key].maitre}
-                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], maitre: e.target.value } }))}
-                            className="h-9"
-                          />
-                        </td>
-                        <td className="border border-border px-3 py-2">
-                          <Input
-                            value={visas[m.key].directeur}
-                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], directeur: e.target.value } }))}
-                            className="h-9"
-                          />
-                        </td>
-                        <td className="border border-border px-3 py-2">
-                          <Input
-                            value={visas[m.key].parents}
-                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], parents: e.target.value } }))}
-                            className="h-9"
-                          />
-                        </td>
-                        <td className="border border-border px-3 py-2">
-                          <Input
-                            value={visas[m.key].observations}
-                            onChange={(e) => setVisas((prev) => ({ ...prev, [m.key]: { ...prev[m.key], observations: e.target.value } }))}
-                            className="h-9"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Synthèse et décisions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground">Moyenne Annuelle (/10)</div>
-                  <div className="text-2xl font-bold">{formatNumber(moyenneAnnuelle)}</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground">Rang</div>
-                  <Input
-                    value={rangGeneral}
-                    onChange={(e) => setRangGeneral(e.target.value)}
-                    placeholder="Ex: 3/25"
-                    className="h-10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground">Moyenne du premier (/10)</div>
-                  <Input
-                    value={moyennePremier}
-                    onChange={(e) => setMoyennePremier(e.target.value)}
-                    placeholder={formatNumber(moyenneSemestre1)}
-                    className="h-10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Décisions</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={decision === 'pass'}
-                      onChange={(e) => setDecision(e.target.checked ? 'pass' : '')}
-                    />
-                    Passe en classe supérieure
-                  </label>
-                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={decision === 'repeat'}
-                      onChange={(e) => setDecision(e.target.checked ? 'repeat' : '')}
-                    />
-                    Redouble
-                  </label>
-                  <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={decision === 'excluded'}
-                      onChange={(e) => setDecision(e.target.checked ? 'excluded' : '')}
-                    />
-                    Exclu(e)
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-md border border-input p-4">
-                  <div className="text-sm font-medium">LE MAITRE</div>
-                  <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
-                </div>
-                <div className="rounded-md border border-input p-4">
-                  <div className="text-sm font-medium">LE DIRECTEUR</div>
-                  <div className="mt-10 border-t border-border pt-2 text-xs text-muted-foreground">Signature</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      ) : null}
-
       {printPortalEl
         ? createPortal(<div className="bulletin-print-only">{PrintView}</div>, printPortalEl)
         : null}
 
-      <style>{`@page {
-  size: A4;
-  margin: 5mm;
-}
-
-@media print {
-  html, body {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    margin: 0 !important;
-    padding: 0 !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  /* Ne rien imprimer sauf le bulletin */
-  .bulletin-preview { display: none !important; }
-  #root { display: none !important; }
-  #bulletin-print-portal { display: block !important; }
-
-  .bulletin-print-only {
-    display: block !important;
-    position: static !important;
-    background: white !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  .bulletin-print {
-    box-shadow: none !important;
-    margin: 0 auto !important;
-    min-height: auto !important;
-    padding: 18px !important;
-    transform: none !important;
-    zoom: 0.92;
-  }
-
-  .bulletin2-print {
-    box-shadow: none !important;
-    margin: 0 auto !important;
-    min-height: auto !important;
-    padding: 50px 18px 10px !important;
-    transform: none !important;
-    zoom: 0.98;
-  }
-
-  .bulletin-signatures2 {
-    padding-bottom: 6px;
-  }
-
-  .bulletin-spacer {
-    height: 6px;
-  }
-
-  .bulletin-bottom,
-  .bulletin-signatures2 {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-}
-
-.bulletin-print-only { display: none; }
-
-#bulletin-print-portal { display: none; }
-
-.bulletin-preview {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-}
-
-.bulletin-preview__backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.bulletin-preview__panel {
-  position: relative;
-  margin: 24px auto;
-  width: min(1100px, calc(100vw - 32px));
-  height: calc(100vh - 48px);
-  background: white;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.bulletin-preview__header {
-  padding: 12px 16px;
-  border-bottom: 1px solid hsl(var(--border));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.bulletin-preview__title {
-  font-weight: 700;
-}
-
-.bulletin-preview__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bulletin-preview__content {
-  padding: 16px;
-  overflow: auto;
-  background: hsl(var(--muted));
-  display: flex;
-  justify-content: center;
-}
-
-.bulletin-preview__page {
-  width: 794px; /* ~ A4 @96dpi */
-  min-height: 1123px;
-  margin: 0 auto;
-  background: white;
-  padding: 0;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-}
-
-.bulletin-print {
-  width: 100%;
-  min-height: 1123px;
-  margin: 0 auto;
-  padding: 18px;
-  box-sizing: border-box;
-  color: #111;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-}
-
-.bulletin-print__title {
-  text-align: center;
-  font-weight: 700;
-  font-size: 14px;
-  margin: 2px 0 10px;
-  letter-spacing: 0.5px;
-}
-
-.bulletin-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 11px;
-}
-
-.bulletin-th,
-.bulletin-td {
-  border: 1px solid #222;
-  padding: 3px 4px;
-  text-align: center;
-  vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bulletin-th--left,
-.bulletin-td--left {
-  text-align: left;
-  width: 170px;
-  white-space: nowrap;
-}
-
-.bulletin-td--strong {
-  font-weight: 700;
-}
-
-.bulletin-spacer {
-  height: 6px;
-}
-
-.bulletin2-print {
-  width: 100%;
-  min-height: 1123px;
-  background: #fff;
-  border: 2px solid #222;
-  padding: 50px 18px 10px;
-  box-sizing: border-box;
-  font-size: 12px;
-  color: #111;
-  display: flex;
-  flex-direction: column;
-}
-
-.bulletin2-header {
-  text-align: center;
-  font-weight: 700;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.bulletin2-header > div + div {
-  margin-top: 6px;
-}
-
-.bulletin2-title {
-  margin: 18px auto 12px;
-  text-align: center;
-  font-weight: 800;
-  border: 2px solid #222;
-  padding: 3px 8px;
-  display: inline-block;
-}
-
-.bulletin2-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-weight: 600;
-  margin: 14px 0 14px;
-}
-
-.bulletin2-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 12px;
-  margin-top: 10px;
-}
-
-.bulletin2-th,
-.bulletin2-td {
-  border: 1px solid #222;
-  padding: 3px 4px;
-  text-align: center;
-  vertical-align: middle;
-}
-
-.bulletin2-th--subject,
-.bulletin2-td--subject {
-  text-align: left;
-  width: 24%;
-  font-weight: 700;
-}
-
-.bulletin2-th--app,
-.bulletin2-td--app {
-  text-align: left;
-  width: 22%;
-}
-
-.bulletin2-bottom {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin-top: 20px;
-  gap: 10px;
-  align-items: start;
-}
-
-.bulletin2-summary {
-  border: 2px solid #222;
-  padding: 8px 10px;
-}
-
-.bulletin2-summary__row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 2px 0;
-}
-
-.bulletin2-decision {
-  font-weight: 800;
-}
-
-.bulletin2-sign {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.bulletin2-date {
-  margin-top: 34px;
-  font-weight: 600;
-}
-
-.bulletin-bottom {
-  border: 1px solid #222;
-  padding: 0;
-}
-
-.bulletin-scores {
-  display: grid;
-  grid-template-columns: 1.3fr 0.8fr 1.1fr;
-  border-bottom: 1px solid #222;
-}
-
-.bulletin-scores__cell {
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.bulletin-scores__cell + .bulletin-scores__cell {
-  border-left: 1px solid #222;
-}
-
-.bulletin-scores__label {
-  font-weight: 700;
-}
-
-.bulletin-scores__box {
-  display: inline-block;
-  min-width: 46px;
-  padding: 2px 6px;
-  border: 1px solid #222;
-  text-align: center;
-  font-weight: 700;
-}
-
-.bulletin-scores__box--small {
-  min-width: 34px;
-}
-
-.bulletin-scores__unit {
-  font-weight: 700;
-}
-
-.bulletin-observers {
-  border-bottom: 1px solid #222;
-}
-
-.bulletin-observers__title {
-  font-weight: 700;
-  text-align: center;
-  padding: 6px;
-  font-size: 12px;
-}
-
-.bulletin-decisions2 {
-  border-bottom: 1px solid #222;
-}
-
-.bulletin-decisions2__title {
-  font-weight: 700;
-  text-align: center;
-  padding: 6px;
-  border-bottom: 1px solid #222;
-  font-size: 12px;
-}
-
-.bulletin-decisions2__content {
-  display: grid;
-  grid-template-columns: 1fr 0.7fr 0.7fr;
-  gap: 10px;
-  padding: 12px 10px;
-  font-size: 11px;
-}
-
-.bulletin-decision2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.bulletin-decision2__check {
-  width: 60px;
-  height: 18px;
-  border: 1px solid #222;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.bulletin-decision2__check.is-checked {
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.bulletin-signatures2 {
-  display: flex;
-  justify-content: space-between;
-  padding: 14px 10px 16px;
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.bulletin-signature2 {
-  width: 46%;
-}
-
-.bulletin-signature2__title {
-  text-transform: uppercase;
-}
-
-.bulletin-signature2__line {
-  margin-top: 18px;
-  border-top: 1px solid #222;
-  height: 0;
-}
-
-.bulletin-meta {
-  margin-top: 10px;
-  font-size: 10px;
-  color: #333;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-}
-
-.bulletin-meta--top {
-  margin: 0 0 10px;
-}
-
-.bulletin-meta__label {
-  font-weight: 700;
-}
-`}</style>
+      <style>{`
+        @page {
+          size: A4;
+          margin: 10mm;
+        }
+        @media print {
+          body {
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .bulletin-print-only {
+            display: block !important;
+          }
+        }
+        .bulletin-print-only {
+          display: none;
+        }
+        .bulletin-print, .bulletin2-print {
+          font-family: 'Times New Roman', serif;
+          color: black;
+          background: white;
+          padding: 20px;
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        .bulletin-print__title, .bulletin2-title {
+          text-align: center;
+          font-size: 20px;
+          font-weight: bold;
+          text-decoration: underline;
+          margin-bottom: 20px;
+        }
+        .bulletin-meta, .bulletin2-meta {
+          margin-bottom: 20px;
+          line-height: 1.5;
+        }
+        .bulletin-meta__label {
+          font-weight: bold;
+          margin-right: 5px;
+        }
+        .bulletin-table, .bulletin2-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        .bulletin-th, .bulletin-td, .bulletin2-th, .bulletin2-td {
+          border: 1px solid black;
+          padding: 5px;
+          text-align: center;
+          font-size: 12px;
+        }
+        .bulletin-th--left, .bulletin-td--left, .bulletin2-th--subject, .bulletin2-td--subject {
+          text-align: left;
+        }
+        .bulletin-td--strong {
+          font-weight: bold;
+        }
+        .bulletin-spacer {
+          height: 20px;
+        }
+        .bulletin-scores {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 20px;
+        }
+        .bulletin-scores__cell {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .bulletin-scores__box {
+          border: 2px solid black;
+          padding: 5px 10px;
+          font-weight: bold;
+          min-width: 40px;
+          text-align: center;
+        }
+        .bulletin-signatures2, .bulletin2-sign {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 40px;
+        }
+        .bulletin-signature2 {
+          width: 200px;
+          text-align: center;
+        }
+        .bulletin-signature2__line {
+          border-bottom: 1px solid black;
+          margin-top: 40px;
+        }
+        .bulletin2-header {
+          text-align: center;
+          margin-bottom: 20px;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+        .bulletin2-summary {
+          margin-top: 20px;
+          border: 1px solid black;
+          padding: 10px;
+          width: fit-content;
+          margin-left: auto;
+        }
+        .bulletin2-summary__row {
+          display: flex;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 5px;
+        }
+        .bulletin2-date {
+          text-align: right;
+          margin-top: 20px;
+          font-style: italic;
+        }
+        .bulletin-preview {
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .bulletin-preview__backdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(0,0,0,0.5);
+          backdrop-filter: blur(4px);
+        }
+        .bulletin-preview__panel {
+          position: relative;
+          background: white;
+          width: 100%;
+          max-width: 900px;
+          max-height: 90vh;
+          border-radius: 12px;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+        }
+        .bulletin-preview__header {
+          padding: 15px 20px;
+          border-bottom: 1px solid #eee;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .bulletin-preview__title {
+          font-weight: bold;
+          font-size: 18px;
+        }
+        .bulletin-preview__content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
+          background: #f8f9fa;
+        }
+        .bulletin-preview__page {
+          background: white;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+          margin: 0 auto;
+        }
+      `}</style>
     </div>
   );
 }
