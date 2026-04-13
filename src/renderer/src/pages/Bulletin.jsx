@@ -886,34 +886,27 @@ export default function Bulletin() {
 
             <div className="bulletin-footer-table-container">
               <table className="bulletin-footer-table">
+                <thead>
+                  <tr>
+                    <th className="bulletin-footer-td label-td" style={{ textAlign: 'center' }}>DÉCISIONS</th>
+                  </tr>
+                </thead>
                 <tbody>
                   <tr>
-                    <td className="bulletin-footer-td label-td">Observateurs Générales</td>
-                    <td className="bulletin-footer-td content-td"></td>
-                    <td className="bulletin-footer-td label-td">Décisions</td>
                     <td className="bulletin-footer-td check-td">
-                      <div className="check-item">
-                        <div className={`check-box ${meta.decision === 'pass' ? 'checked' : ''}`}>{meta.decision === 'pass' ? '✓' : ''}</div>
-                        <span>Passe en classe supérieure</span>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="bulletin-footer-td no-border-top" colSpan={2} rowSpan={2}></td>
-                    <td className="bulletin-footer-td label-td no-border-top"></td>
-                    <td className="bulletin-footer-td check-td no-border-top">
-                      <div className="check-item">
-                        <div className={`check-box ${meta.decision === 'repeat' ? 'checked' : ''}`}>{meta.decision === 'repeat' ? '✓' : ''}</div>
-                        <span>Redouble</span>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="bulletin-footer-td label-td no-border-top"></td>
-                    <td className="bulletin-footer-td check-td no-border-top">
-                      <div className="check-item">
-                        <div className={`check-box ${meta.decision === 'excluded' ? 'checked' : ''}`}>{meta.decision === 'excluded' ? '✗' : ''}</div>
-                        <span>Exclu(e)</span>
+                      <div className="check-item-row">
+                        <div className="check-item">
+                          <div className={`check-box ${meta.decision === 'pass' ? 'checked' : ''}`}>{meta.decision === 'pass' ? '✓' : ''}</div>
+                          <span>Passe en classe supérieure</span>
+                        </div>
+                        <div className="check-item">
+                          <div className={`check-box ${meta.decision === 'repeat' ? 'checked' : ''}`}>{meta.decision === 'repeat' ? '✓' : ''}</div>
+                          <span>Redouble</span>
+                        </div>
+                        <div className="check-item">
+                          <div className={`check-box ${meta.decision === 'excluded' ? 'checked' : ''}`}>{meta.decision === 'excluded' ? '✗' : ''}</div>
+                          <span>Exclu(e)</span>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1072,34 +1065,27 @@ export default function Bulletin() {
 
           <div className="bulletin-footer-table-container">
             <table className="bulletin-footer-table">
+              <thead>
+                <tr>
+                  <th className="bulletin-footer-td label-td" style={{ textAlign: 'center' }}>DÉCISIONS</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
-                  <td className="bulletin-footer-td label-td">Observateurs Générales</td>
-                  <td className="bulletin-footer-td content-td"></td>
-                  <td className="bulletin-footer-td label-td">Décisions</td>
                   <td className="bulletin-footer-td check-td">
-                    <div className="check-item">
-                      <div className={`check-box ${decision === 'pass' ? 'checked' : ''}`}>{decision === 'pass' ? '✓' : ''}</div>
-                      <span>Passe en classe supérieure</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="bulletin-footer-td no-border-top" colSpan={2} rowSpan={2}></td>
-                  <td className="bulletin-footer-td label-td no-border-top"></td>
-                  <td className="bulletin-footer-td check-td no-border-top">
-                    <div className="check-item">
-                      <div className={`check-box ${decision === 'repeat' ? 'checked' : ''}`}>{decision === 'repeat' ? '✓' : ''}</div>
-                      <span>Redouble</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="bulletin-footer-td label-td no-border-top"></td>
-                  <td className="bulletin-footer-td check-td no-border-top">
-                    <div className="check-item">
-                      <div className={`check-box ${decision === 'excluded' ? 'checked' : ''}`}>{decision === 'excluded' ? '✗' : ''}</div>
-                      <span>Exclu(e)</span>
+                    <div className="check-item-row">
+                      <div className="check-item">
+                        <div className={`check-box ${decision === 'pass' ? 'checked' : ''}`}>{decision === 'pass' ? '✓' : ''}</div>
+                        <span>Passe en classe supérieure</span>
+                      </div>
+                      <div className="check-item">
+                        <div className={`check-box ${decision === 'repeat' ? 'checked' : ''}`}>{decision === 'repeat' ? '✓' : ''}</div>
+                        <span>Redouble</span>
+                      </div>
+                      <div className="check-item">
+                        <div className={`check-box ${decision === 'excluded' ? 'checked' : ''}`}>{decision === 'excluded' ? '✗' : ''}</div>
+                        <span>Exclu(e)</span>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -1197,7 +1183,9 @@ export default function Bulletin() {
           <div>Les parents</div>
         </div>
 
-        <div className="bulletin2-date">Kouralé le {new Date().toLocaleDateString('fr-FR')}</div>
+        <div className="bulletin2-date-container">
+          <div className="bulletin2-date">Kouralé le {new Date().toLocaleDateString('fr-FR')}</div>
+        </div>
       </div>
     );
   }, [academicYear, collegeComputed, collegeDecision, collegeEffectif, collegeMoyenne1, collegeMoyenneDernier, collegeRang, collegeTrimestreLabel, formatNumber, selectedClass, selectedStudent]);
@@ -1910,13 +1898,21 @@ export default function Bulletin() {
            font-family: 'Times New Roman', serif;
            color: black;
            background: white;
-           padding: 10px;
+           padding: 5px;
            max-width: 800px;
            margin: 0 auto;
+           position: relative;
+           max-height: 290mm;
+           overflow: hidden;
+         }
+         .bulletin-bulk-print-container .bulletin-print,
+         .bulletin-bulk-print-container .bulletin2-print {
            page-break-after: always;
+           max-height: none;
+           overflow: visible;
          }
          .bulletin-footer-table-container {
-           margin-top: 20px;
+           margin-top: 10px;
          }
          .bulletin-footer-table {
            width: 100%;
@@ -1924,53 +1920,54 @@ export default function Bulletin() {
          }
          .bulletin-footer-td {
            border: 1px solid black;
-           padding: 8px;
+           padding: 4px;
            vertical-align: top;
-           font-size: 11px;
+           font-size: 10px;
          }
          .bulletin-footer-td.label-td {
            font-weight: bold;
-           width: 150px;
            background: #f9f9f9;
-         }
-         .bulletin-footer-td.content-td {
-           width: 200px;
+           text-align: center;
          }
          .bulletin-footer-td.check-td {
-           width: 250px;
+           width: 100%;
          }
-         .bulletin-footer-td.no-border-top {
-           border-top: none;
+         .check-item-row {
+           display: flex;
+           justify-content: space-around;
+           align-items: center;
+           width: 100%;
+           padding: 2px 0;
          }
          .check-item {
            display: flex;
            align-items: center;
-           gap: 10px;
-           margin-bottom: 4px;
+           gap: 8px;
          }
          .check-box {
-           width: 16px;
-           height: 16px;
-           border: 1.5px solid black;
+           width: 14px;
+           height: 14px;
+           border: 1px solid black;
            display: flex;
            align-items: center;
            justify-content: center;
            font-weight: bold;
-           font-size: 12px;
+           font-size: 10px;
          }
          .check-box.checked {
            background: #eee;
          }
         .bulletin-print__title, .bulletin2-title {
           text-align: center;
-          font-size: 20px;
+          font-size: 16px;
           font-weight: bold;
           text-decoration: underline;
-          margin-bottom: 20px;
+          margin-bottom: 8px;
         }
         .bulletin-meta, .bulletin2-meta {
-          margin-bottom: 20px;
-          line-height: 1.5;
+          margin-bottom: 8px;
+          line-height: 1.1;
+          font-size: 11px;
         }
         .bulletin-meta__label {
           font-weight: bold;
@@ -1979,13 +1976,13 @@ export default function Bulletin() {
         .bulletin-table, .bulletin2-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 20px;
+          margin-bottom: 8px;
         }
         .bulletin-th, .bulletin-td, .bulletin2-th, .bulletin2-td {
           border: 1px solid black;
-          padding: 5px;
+          padding: 2px;
           text-align: center;
-          font-size: 12px;
+          font-size: 10px;
         }
         .bulletin-th--left, .bulletin-td--left, .bulletin2-th--subject, .bulletin2-td--subject {
           text-align: left;
@@ -1994,61 +1991,70 @@ export default function Bulletin() {
           font-weight: bold;
         }
         .bulletin-spacer {
-          height: 20px;
+          height: 8px;
         }
         .bulletin-scores {
           display: flex;
           justify-content: space-between;
-          margin-top: 20px;
+          margin-top: 8px;
         }
         .bulletin-scores__cell {
           display: flex;
           align-items: center;
           gap: 5px;
+          font-size: 10px;
         }
         .bulletin-scores__box {
-          border: 2px solid black;
-          padding: 5px 10px;
+          border: 1.2px solid black;
+          padding: 2px 6px;
           font-weight: bold;
-          min-width: 40px;
+          min-width: 30px;
           text-align: center;
         }
         .bulletin-signatures2, .bulletin2-sign {
           display: flex;
           justify-content: space-between;
-          margin-top: 40px;
+          margin-top: 15px;
         }
         .bulletin-signature2 {
-          width: 200px;
+          width: 160px;
           text-align: center;
+          font-size: 10px;
         }
         .bulletin-signature2__line {
           border-bottom: 1px solid black;
-          margin-top: 40px;
+          margin-top: 25px;
         }
         .bulletin2-header {
           text-align: center;
-          margin-bottom: 20px;
+          margin-bottom: 8px;
           font-weight: bold;
           text-transform: uppercase;
+          font-size: 11px;
         }
         .bulletin2-summary {
-          margin-top: 20px;
+          margin-top: 8px;
           border: 1px solid black;
-          padding: 10px;
+          padding: 6px;
           width: fit-content;
           margin-left: auto;
+          font-size: 10px;
         }
         .bulletin2-summary__row {
           display: flex;
           justify-content: space-between;
-          gap: 20px;
-          margin-bottom: 5px;
+          gap: 12px;
+          margin-bottom: 2px;
+        }
+        .bulletin2-date-container {
+          margin-top: 30px;
+          text-align: right;
         }
         .bulletin2-date {
-          text-align: right;
-          margin-top: 20px;
+          display: inline-block;
           font-style: italic;
+          font-size: 10px;
+          border-top: 1px solid transparent;
         }
         .bulletin-preview {
           position: fixed;

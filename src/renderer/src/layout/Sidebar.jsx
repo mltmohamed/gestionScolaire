@@ -8,7 +8,8 @@ import {
   FileText,
   Wallet,
   Settings as SettingsIcon,
-  LogOut
+  LogOut,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/context/AuthContext';
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Classes', href: '/classes', icon: School },
   { name: 'Paiements', href: '/payments', icon: Wallet },
   { name: 'Bulletin', href: '/bulletin', icon: FileText },
+  { name: 'Carte Étudiant', href: '/student-card', icon: CreditCard },
 ];
 
 export default function Sidebar() {

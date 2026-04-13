@@ -15,6 +15,7 @@ import Payments from './pages/Payments';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Bulletin from './pages/Bulletin';
+import StudentCard from './pages/StudentCard';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -56,6 +57,7 @@ function App() {
                 <Route path="classes" element={<Classes />} />
                 <Route path="payments" element={<Payments />} />
                 <Route path="bulletin" element={<Bulletin />} />
+                <Route path="student-card" element={<StudentCard />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>
