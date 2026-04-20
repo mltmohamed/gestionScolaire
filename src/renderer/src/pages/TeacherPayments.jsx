@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Users, DollarSign, Plus, Eye, Calendar, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Search, Users, DollarSign, Plus, Eye, Calendar, TrendingUp, CheckCircle, AlertTriangle, Printer, Download } from 'lucide-react';
 
 export default function TeacherPayments() {
   const { teacherPayments, loading, createTeacherPayment, updateTeacherPayment, deleteTeacherPayment } = usePayments();
@@ -186,6 +186,239 @@ export default function TeacherPayments() {
     );
   };
 
+  // Fonctions d'impression
+  const printPaymentReceipt = (payment) => {
+    const teacher = teachers.find(t => t.id === payment.teacher_id);
+    
+    const receiptContent = `
+      <html>
+        <head>
+          <title>Reçu de Paiement - Salaire Enseignant</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .info { margin: 20px 0; }
+            .details { margin: 20px 0; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>REÇU DE PAIEMENT</h1>
+            <h2>Salaire Enseignant</h2>
+            <p>Établissement LA SAGESSE</p>
+          </div>
+          
+          <div class="info">
+            <p><strong>Date:</strong> ${new Date(payment.payment_date).toLocaleDateString('fr-FR')}</p>
+            <p><strong>Numéro de reçu:</strong> #${payment.id.toString().padStart(6, '0')}</p>
+          </div>
+          
+          <div class="details">
+            <h3>Informations de l'enseignant</h3>
+            <p><strong>Nom:</strong> ${teacher?.first_name} ${teacher?.last_name}</p>
+            <p><strong>Téléphone:</strong> ${teacher?.phone}</p>
+            <p><strong>Spécialité:</strong> ${teacher?.specialty || 'Non spécifiée'}</p>
+          </div>
+          
+          <table>
+            <tr>
+              <th>Description</th>
+              <th>Montant</th>
+            </tr>
+            <tr>
+              <td>${payment.description}</td>
+              <td>${payment.amount} FCFA</td>
+            </tr>
+            <tr>
+              <th>Total</th>
+              <th>${payment.amount} FCFA</th>
+            </tr>
+          </table>
+          
+          <div class="details">
+            <p><strong>Mode de paiement:</strong> ${payment.payment_method || 'Non spécifié'}</p>
+            <p><strong>Période:</strong> ${payment.month || 'Non spécifiée'} ${payment.year || ''}</p>
+          </div>
+          
+          <div class="footer">
+            <p>Merci pour votre service!</p>
+            <p>Ce reçu sert de preuve de paiement</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(receiptContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const printTeacherBalance = (teacherId) => {
+    const teacher = teachers.find(t => t.id === teacherId);
+    const stats = teacherStats[teacherId];
+    const teacherPaymentsList = teacherPayments.filter(p => p.teacher_id === teacherId);
+    
+    const balanceContent = `
+      <html>
+        <head>
+          <title>État des Paiements - Salaire Enseignant</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .info { margin: 20px 0; }
+            .summary { background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 5px; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .paid { color: green; font-weight: bold; }
+            .remaining { color: red; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>ÉTAT DES PAIEMENTS</h1>
+            <h2>Salaire Enseignant</h2>
+            <p>Établissement LA SAGESSE</p>
+          </div>
+          
+          <div class="info">
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            <p><strong>Période:</strong> ${stats?.year || '2025-2026'}</p>
+          </div>
+          
+          <div class="details">
+            <h3>Informations de l'enseignant</h3>
+            <p><strong>Nom:</strong> ${teacher?.first_name} ${teacher?.last_name}</p>
+            <p><strong>Téléphone:</strong> ${teacher?.phone}</p>
+            <p><strong>Spécialité:</strong> ${teacher?.specialty || 'Non spécifiée'}</p>
+          </div>
+          
+          <div class="summary">
+            <h3>Résumé des paiements</h3>
+            <p><strong>Salaire attendu:</strong> ${stats?.expectedSalary || 0} FCFA</p>
+            <p><strong>Montant payé:</strong> <span class="paid">${stats?.totalPaid || 0} FCFA</span></p>
+            <p><strong>Reste à payer:</strong> <span class="remaining">${stats?.remaining || 0} FCFA</span></p>
+            <p><strong>Statut:</strong> ${stats?.status === 'paid' ? 'Payé' : stats?.status === 'partial' ? 'Partiel' : 'Non payé'}</p>
+          </div>
+          
+          <h3>Historique des paiements</h3>
+          <table>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Mode de paiement</th>
+              <th>Montant</th>
+            </tr>
+            ${teacherPaymentsList.map(payment => `
+              <tr>
+                <td>${new Date(payment.payment_date).toLocaleDateString('fr-FR')}</td>
+                <td>${payment.description}</td>
+                <td>${payment.payment_method || 'Non spécifié'}</td>
+                <td>${payment.amount} FCFA</td>
+              </tr>
+            `).join('')}
+          </table>
+          
+          <div class="footer">
+            <p>Document généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(balanceContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const printTeacherReport = () => {
+    const teacherList = filteredTeachers;
+    const totalExpected = teacherList.reduce((sum, teacher) => sum + (teacherStats[teacher.id]?.expectedSalary || 0), 0);
+    const totalPaid = teacherList.reduce((sum, teacher) => sum + (teacherStats[teacher.id]?.totalPaid || 0), 0);
+    const totalRemaining = totalExpected - totalPaid;
+    
+    const reportContent = `
+      <html>
+        <head>
+          <title>Rapport des Enseignants - Salaires</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .summary { background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 5px; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .paid { color: green; font-weight: bold; }
+            .remaining { color: red; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>RAPPORT DES ENSEIGNANTS</h1>
+            <h2>Salaires</h2>
+            <p>Établissement LA SAGESSE</p>
+          </div>
+          
+          <div class="info">
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            <p><strong>Filtres:</strong> ${searchTerm ? `Recherche: ${searchTerm}` : 'Tous les enseignants'} | ${filters.year || 'Toutes les années'}</p>
+          </div>
+          
+          <div class="summary">
+            <h3>Résumé général</h3>
+            <p><strong>Nombre d'enseignants:</strong> ${teacherList.length}</p>
+            <p><strong>Total des salaires attendus:</strong> ${totalExpected} FCFA</p>
+            <p><strong>Total payé:</strong> <span class="paid">${totalPaid} FCFA</span></p>
+            <p><strong>Total restant:</strong> <span class="remaining">${totalRemaining} FCFA</span></p>
+            <p><strong>Taux de paiement:</strong> ${totalExpected > 0 ? ((totalPaid / totalExpected) * 100).toFixed(1) : 0}%</p>
+          </div>
+          
+          <h3>Détail par enseignant</h3>
+          <table>
+            <tr>
+              <th>Enseignant</th>
+              <th>Spécialité</th>
+              <th>Salaire attendu</th>
+              <th>Payé</th>
+              <th>Reste</th>
+              <th>Statut</th>
+            </tr>
+            ${teacherList.map(teacher => {
+              const stats = teacherStats[teacher.id];
+              return `
+                <tr>
+                  <td>${teacher.first_name} ${teacher.last_name}</td>
+                  <td>${teacher.specialty || 'Non spécifiée'}</td>
+                  <td>${stats?.expectedSalary || 0} FCFA</td>
+                  <td class="paid">${stats?.totalPaid || 0} FCFA</td>
+                  <td class="remaining">${stats?.remaining || 0} FCFA</td>
+                  <td>${stats?.status === 'paid' ? 'Payé' : stats?.status === 'partial' ? 'Partiel' : 'Non payé'}</td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+          
+          <div class="footer">
+            <p>Rapport généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(reportContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64">
       <p className="text-muted-foreground">Chargement...</p>
@@ -207,10 +440,16 @@ export default function TeacherPayments() {
             Gérez les salaires et paiements des enseignants
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Enregistrer un paiement
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={printTeacherReport}>
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimer le rapport
+          </Button>
+          <Button onClick={() => handleOpenDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Enregistrer un paiement
+          </Button>
+        </div>
       </div>
 
       {/* Statistiques */}
@@ -394,6 +633,14 @@ export default function TeacherPayments() {
                       <TableCell>{getStatusBadge(stats.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => printTeacherBalance(teacher.id)}
+                            title="Imprimer l'état des paiements"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -617,8 +864,18 @@ export default function TeacherPayments() {
                               {new Date(payment.payment_date).toLocaleDateString('fr-FR')} - {payment.payment_method || 'Non spécifié'}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">{payment.description}</p>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">{payment.description}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => printPaymentReceipt(payment)}
+                              title="Imprimer le reçu"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                       ))}

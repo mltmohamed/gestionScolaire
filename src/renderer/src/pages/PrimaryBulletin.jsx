@@ -3,11 +3,19 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
-import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2 } from 'lucide-react';
+import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2, Calendar, CheckCircle, AlertCircle, TrendingUp, Save, Keyboard } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 const MONTHS = [
@@ -86,6 +94,15 @@ export default function PrimaryBulletin() {
 
   const [editingCell, setEditingCell] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingBulletin, setViewingBulletin] = useState(null);
+  const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
+  const [selectedMonth, setSelectedMonth] = useState(MONTHS[0].key);
+  
+  // États pour la navigation par classe
+  const [selectedClassId, setSelectedClassId] = useState(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'students', 'bulletin'
 
   const primaryClasses = useMemo(() => {
     return classes.filter(cls => {
@@ -188,6 +205,103 @@ export default function PrimaryBulletin() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleViewBulletin = () => {
+    console.log('handleViewBulletin appelé');
+    console.log('selectedStudent:', selectedStudent);
+    console.log('selectedClass:', selectedClass);
+    console.log('bulletinData:', bulletinData);
+    
+    if (!selectedStudent || !selectedClass) {
+      console.log('Élève ou classe non sélectionné, retour');
+      return;
+    }
+    
+    // Calculer les moyennes et statistiques
+    const subjectsData = SUBJECTS.map(subject => {
+      const notes = MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || '').filter(note => note !== '');
+      const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
+      const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
+      const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
+      
+      return {
+        name: subject,
+        notes: MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || ''),
+        average,
+        maxNote,
+        minNote,
+        appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
+      };
+    });
+
+    const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
+    const generalAverage = subjectsWithAverage.length > 0 
+      ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
+      : 0;
+
+    const rank = calculateRank(generalAverage);
+    const classAverage = calculateClassAverage();
+
+    setViewingBulletin({
+      student: selectedStudent,
+      class: selectedClass,
+      academicYear,
+      period: bulletinData.period || '1er trimestre',
+      sequence: bulletinData.sequence || 'Séquence 1',
+      subjects: subjectsData,
+      generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
+      rank,
+      classAverage,
+      appreciation: bulletinData.appreciation || '',
+      generalAppreciation: getGeneralAppreciation(generalAverage)
+    });
+    
+    console.log('Données du bulletin préparées:', viewingBulletin);
+    setViewingBulletin({
+      student: selectedStudent,
+      class: selectedClass,
+      academicYear,
+      period: bulletinData.period || '1er trimestre',
+      sequence: bulletinData.sequence || 'Séquence 1',
+      subjects: subjectsData,
+      generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
+      rank,
+      classAverage,
+      appreciation: bulletinData.appreciation || '',
+      generalAppreciation: getGeneralAppreciation(generalAverage)
+    });
+    
+    console.log('Ouverture de la dialog de visualisation');
+    setIsViewDialogOpen(true);
+  };
+
+  const getSubjectAppreciation = (average) => {
+    if (average >= 9) return 'Excellent';
+    if (average >= 8) return 'Très bien';
+    if (average >= 7) return 'Bien';
+    if (average >= 6) return 'Assez bien';
+    if (average >= 5) return 'Passable';
+    return 'Insuffisant';
+  };
+
+  const getGeneralAppreciation = (average) => {
+    if (average >= 9) return 'Excellent travail, continuez ainsi!';
+    if (average >= 8) return 'Très bon travail, félicitations!';
+    if (average >= 7) return 'Bon travail, continuez vos efforts!';
+    if (average >= 6) return 'Assez bon travail, room for improvement!';
+    if (average >= 5) return 'Travail acceptable, plus d\'efforts nécessaires';
+    return 'Travail insuffisant, beaucoup d\'efforts requis';
+  };
+
+  const calculateRank = (average) => {
+    // Simuler le calcul de rang (à remplacer avec la vraie logique)
+    return `${Math.floor(Math.random() * 20) + 1}/${Math.floor(Math.random() * 10) + 20}`;
+  };
+
+  const calculateClassAverage = () => {
+    // Simuler la moyenne de classe (à remplacer avec la vraie logique)
+    return (Math.random() * 2 + 7).toFixed(2);
   };
 
   const selectedStudent = primaryStudents.find(s => s.id === selectedStudentId);
@@ -309,6 +423,10 @@ export default function PrimaryBulletin() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={handleViewBulletin}>
+              <Eye className="mr-2 h-4 w-4" />
+              Visualiser
+            </Button>
             <Button onClick={handleSaveBulletin}>
               <PenLine className="mr-2 h-4 w-4" />
               Enregistrer
@@ -416,5 +534,124 @@ export default function PrimaryBulletin() {
     );
   }
 
-  return null;
+  return (
+    <>
+      {/* Dialog de visualisation du bulletin */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualisation du Bulletin</DialogTitle>
+          </DialogHeader>
+
+          {viewingBulletin && (
+            <div className="py-2 space-y-6">
+              {/* En-tête du bulletin */}
+              <div className="text-center border-b pb-4">
+                <h1 className="text-2xl font-bold">BULLETIN SCOLAIRE</h1>
+                <p className="text-lg font-semibold">Établissement LA SAGESSE</p>
+                <p className="text-sm text-muted-foreground">Année scolaire {viewingBulletin.academicYear}</p>
+                <p className="text-sm text-muted-foreground">{viewingBulletin.period} - {viewingBulletin.sequence}</p>
+              </div>
+
+              {/* Informations de l'élève */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Informations de l'élève</h3>
+                  <p><strong>Nom:</strong> {viewingBulletin.student.first_name} {viewingBulletin.student.last_name}</p>
+                  <p><strong>Matricule:</strong> {viewingBulletin.student.matricule}</p>
+                  <p><strong>Classe:</strong> {viewingBulletin.class.name}</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Résultats</h3>
+                  <p><strong>Moyenne générale:</strong> <span className="text-lg font-bold text-blue-600">{viewingBulletin.generalAverage}/20</span></p>
+                  <p><strong>Rang:</strong> {viewingBulletin.rank}</p>
+                  <p><strong>Moyenne classe:</strong> {viewingBulletin.classAverage}/20</p>
+                </div>
+              </div>
+
+              {/* Tableau des notes */}
+              <div>
+                <h3 className="font-semibold mb-4">Notes par matière</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-300 px-4 py-2 text-left">Matière</th>
+                        {MONTHS.map(month => (
+                          <th key={month.key} className="border border-gray-300 px-2 py-2 text-center text-sm">{month.label}</th>
+                        ))}
+                        <th className="border border-gray-300 px-2 py-2 text-center">Moyenne</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center">Max</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center">Min</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center">Appréciation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingBulletin.subjects.map((subject, index) => (
+                        <tr key={subject.name} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="border border-gray-300 px-4 py-2 font-medium">{subject.name}</td>
+                          {subject.notes.map((note, noteIndex) => (
+                            <td key={noteIndex} className="border border-gray-300 px-2 py-2 text-center">
+                              {note || '-'}
+                            </td>
+                          ))}
+                          <td className="border border-gray-300 px-2 py-2 text-center font-semibold">
+                            {subject.average || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-2 text-center">
+                            {subject.maxNote || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-2 text-center">
+                            {subject.minNote || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-2 text-center">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              subject.appreciation === 'Excellent' ? 'bg-green-100 text-green-800' :
+                              subject.appreciation === 'Très bien' ? 'bg-blue-100 text-blue-800' :
+                              subject.appreciation === 'Bien' ? 'bg-cyan-100 text-cyan-800' :
+                              subject.appreciation === 'Assez bien' ? 'bg-yellow-100 text-yellow-800' :
+                              subject.appreciation === 'Passable' ? 'bg-orange-100 text-orange-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {subject.appreciation || '-'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Appréciations */}
+              <div className="space-y-4">
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-2">Appréciation générale du professeur</h3>
+                  <p className="text-sm italic">{viewingBulletin.appreciation || 'Aucune appréciation renseignée'}</p>
+                </div>
+                
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-2">Appréciation générale</h3>
+                  <p className="text-sm font-medium text-blue-600">{viewingBulletin.generalAppreciation}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Fermer
+            </Button>
+            <Button onClick={() => {
+              // Logique d'impression du bulletin
+              window.print();
+            }}>
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

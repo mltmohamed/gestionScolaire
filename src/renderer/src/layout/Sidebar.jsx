@@ -252,7 +252,7 @@ export default function Sidebar() {
                   }
                 >
                   <Users className="mr-3 h-4 w-4" />
-                  <span>Collège (7e-9e)</span>
+                  <span>Second Cycle (7e-9e)</span>
                 </NavLink>
               </div>
             )}
