@@ -125,6 +125,10 @@ class DatabaseManager {
       ensureColumn('bulletin_meta', 'bulletin_type', 'TEXT');
       ensureColumn('bulletin_meta', 'data_json', 'TEXT');
 
+      // Ajouter les champs de frais pour les classes
+      ensureColumn('classes', 'tuition_fee', 'DECIMAL(10,2) DEFAULT 0');
+      ensureColumn('classes', 'uniform_fee', 'DECIMAL(10,2) DEFAULT 0');
+
       // Table guardians (tuteur)
       this.db.run(`
         CREATE TABLE IF NOT EXISTS guardians (

@@ -12,9 +12,14 @@ import Students from './pages/Students';
 import Teachers from './pages/Teachers';
 import Classes from './pages/Classes';
 import Payments from './pages/Payments';
+import TuitionPayments from './pages/TuitionPayments';
+import UniformPayments from './pages/UniformPayments';
+import TeacherPayments from './pages/TeacherPayments';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Bulletin from './pages/Bulletin';
+import PrimaryBulletin from './pages/PrimaryBulletin';
+import CollegeBulletin from './pages/CollegeBulletin';
 import StudentCard from './pages/StudentCard';
 
 function ProtectedRoute({ children }) {
@@ -56,7 +61,12 @@ function App() {
                 <Route path="teachers" element={<Teachers />} />
                 <Route path="classes" element={<Classes />} />
                 <Route path="payments" element={<Payments />} />
+                <Route path="payments/tuition" element={<TuitionPayments />} />
+                <Route path="payments/uniform" element={<UniformPayments />} />
+                <Route path="payments/teachers" element={<TeacherPayments />} />
                 <Route path="bulletin" element={<Bulletin />} />
+                <Route path="bulletin/primary" element={<PrimaryBulletin />} />
+                <Route path="bulletin/college" element={<CollegeBulletin />} />
                 <Route path="student-card" element={<StudentCard />} />
                 <Route path="settings" element={<Settings />} />
               </Route>

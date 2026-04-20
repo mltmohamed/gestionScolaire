@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, Users, Eye, School, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Users, Eye, School, AlertTriangle, DollarSign } from 'lucide-react';
 import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
 
 export default function Classes() {
@@ -39,6 +39,8 @@ export default function Classes() {
     max_students: 30,
     teacher_id: '',
     teacher_ids: [],
+    tuition_fee: '',
+    uniform_fee: '',
   });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
@@ -114,6 +116,8 @@ export default function Classes() {
           max_students: cls.max_students || 30,
           teacher_id: cls.teacher_id || '',
           teacher_ids: [],
+          tuition_fee: cls.tuition_fee || '',
+          uniform_fee: cls.uniform_fee || '',
         });
       }
     } else {
@@ -125,6 +129,8 @@ export default function Classes() {
         max_students: 30,
         teacher_id: '',
         teacher_ids: [],
+        tuition_fee: '',
+        uniform_fee: '',
       });
     }
     setIsDialogOpen(true);
@@ -301,6 +307,8 @@ export default function Classes() {
                 <TableHead>Professeur principal</TableHead>
                 <TableHead>Nombre d'élèves</TableHead>
                 <TableHead>Capacité max</TableHead>
+                <TableHead>Frais scolarité</TableHead>
+                <TableHead>Frais tenue</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -326,6 +334,18 @@ export default function Classes() {
                       }`}>
                         {cls.student_count >= cls.max_students ? 'Complet' : 'Disponible'}
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4 text-blue-600" />
+                        {cls.tuition_fee ? parseFloat(cls.tuition_fee).toFixed(2) : '0.00'} FCFA
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4 text-purple-600" />
+                        {cls.uniform_fee ? parseFloat(cls.uniform_fee).toFixed(2) : '0.00'} FCFA
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -432,6 +452,32 @@ export default function Classes() {
                   value={formData.max_students}
                   onChange={(e) => setFormData({ ...formData, max_students: parseInt(e.target.value) })}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Frais de scolarité (FCFA)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={formData.tuition_fee}
+                    onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Frais de tenue (FCFA)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={formData.uniform_fee}
+                    onChange={(e) => setFormData({ ...formData, uniform_fee: e.target.value })}
+                  />
+                </div>
               </div>
 
               {!['7ème année', '8ème année', '9ème année'].includes(formData.level) && (

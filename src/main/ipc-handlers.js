@@ -856,16 +856,8 @@ function setupIPCHandlers(ipcMain) {
       run('DELETE FROM bulletin_notes WHERE student_id = ?', [id]);
       run('DELETE FROM bulletin_meta WHERE student_id = ?', [id]);
       
-      // Supprimer le tuteur associé (s'il n'est pas partagé avec d'autres élèves)
-      const guardianResult = query('SELECT guardian_id FROM students WHERE id = ?', [id])[0];
-      if (guardianResult && guardianResult.guardian_id) {
-        const otherStudents = query('SELECT COUNT(*) as count FROM students WHERE guardian_id = ? AND id != ?', [guardianResult.guardian_id, id])[0].count;
-        if (otherStudents === 0) {
-          run('DELETE FROM guardians WHERE id = ?', [guardianResult.guardian_id]);
-        }
-      }
-
       // Supprimer l'élève définitivement
+      // Le tuteur sera automatiquement supprimé grâce à la contrainte ON DELETE CASCADE dans la table guardians
       run('DELETE FROM students WHERE id = ?', [id]);
 
       return { success: true, message: 'Élève et toutes ses données supprimés définitivement' };
@@ -987,7 +979,7 @@ function setupIPCHandlers(ipcMain) {
   handle('classes:getAll', { auth: true }, () => {
     const sql = `
       SELECT c.*, t.first_name || ' ' || t.last_name as teacher_name,
-             (SELECT COUNT(*) FROM students WHERE class_id = c.id) as student_count
+             (SELECT COUNT(*) FROM students WHERE class_id = c.id AND COALESCE(is_deleted, 0) = 0) as student_count
       FROM classes c
       LEFT JOIN teachers t ON c.teacher_id = t.id
       WHERE COALESCE(c.is_deleted, 0) = 0
@@ -1028,15 +1020,17 @@ function setupIPCHandlers(ipcMain) {
 
   handle('classes:create', { auth: true }, (event, data) => {
     const sql = `
-      INSERT INTO classes (name, level, academic_year, max_students, teacher_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO classes (name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     const result = query(sql, [
       data.name,
       data.level,
       data.academic_year,
       data.max_students || 30,
-      data.teacher_id || null
+      data.teacher_id || null,
+      data.tuition_fee || 0,
+      data.uniform_fee || 0
     ]);
     const classId = result.lastInsertRowid;
 
@@ -1063,7 +1057,7 @@ function setupIPCHandlers(ipcMain) {
     const sql = `
       UPDATE classes 
       SET name = ?, level = ?, academic_year = ?, max_students = ?, teacher_id = ?,
-          updated_at = CURRENT_TIMESTAMP
+          tuition_fee = ?, uniform_fee = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
     query(sql, [
@@ -1072,6 +1066,8 @@ function setupIPCHandlers(ipcMain) {
       data.academic_year,
       data.max_students,
       data.teacher_id,
+      data.tuition_fee || 0,
+      data.uniform_fee || 0,
       id
     ]);
 
@@ -1112,7 +1108,7 @@ function setupIPCHandlers(ipcMain) {
       const teacherId = classData?.teacher_id || null;
 
       // Récupérer tous les élèves de cette classe
-      const students = query('SELECT id, guardian_id FROM students WHERE class_id = ?', [id]);
+      const students = query('SELECT id FROM students WHERE class_id = ?', [id]);
 
       // Pour chaque élève, supprimer toutes ses données associées
       for (const student of students) {
@@ -1128,15 +1124,8 @@ function setupIPCHandlers(ipcMain) {
         run('DELETE FROM bulletin_notes WHERE student_id = ?', [studentId]);
         run('DELETE FROM bulletin_meta WHERE student_id = ?', [studentId]);
 
-        // Supprimer le tuteur si non partagé
-        if (student.guardian_id) {
-          const otherStudents = query('SELECT COUNT(*) as count FROM students WHERE guardian_id = ? AND id != ?', [student.guardian_id, studentId])[0].count;
-          if (otherStudents === 0) {
-            run('DELETE FROM guardians WHERE id = ?', [student.guardian_id]);
-          }
-        }
-
         // Supprimer l'élève
+        // Le tuteur sera automatiquement supprimé grâce à la contrainte ON DELETE CASCADE dans la table guardians
         run('DELETE FROM students WHERE id = ?', [studentId]);
       }
 
