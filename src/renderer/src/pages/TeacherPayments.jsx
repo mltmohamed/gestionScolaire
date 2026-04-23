@@ -70,13 +70,13 @@ export default function TeacherPayments() {
       );
       
       const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-      const expectedSalary = 150000; // Salaire de base - à rendre configurable
+      const expectedSalary = teacher.salary || 0; // Utiliser le salaire individuel de l'enseignant
       
       stats[teacher.id] = {
         totalPaid,
         expectedSalary,
         remaining: expectedSalary - totalPaid,
-        status: totalPaid >= expectedSalary ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid',
+        status: expectedSalary > 0 ? (totalPaid >= expectedSalary ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid') : 'no_salary',
         paymentCount: payments.length,
         payments,
       };
@@ -133,10 +133,30 @@ export default function TeacherPayments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    const amount = parseFloat(formData.amount);
+    const teacher = teachers.find(t => t.id === formData.teacher_id);
+    const expectedSalary = teacher?.salary || 0;
+    
+    // Validation: ne pas dépasser le salaire attendu
+    if (expectedSalary > 0 && amount > expectedSalary) {
+      toast.error(`Le montant ne peut pas dépasser le salaire de l'enseignant (${expectedSalary.toFixed(2)} FCFA)`);
+      return;
+    }
+    
+    // Vérifier le total payé avec ce nouveau paiement
+    const currentStats = teacherStats[formData.teacher_id];
+    const currentPaid = currentStats?.totalPaid || 0;
+    
+    if (expectedSalary > 0 && (currentPaid + amount) > expectedSalary) {
+      toast.error(`Le total des paiements ne peut pas dépasser le salaire de ${expectedSalary.toFixed(2)} FCFA`);
+      return;
+    }
+    
     try {
       const paymentData = {
         ...formData,
-        amount: parseFloat(formData.amount),
+        amount: amount,
         period_month: parseInt(formData.period_month),
         period_year: parseInt(formData.period_year),
       };
@@ -159,12 +179,14 @@ export default function TeacherPayments() {
       paid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
       partial: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
       unpaid: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      no_salary: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
     };
 
     const labels = {
       paid: 'Payé',
       partial: 'Partiel',
       unpaid: 'Non payé',
+      no_salary: 'Aucun salaire',
     };
 
     return (

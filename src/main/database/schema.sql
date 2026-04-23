@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS teachers (
   status TEXT DEFAULT 'active',
   gender TEXT, -- Ajout du sexe pour les enseignants aussi
   photo TEXT, -- Chemin ou Base64 de la photo
+  salary DECIMAL(10,2) DEFAULT 0, -- Salaire individuel de l'enseignant
   is_deleted INTEGER DEFAULT 0,
   deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

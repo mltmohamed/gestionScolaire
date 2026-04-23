@@ -39,8 +39,8 @@ export default function Classes() {
     max_students: 30,
     teacher_id: '',
     teacher_ids: [],
-    tuition_fee: '',
-    uniform_fee: '',
+    tuition_fee: 0,
+    uniform_fee: 0,
   });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
@@ -94,7 +94,9 @@ export default function Classes() {
             academic_year: d.academic_year || '',
             max_students: d.max_students || 30,
             teacher_id: d.teacher_id || '',
-            teacher_ids: d.teacher_ids || [],
+            teacher_ids: (d.teacher_ids || []).map(id => Number(id)),
+            tuition_fee: d.tuition_fee || 0,
+            uniform_fee: d.uniform_fee || 0,
           });
         } else {
           const d = result || cls;
@@ -104,7 +106,9 @@ export default function Classes() {
             academic_year: d.academic_year || '',
             max_students: d.max_students || 30,
             teacher_id: d.teacher_id || '',
-            teacher_ids: d.teacher_ids || [],
+            teacher_ids: (d.teacher_ids || []).map(id => Number(id)),
+            tuition_fee: d.tuition_fee || 0,
+            uniform_fee: d.uniform_fee || 0,
           });
         }
       } catch (error) {
@@ -115,9 +119,9 @@ export default function Classes() {
           academic_year: cls.academic_year || '',
           max_students: cls.max_students || 30,
           teacher_id: cls.teacher_id || '',
-          teacher_ids: [],
-          tuition_fee: cls.tuition_fee || '',
-          uniform_fee: cls.uniform_fee || '',
+          teacher_ids: (cls.teacher_ids || []).map(id => Number(id)),
+          tuition_fee: cls.tuition_fee || 0,
+          uniform_fee: cls.uniform_fee || 0,
         });
       }
     } else {
@@ -129,8 +133,8 @@ export default function Classes() {
         max_students: 30,
         teacher_id: '',
         teacher_ids: [],
-        tuition_fee: '',
-        uniform_fee: '',
+        tuition_fee: 0,
+        uniform_fee: 0,
       });
     }
     setIsDialogOpen(true);
@@ -157,6 +161,13 @@ export default function Classes() {
       toast.error('Veuillez remplir les champs obligatoires');
       return;
     }
+
+    // Debug: afficher les données envoyées
+    console.log('=== DONNÉES CLASSE ENVOYÉES ===');
+    console.log('teacher_ids:', formData.teacher_ids);
+    console.log('teacher_id:', formData.teacher_id);
+    console.log('level:', formData.level);
+    console.log('===============================');
 
     try {
       const result = editingClass
@@ -503,31 +514,48 @@ export default function Classes() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Professeurs intervenants (Collège)</label>
                   <div className="grid grid-cols-2 gap-2 border rounded-md p-3 max-h-40 overflow-y-auto bg-muted/20">
-                    {teachers.map((teacher) => (
-                      <div key={teacher.id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`teacher-${teacher.id}`}
-                          checked={formData.teacher_ids.includes(teacher.id)}
-                          onChange={(e) => {
-                            const ids = [...formData.teacher_ids];
-                            if (e.target.checked) {
-                              ids.push(teacher.id);
-                            } else {
-                              const index = ids.indexOf(teacher.id);
-                              if (index > -1) ids.splice(index, 1);
-                            }
-                            setFormData({ ...formData, teacher_ids: ids });
-                          }}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <label htmlFor={`teacher-${teacher.id}`} className="text-xs truncate">
-                          {teacher.first_name} {teacher.last_name}
-                        </label>
-                      </div>
-                    ))}
+                    {teachers.map((teacher) => {
+                      const isSelected = formData.teacher_ids.some(id => Number(id) === Number(teacher.id));
+                      return (
+                        <div key={teacher.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`teacher-${teacher.id}`}
+                            checked={isSelected}
+                            onChange={(e) => {
+                              console.log('=== CHANGEMENT CHECKBOX ===');
+                              console.log('Teacher ID:', teacher.id, 'Type:', typeof teacher.id);
+                              console.log('Checked:', e.target.checked);
+                              console.log('Teacher IDs avant:', formData.teacher_ids);
+                              
+                              const ids = [...formData.teacher_ids];
+                              if (e.target.checked) {
+                                if (!ids.some(id => Number(id) === Number(teacher.id))) {
+                                  ids.push(teacher.id);
+                                  console.log('Teacher ajouté');
+                                }
+                              } else {
+                                const index = ids.findIndex(id => Number(id) === Number(teacher.id));
+                                if (index > -1) {
+                                  ids.splice(index, 1);
+                                  console.log('Teacher supprimé');
+                                }
+                              }
+                              console.log('Teacher IDs après:', ids);
+                              console.log('=========================');
+                              setFormData({ ...formData, teacher_ids: ids });
+                            }}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <label htmlFor={`teacher-${teacher.id}`} className="text-xs truncate">
+                            {teacher.first_name} {teacher.last_name}
+                          </label>
+                        </div>
+                      );
+                    })}
                   </div>
                   <p className="text-[10px] text-muted-foreground italic">Sélectionnez les professeurs qui interviennent dans cette classe.</p>
+                  <p className="text-[10px] text-blue-600">Professeurs sélectionnés: {formData.teacher_ids.length} - IDs: {JSON.stringify(formData.teacher_ids)}</p>
                 </div>
               )}
             </div>

@@ -119,11 +119,33 @@ export default function UniformPayments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    const amount = parseFloat(formData.amount);
+    const student = students.find(s => s.id === (editingPayment?.id || formData.student_id));
+    const studentClass = classes.find(c => c.id === student?.class_id);
+    const uniformFee = studentClass?.uniform_fee || 0;
+    
+    // Validation: ne pas dépasser les frais de tenue
+    if (amount > uniformFee) {
+      toast.error(`Le montant ne peut pas dépasser les frais de tenue de la classe (${uniformFee.toFixed(2)} FCFA)`);
+      return;
+    }
+    
+    // Vérifier le total payé avec ce nouveau paiement
+    const currentPaid = editingPayment ? 
+      (studentBalances[student.id]?.totalPaid || 0) - (editingPayment.amount || 0) : 
+      (studentBalances[student.id]?.totalPaid || 0);
+    
+    if ((currentPaid + amount) > uniformFee) {
+      toast.error(`Le total des paiements ne peut pas dépasser ${uniformFee.toFixed(2)} FCFA`);
+      return;
+    }
+    
     try {
       const paymentData = {
         ...formData,
         type: 'uniform',
-        amount: parseFloat(formData.amount),
+        amount: amount,
       };
 
       const result = await createStudentPayment(paymentData);

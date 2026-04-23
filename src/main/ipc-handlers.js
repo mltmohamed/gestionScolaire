@@ -778,8 +778,8 @@ function setupIPCHandlers(ipcMain) {
 
   handle('teachers:create', { auth: true }, (event, data) => {
     const sql = `
-      INSERT INTO teachers (first_name, last_name, email, phone, address, specialty, status, gender, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO teachers (first_name, last_name, email, phone, address, specialty, status, gender, photo, salary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const result = run(sql, [
       data.first_name,
@@ -790,7 +790,8 @@ function setupIPCHandlers(ipcMain) {
       data.specialty || null,
       data.status || 'inactive',
       data.gender || null,
-      data.photo || null
+      data.photo || null,
+      data.salary || 0
     ]);
     // Note: run() doesn't return the result like query() did in previous implementation, 
     // but my db.js run() doesn't return anything. I need to get the last ID.
@@ -808,7 +809,7 @@ function setupIPCHandlers(ipcMain) {
     const sql = `
       UPDATE teachers 
       SET first_name = ?, last_name = ?, email = ?, phone = ?, 
-          address = ?, specialty = ?, status = ?, gender = ?, photo = ?,
+          address = ?, specialty = ?, status = ?, gender = ?, photo = ?, salary = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -822,6 +823,7 @@ function setupIPCHandlers(ipcMain) {
       data.status,
       data.gender,
       data.photo,
+      data.salary || 0,
       id
     ]);
     return { success: true };
@@ -1065,18 +1067,28 @@ function setupIPCHandlers(ipcMain) {
       data.level,
       data.academic_year,
       data.max_students,
-      data.teacher_id,
+      data.teacher_id || null,
       data.tuition_fee || 0,
       data.uniform_fee || 0,
       id
     ]);
 
-    // Update multiple teachers
+    // Update multiple teachers - TOUJOURS supprimer puis réinsérer
     run('DELETE FROM class_teachers WHERE class_id = ?', [id]);
-    if (data.teacher_ids && Array.isArray(data.teacher_ids)) {
-      for (const tId of data.teacher_ids) {
-        run('INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)', [id, tId]);
-        run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+    
+    // S'assurer que teacher_ids est un tableau et insérer chaque professeur
+    const teacherIds = Array.isArray(data.teacher_ids) ? data.teacher_ids : [];
+    console.log('=== MISE À JOUR CLASSES ===');
+    console.log('class_id:', id);
+    console.log('teacher_ids reçus:', teacherIds);
+    console.log('prevTeachers:', prevTeachers);
+    
+    if (teacherIds.length > 0) {
+      for (const tId of teacherIds) {
+        if (tId) { // Vérifier que l'ID n'est pas vide
+          run('INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)', [id, tId]);
+          run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+        }
       }
     }
 
@@ -1085,11 +1097,11 @@ function setupIPCHandlers(ipcMain) {
     }
 
     // Update status for teachers who are no longer assigned
-    const allAssignedTeachers = new Set([data.teacher_id, ...(data.teacher_ids || [])].filter(Boolean).map(String));
+    const allAssignedTeachers = new Set([data.teacher_id, ...(teacherIds || [])].filter(Boolean).map(String));
     const potentialInactive = new Set([...prevTeachers, previousTeacherId].filter(Boolean).map(String));
     
     for (const tId of potentialInactive) {
-      if (!allAssignedTeachers.has(tId)) {
+      if (!allAssignedTeachers.has(String(tId))) {
         const stillAssigned1 = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [tId])[0]?.count || 0;
         const stillAssigned2 = query('SELECT COUNT(*) as count FROM class_teachers WHERE teacher_id = ?', [tId])[0]?.count || 0;
         if (stillAssigned1 === 0 && stillAssigned2 === 0) {
@@ -1097,6 +1109,9 @@ function setupIPCHandlers(ipcMain) {
         }
       }
     }
+
+    console.log('Nouveaux teachers assignés:', teacherIds);
+    console.log('===========================');
 
     return { success: true };
   });

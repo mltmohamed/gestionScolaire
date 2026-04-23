@@ -74,16 +74,20 @@ export default function Payments() {
         return matchSearch && matchTeacher && matchMethod && matchYear && matchMonth;
       });
 
-      const totalPaid = filtered.reduce((sum, p) => sum + Number(p.amount), 0);
+      const totalPaid = filtered.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const uniqueTeachersPaid = new Set(filtered.map(p => p.teacher_id)).size;
       const totalTeachers = teachers.length;
+      const totalExpectedSalary = teachers.reduce((sum, t) => sum + (t.salary || 0), 0);
+      
       return {
         totalAmount: totalPaid,
+        totalExpected: totalExpectedSalary,
         countPaid: uniqueTeachersPaid,
         countUnpaid: totalTeachers - uniqueTeachersPaid,
         label: "Salaires Versés",
         subLabel: "Enseignants Payés",
-        unpaidLabel: "Restants"
+        unpaidLabel: "Restants à Payer",
+        expectedLabel: "Total Salaires Attendus"
       };
     } else {
       const filtered = studentPayments.filter((p) => {
@@ -102,16 +106,18 @@ export default function Payments() {
         return matchSearch && matchType && matchClass && matchMethod && matchYear;
       });
 
-      const totalAmount = filtered.reduce((sum, p) => sum + Number(p.amount), 0);
+      const totalAmount = filtered.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const studentsWhoPaid = new Set(filtered.map(p => p.student_id)).size;
       const totalStudents = students.length;
+      
       return {
         totalAmount,
         countPaid: studentsWhoPaid,
         countUnpaid: totalStudents - studentsWhoPaid,
-        label: activeTab === 'tuition' ? "Scolarité Totale" : "Ventes Tenues",
+        label: activeTab === 'tuition' ? "Scolarité Collectée" : "Ventes Tenues",
         subLabel: "Élèves ayant payé",
-        unpaidLabel: "N'ayant pas payé"
+        unpaidLabel: "N'ayant pas payé",
+        expectedLabel: activeTab === 'tuition' ? "Total Frais Scolarité" : "Total Frais Tenues"
       };
     }
   }, [activeTab, studentPayments, teacherPayments, students, teachers, filters, searchTerm]);
@@ -357,11 +363,89 @@ export default function Payments() {
 
   const handlePrintReceipt = (payment) => {
     const p = { ...payment, _kind: activeTab === 'teachers' ? 'teacher' : 'student' };
-    setViewingPayment(p);
-    // On attend un court instant que le state se mette à jour pour le rendu d'impression
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    
+    // Créer une fenêtre d'impression avec le contenu du reçu
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Reçu de Paiement</title>
+          <style>
+            body { font-family: 'Times New Roman', serif; margin: 20px; }
+            .receipt { border: 4px double #000; padding: 30px; max-width: 700px; margin: 0 auto; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { font-size: 24px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; }
+            .header p { margin: 5px 0; font-size: 14px; }
+            .info { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; }
+            .details { margin: 20px 0; font-size: 16px; line-height: 2; }
+            .details p { margin: 10px 0; }
+            .amount { font-weight: bold; border: 1px solid #000; background: #f0f0f0; padding: 5px 10px; display: inline-block; }
+            .signature { display: flex; justify-content: space-between; margin-top: 60px; }
+            .signature div { text-align: center; }
+            .signature .line { border-bottom: 1px solid #000; width: 200px; margin: 40px auto 10px; }
+            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <div class="header">
+              <h1>Reçu de Paiement</h1>
+              <p>Ecole Privée LA SAGESSE - Kalabancoro</p>
+              <p style="font-style: italic;">"L'éducation est la clé du futur"</p>
+            </div>
+            
+            <div class="info">
+              <div>
+                <p><strong>N° Reçu:</strong> ${String(p.id).padStart(6, '0')}</p>
+                <p><strong>Date:</strong> ${new Date(p.payment_date).toLocaleDateString('fr-FR')}</p>
+              </div>
+              <div style="text-align: right;">
+                <p><strong>Année Scolaire:</strong> ${p.academic_year || p.period_year || '-'}</p>
+              </div>
+            </div>
+            
+            <div class="details">
+              <p>Reçu de : <strong>${p.first_name} ${p.last_name}</strong></p>
+              <p>La somme de (en chiffres) : <span class="amount">${Number(p.amount).toLocaleString()} FCFA</span></p>
+              <p>Motif du paiement : <strong><em>
+                ${p._kind === 'teacher' 
+                  ? `Salaire - ${['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][(p.period_month || 1) - 1]} ${p.period_year}`
+                  : (p.type === 'uniform' ? 'Achat de tenue scolaire' : 'Frais de scolarité')}
+              </em></strong></p>
+              <p>Méthode : <strong>${p.payment_method || 'Espèces'}</strong></p>
+              ${p.description ? `<p style="font-size: 14px; font-style: italic;">Observation : ${p.description}</p>` : ''}
+            </div>
+            
+            <div class="signature">
+              <div>
+                <p class="line"></p>
+                <p><strong>Le Parent / Bénéficiaire</strong></p>
+              </div>
+              <div>
+                <p class="line"></p>
+                <p><strong>Le Comptable / Direction</strong></p>
+                <p style="font-size: 12px; font-style: italic;">(Cachet et Signature)</p>
+              </div>
+            </div>
+            
+            <div class="footer">
+              <p>Imprimé le ${new Date().toLocaleString('fr-FR')} via SchoolManage</p>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `;
+    
+    printWindow.document.write(receiptHTML);
+    printWindow.document.close();
   };
 
   const handleStudentSubmit = async (e) => {

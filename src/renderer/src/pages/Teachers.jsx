@@ -40,6 +40,7 @@ export default function Teachers() {
     specialty: '',
     gender: '',
     photo: null,
+    salary: 0,
   });
 
   const handlePhotoChange = (e) => {
@@ -105,6 +106,7 @@ export default function Teachers() {
         specialty: teacher.specialty || '',
         gender: teacher.gender || '',
         photo: teacher.photo || null,
+        salary: teacher.salary || 0,
       });
     } else {
       setEditingTeacher(null);
@@ -117,6 +119,7 @@ export default function Teachers() {
         specialty: '',
         gender: '',
         photo: null,
+        salary: 0,
       });
     }
     setIsDialogOpen(true);
@@ -458,6 +461,18 @@ export default function Teachers() {
                   value={formData.specialty}
                   onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
                   placeholder="Ex: Mathématiques, Physique, etc."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Salaire mensuel (FCFA)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.salary}
+                  onChange={(e) => setFormData({ ...formData, salary: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
                 />
               </div>
 

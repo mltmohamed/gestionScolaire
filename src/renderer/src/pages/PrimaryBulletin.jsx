@@ -107,7 +107,8 @@ export default function PrimaryBulletin() {
   const primaryClasses = useMemo(() => {
     return classes.filter(cls => {
       const level = String(cls.level || '').trim().toLowerCase();
-      return ['3e année', '4e année', '5e année', '6e année'].includes(level);
+      // Supporter plusieurs formats pour les niveaux du primaire
+      return ['3e année', '4e année', '5e année', '6e année', '3ème année', '4ème année', '5ème année', '6ème année'].includes(level);
     });
   }, [classes]);
 

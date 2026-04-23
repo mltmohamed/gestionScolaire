@@ -129,6 +129,9 @@ class DatabaseManager {
       ensureColumn('classes', 'tuition_fee', 'DECIMAL(10,2) DEFAULT 0');
       ensureColumn('classes', 'uniform_fee', 'DECIMAL(10,2) DEFAULT 0');
 
+      // Ajouter le champ de salaire pour les enseignants
+      ensureColumn('teachers', 'salary', 'DECIMAL(10,2) DEFAULT 0');
+
       // Table guardians (tuteur)
       this.db.run(`
         CREATE TABLE IF NOT EXISTS guardians (

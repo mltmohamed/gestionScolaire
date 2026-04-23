@@ -168,19 +168,6 @@ export default function CollegeBulletin() {
     setViewMode('entry');
   };
 
-  const handleCellEdit = (subject, field, value) => {
-    setBulletinData(prev => ({
-      ...prev,
-      subjects: {
-        ...prev.subjects,
-        [subject]: {
-          ...prev.subjects[subject],
-          [field]: value,
-        },
-      },
-    }));
-  };
-
   const handleSaveBulletin = async () => {
     try {
       const result = await saveBulletin(bulletinData);
@@ -850,77 +837,77 @@ export default function CollegeBulletin() {
     }
   }
 
+  // Charger les données du bulletin de l'élève actuel
+  useEffect(() => {
+    if (selectedStudentId && selectedMonthForClass && viewMode === 'entry') {
+      loadStudentBulletinData(selectedStudentId);
+    }
+  }, [selectedStudentId, selectedMonthForClass, viewMode]);
+
+  const loadStudentBulletinData = async (studentId) => {
+    try {
+      const result = await getBulletin(studentId, academicYear);
+      if (result.success && result.data) {
+        setBulletinDataMap(prev => ({
+          ...prev,
+          [studentId]: result.data
+        }));
+      } else {
+        // Initialiser les données si elles n'existent pas
+        setBulletinDataMap(prev => ({
+          ...prev,
+          [studentId]: {
+            student_id: studentId,
+            academic_year: academicYear,
+            period: '',
+            sequence: '',
+            appreciation: '',
+            subjects: {}
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données du bulletin:', error);
+    }
+  };
+
+  const handleCellEdit = (subject, month, value) => {
+    setBulletinDataMap(prev => ({
+      ...prev,
+      [selectedStudentId]: {
+        ...prev[selectedStudentId],
+        subjects: {
+          ...prev[selectedStudentId]?.subjects,
+          [subject]: {
+            ...prev[selectedStudentId]?.subjects?.[subject],
+            [month]: value
+          }
+        }
+      }
+    }));
+  };
+
+  const handleSaveStudentBulletin = async () => {
+    try {
+      const studentData = bulletinDataMap[selectedStudentId];
+      if (studentData) {
+        await saveBulletin(studentData);
+        toast.success(`Bulletin de ${currentStudent?.first_name} ${currentStudent?.last_name} enregistré`);
+      }
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement du bulletin');
+    }
+  };
+
+  const clampNote = (value) => {
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return Math.min(Math.max(num, 0), 10).toString();
+  };
+
   if (viewMode === 'entry') {
     const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
     const currentStudent = collegeStudents.find(s => s.id === selectedStudentId);
-    
-    // Charger les données du bulletin de l'élève actuel
-    useEffect(() => {
-      if (selectedStudentId && selectedMonthForClass) {
-        loadStudentBulletinData(selectedStudentId);
-      }
-    }, [selectedStudentId, selectedMonthForClass]);
-
-    const loadStudentBulletinData = async (studentId) => {
-      try {
-        const result = await getBulletin(studentId, academicYear);
-        if (result.success && result.data) {
-          setBulletinDataMap(prev => ({
-            ...prev,
-            [studentId]: result.data
-          }));
-        } else {
-          // Initialiser les données si elles n'existent pas
-          setBulletinDataMap(prev => ({
-            ...prev,
-            [studentId]: {
-              student_id: studentId,
-              academic_year: academicYear,
-              period: '',
-              sequence: '',
-              appreciation: '',
-              subjects: {}
-            }
-          }));
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des données du bulletin:', error);
-      }
-    };
-
-    const handleCellEdit = (subject, month, value) => {
-      setBulletinDataMap(prev => ({
-        ...prev,
-        [selectedStudentId]: {
-          ...prev[selectedStudentId],
-          subjects: {
-            ...prev[selectedStudentId]?.subjects,
-            [subject]: {
-              ...prev[selectedStudentId]?.subjects?.[subject],
-              [month]: value
-            }
-          }
-        }
-      }));
-    };
-
-    const handleSaveStudentBulletin = async () => {
-      try {
-        const studentData = bulletinDataMap[selectedStudentId];
-        if (studentData) {
-          await saveBulletin(studentData);
-          toast.success(`Bulletin de ${currentStudent?.first_name} ${currentStudent?.last_name} enregistré`);
-        }
-      } catch (error) {
-        toast.error('Erreur lors de l\'enregistrement du bulletin');
-      }
-    };
-
-    const clampNote = (value) => {
-      const num = parseFloat(value);
-      if (isNaN(num)) return '';
-      return Math.min(Math.max(num, 0), 10).toString();
-    };
     
     return (
       <div className="space-y-6 fade-in">
@@ -947,8 +934,46 @@ export default function CollegeBulletin() {
               // Calculer et afficher le bulletin de l'élève
               const studentData = bulletinDataMap[selectedStudentId];
               if (studentData) {
-                setBulletinData(studentData);
-                handleViewBulletin();
+                // Préparer les données pour la visualisation
+                const subjectsData = COLLEGE_SUBJECTS.map(subject => {
+                  const notes = MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || '').filter(note => note !== '');
+                  const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
+                  const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
+                  const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
+                  
+                  return {
+                    name: subject,
+                    notes: MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || ''),
+                    average,
+                    maxNote,
+                    minNote,
+                    appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
+                  };
+                });
+
+                const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
+                const generalAverage = subjectsWithAverage.length > 0 
+                  ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
+                  : 0;
+
+                const rank = calculateRank(generalAverage);
+                const classAverage = calculateClassAverage();
+
+                setViewingBulletin({
+                  student: currentStudent,
+                  class: selectedClass,
+                  academicYear,
+                  period: studentData.period || '1er trimestre',
+                  sequence: studentData.sequence || 'Séquence 1',
+                  subjects: subjectsData,
+                  generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
+                  rank,
+                  classAverage,
+                  appreciation: studentData.appreciation || '',
+                  generalAppreciation: getGeneralAppreciation(generalAverage)
+                });
+                
+                setIsViewDialogOpen(true);
               }
             }}>
               <Eye className="mr-2 h-4 w-4" />
