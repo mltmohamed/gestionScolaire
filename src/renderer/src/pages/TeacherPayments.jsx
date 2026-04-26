@@ -1,11 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { usePayments } from '@/hooks/usePayments';
 import { useTeachers } from '@/hooks/useTeachers';
 import { useToast } from '@/hooks/useToast.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -14,906 +13,736 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Users, DollarSign, Plus, Eye, Calendar, TrendingUp, CheckCircle, AlertTriangle, Printer, Download } from 'lucide-react';
+import {
+  Banknote,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Filter,
+  Pencil,
+  Printer,
+  RotateCcw,
+  Search,
+  TrendingUp,
+  UserRound,
+  Wallet,
+} from 'lucide-react';
+
+const months = [
+  { value: 1, label: 'Janvier' },
+  { value: 2, label: 'Février' },
+  { value: 3, label: 'Mars' },
+  { value: 4, label: 'Avril' },
+  { value: 5, label: 'Mai' },
+  { value: 6, label: 'Juin' },
+  { value: 7, label: 'Juillet' },
+  { value: 8, label: 'Août' },
+  { value: 9, label: 'Septembre' },
+  { value: 10, label: 'Octobre' },
+  { value: 11, label: 'Novembre' },
+  { value: 12, label: 'Décembre' },
+];
+
+const currentMonth = new Date().getMonth() + 1;
+const currentYear = new Date().getFullYear();
+const yearOptions = Array.from({ length: 5 }, (_, index) => currentYear - 2 + index);
+
+const formatCurrency = (value) => `${Number(value || 0).toLocaleString('fr-FR')} FCFA`;
+const formatDate = (date) => date ? new Date(date).toLocaleDateString('fr-FR') : '-';
+const parseAmount = (value) => Number(String(value || '').replace(',', '.'));
+const getTeacherName = (teacher) => `${teacher?.first_name || ''} ${teacher?.last_name || ''}`.trim();
+const getMonthLabel = (value) => months.find((month) => month.value === Number(value))?.label || '-';
+
+function SelectField({ value, onChange, children, required = false, disabled = false }) {
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      required={required}
+      disabled={disabled}
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {children}
+    </select>
+  );
+}
+
+function StatTile({ icon: Icon, label, value, helper, tone }) {
+  const tones = {
+    blue: 'bg-[#0066CC]/10 text-[#0066CC] border-[#0066CC]/20',
+    green: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300',
+    orange: 'bg-[#FF6600]/10 text-[#FF3300] border-[#FF6600]/20',
+    slate: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800',
+  };
+
+  return (
+    <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-2 truncate text-2xl font-bold text-slate-950 dark:text-white">{value}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{helper}</p>
+          </div>
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${tones[tone]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusBadge({ status }) {
+  const config = {
+    paid: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300',
+    partial: 'bg-[#FF6600]/10 text-[#FF3300] border-[#FF6600]/20',
+    unpaid: 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-300',
+    no_salary: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800',
+  };
+  const labels = {
+    paid: 'Payé',
+    partial: 'Partiel',
+    unpaid: 'Non payé',
+    no_salary: 'Salaire non défini',
+  };
+
+  return (
+    <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${config[status]}`}>
+      {labels[status]}
+    </span>
+  );
+}
+
+function ProgressBar({ paid, total }) {
+  const percentage = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
+  const color = percentage >= 100 ? 'bg-emerald-500' : percentage > 0 ? 'bg-[#FF6600]' : 'bg-slate-300';
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${percentage}%` }} />
+    </div>
+  );
+}
 
 export default function TeacherPayments() {
-  const { teacherPayments, loading, createTeacherPayment, updateTeacherPayment, deleteTeacherPayment } = usePayments();
+  const { teacherPayments, loading, createTeacherPayment, updateTeacherPayment } = usePayments();
   const { teachers } = useTeachers();
   const { toast, ToastComponent } = useToast();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [viewingPayment, setViewingPayment] = useState(null);
-  const [editingPayment, setEditingPayment] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     teacher_id: 'all',
-    period_month: new Date().getMonth() + 1,
-    period_year: new Date().getFullYear(),
+    period_month: currentMonth,
+    period_year: currentYear,
     status: 'all',
   });
-
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [editingPayment, setEditingPayment] = useState(null);
   const [formData, setFormData] = useState({
     teacher_id: '',
     amount: '',
-    payment_method: '',
-    period_month: new Date().getMonth() + 1,
-    period_year: new Date().getFullYear(),
-    description: '',
+    payment_method: 'Espèces',
+    period_month: currentMonth,
+    period_year: currentYear,
     payment_date: new Date().toISOString().split('T')[0],
+    description: '',
   });
 
-  const months = [
-    { value: 1, label: 'Janvier' },
-    { value: 2, label: 'Février' },
-    { value: 3, label: 'Mars' },
-    { value: 4, label: 'Avril' },
-    { value: 5, label: 'Mai' },
-    { value: 6, label: 'Juin' },
-    { value: 7, label: 'Juillet' },
-    { value: 8, label: 'Août' },
-    { value: 9, label: 'Septembre' },
-    { value: 10, label: 'Octobre' },
-    { value: 11, label: 'Novembre' },
-    { value: 12, label: 'Décembre' },
-  ];
-
-  // Calculer les statistiques par enseignant et par période
   const teacherStats = useMemo(() => {
     const stats = {};
-    
-    teachers.forEach(teacher => {
-      const payments = teacherPayments.filter(p => 
-        p.teacher_id === teacher.id && 
-        p.period_month === filters.period_month && 
-        p.period_year === filters.period_year
+
+    teachers.forEach((teacher) => {
+      const payments = teacherPayments.filter((payment) =>
+        Number(payment.teacher_id) === Number(teacher.id)
+        && Number(payment.period_month) === Number(filters.period_month)
+        && Number(payment.period_year) === Number(filters.period_year)
       );
-      
-      const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-      const expectedSalary = teacher.salary || 0; // Utiliser le salaire individuel de l'enseignant
-      
+      const expectedSalary = Number(teacher.salary || 0);
+      const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const remaining = Math.max(expectedSalary - totalPaid, 0);
+
       stats[teacher.id] = {
-        totalPaid,
-        expectedSalary,
-        remaining: expectedSalary - totalPaid,
-        status: expectedSalary > 0 ? (totalPaid >= expectedSalary ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid') : 'no_salary',
-        paymentCount: payments.length,
         payments,
+        expectedSalary,
+        totalPaid,
+        remaining,
+        paymentCount: payments.length,
+        status: expectedSalary > 0
+          ? totalPaid >= expectedSalary
+            ? 'paid'
+            : totalPaid > 0
+              ? 'partial'
+              : 'unpaid'
+          : 'no_salary',
       };
     });
-    
+
     return stats;
   }, [teachers, teacherPayments, filters.period_month, filters.period_year]);
 
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(teacher => {
+    const q = searchTerm.trim().toLowerCase();
+    return teachers.filter((teacher) => {
       const stats = teacherStats[teacher.id];
-      if (!stats) return false;
-
-      const q = (searchTerm || '').trim().toLowerCase();
-      const matchSearch = !q || 
-        (teacher.first_name || '').toLowerCase().includes(q) || 
-        (teacher.last_name || '').toLowerCase().includes(q) ||
-        (teacher.specialty || '').toLowerCase().includes(q);
-
+      const searchable = [teacher.first_name, teacher.last_name, teacher.phone, teacher.specialty]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const matchSearch = !q || searchable.includes(q);
       const matchTeacher = filters.teacher_id === 'all' || String(teacher.id) === String(filters.teacher_id);
-      const matchStatus = filters.status === 'all' || stats.status === filters.status;
-
+      const matchStatus = filters.status === 'all' || stats?.status === filters.status;
       return matchSearch && matchTeacher && matchStatus;
     });
   }, [teachers, teacherStats, searchTerm, filters]);
 
-  const handleOpenDialog = (teacher = null) => {
-    if (teacher) {
-      const stats = teacherStats[teacher.id];
-      setEditingPayment(teacher);
-      setFormData({
-        teacher_id: teacher.id,
-        amount: stats.remaining > 0 ? stats.remaining.toString() : '',
-        payment_method: '',
-        period_month: filters.period_month,
-        period_year: filters.period_year,
-        description: `Salaire ${months.find(m => m.value === filters.period_month)?.label} ${filters.period_year} - ${teacher.first_name} ${teacher.last_name}`,
-        payment_date: new Date().toISOString().split('T')[0],
-      });
-    } else {
-      setEditingPayment(null);
-      setFormData({
-        teacher_id: '',
-        amount: '',
-        payment_method: '',
-        period_month: filters.period_month,
-        period_year: filters.period_year,
-        description: '',
-        payment_date: new Date().toISOString().split('T')[0],
-      });
-    }
+  const pageStats = useMemo(() => {
+    const totalExpected = filteredTeachers.reduce((sum, teacher) => sum + Number(teacherStats[teacher.id]?.expectedSalary || 0), 0);
+    const totalPaid = filteredTeachers.reduce((sum, teacher) => sum + Number(teacherStats[teacher.id]?.totalPaid || 0), 0);
+    return {
+      totalExpected,
+      totalPaid,
+      totalRemaining: Math.max(totalExpected - totalPaid, 0),
+      paidCount: filteredTeachers.filter((teacher) => teacherStats[teacher.id]?.status === 'paid').length,
+      partialCount: filteredTeachers.filter((teacher) => teacherStats[teacher.id]?.status === 'partial').length,
+    };
+  }, [filteredTeachers, teacherStats]);
+
+  const getStatsForForm = () => {
+    const teacher = teachers.find((item) => Number(item.id) === Number(formData.teacher_id));
+    if (!teacher) return { teacher: null, salary: 0, paidExcludingEdit: 0, remaining: 0 };
+    const salary = Number(teacher.salary || 0);
+    const paidExcludingEdit = teacherPayments
+      .filter((payment) =>
+        Number(payment.teacher_id) === Number(teacher.id)
+        && Number(payment.period_month) === Number(formData.period_month)
+        && Number(payment.period_year) === Number(formData.period_year)
+        && Number(payment.id) !== Number(editingPayment?.id)
+      )
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+    return {
+      teacher,
+      salary,
+      paidExcludingEdit,
+      remaining: Math.max(salary - paidExcludingEdit, 0),
+    };
+  };
+
+  const openPaymentDialog = (teacher = null) => {
+    const stats = teacher ? teacherStats[teacher.id] : null;
+    setSelectedTeacher(teacher);
+    setEditingPayment(null);
+    setFormData({
+      teacher_id: teacher?.id || '',
+      amount: stats?.remaining ? String(stats.remaining) : '',
+      payment_method: 'Espèces',
+      period_month: filters.period_month,
+      period_year: filters.period_year,
+      payment_date: new Date().toISOString().split('T')[0],
+      description: teacher ? `Salaire ${getMonthLabel(filters.period_month)} ${filters.period_year}` : '',
+    });
+    setIsDetailsOpen(false);
     setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (payment, teacher) => {
+    setSelectedTeacher(teacher);
+    setEditingPayment(payment);
+    setFormData({
+      teacher_id: payment.teacher_id || teacher?.id || '',
+      amount: String(payment.amount || ''),
+      payment_method: payment.payment_method || 'Espèces',
+      period_month: Number(payment.period_month || filters.period_month),
+      period_year: Number(payment.period_year || filters.period_year),
+      payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
+      description: payment.description || '',
+    });
+    setIsDetailsOpen(false);
+    setIsDialogOpen(true);
+  };
+
+  const handleTeacherChange = (teacherId) => {
+    const teacher = teachers.find((item) => Number(item.id) === Number(teacherId));
+    setSelectedTeacher(teacher || null);
+    setFormData((prev) => {
+      const stats = teacher ? teacherStats[teacher.id] : null;
+      return {
+        ...prev,
+        teacher_id: teacherId,
+        amount: stats?.remaining ? String(stats.remaining) : '',
+        description: teacher ? `Salaire ${getMonthLabel(prev.period_month)} ${prev.period_year}` : '',
+      };
+    });
+  };
+
+  const handlePeriodChange = (field, value) => {
+    setFormData((prev) => {
+      const next = { ...prev, [field]: Number(value) };
+      const teacher = teachers.find((item) => Number(item.id) === Number(next.teacher_id));
+      const paid = teacherPayments
+        .filter((payment) =>
+          Number(payment.teacher_id) === Number(next.teacher_id)
+          && Number(payment.period_month) === Number(next.period_month)
+          && Number(payment.period_year) === Number(next.period_year)
+          && Number(payment.id) !== Number(editingPayment?.id)
+        )
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const remaining = Math.max(Number(teacher?.salary || 0) - paid, 0);
+      return {
+        ...next,
+        amount: remaining ? String(remaining) : next.amount,
+        description: teacher ? `Salaire ${getMonthLabel(next.period_month)} ${next.period_year}` : next.description,
+      };
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const amount = parseFloat(formData.amount);
-    const teacher = teachers.find(t => t.id === formData.teacher_id);
-    const expectedSalary = teacher?.salary || 0;
-    
-    // Validation: ne pas dépasser le salaire attendu
-    if (expectedSalary > 0 && amount > expectedSalary) {
-      toast.error(`Le montant ne peut pas dépasser le salaire de l'enseignant (${expectedSalary.toFixed(2)} FCFA)`);
+    const amount = parseAmount(formData.amount);
+    const salaryInfo = getStatsForForm();
+
+    if (!salaryInfo.teacher) {
+      toast.error('Veuillez sélectionner un enseignant');
       return;
     }
-    
-    // Vérifier le total payé avec ce nouveau paiement
-    const currentStats = teacherStats[formData.teacher_id];
-    const currentPaid = currentStats?.totalPaid || 0;
-    
-    if (expectedSalary > 0 && (currentPaid + amount) > expectedSalary) {
-      toast.error(`Le total des paiements ne peut pas dépasser le salaire de ${expectedSalary.toFixed(2)} FCFA`);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Montant invalide');
       return;
     }
-    
-    try {
-      const paymentData = {
-        ...formData,
-        amount: amount,
-        period_month: parseInt(formData.period_month),
-        period_year: parseInt(formData.period_year),
-      };
+    if (salaryInfo.salary <= 0) {
+      toast.error('Définissez d’abord le salaire mensuel dans la fiche professeur');
+      return;
+    }
+    if (amount > salaryInfo.remaining) {
+      toast.error(`Le montant dépasse le reste à payer (${formatCurrency(salaryInfo.remaining)})`);
+      return;
+    }
 
-      const result = await createTeacherPayment(paymentData);
-      if (result.success) {
-        toast.success('Paiement enseignant enregistré avec succès !');
-        setIsDialogOpen(false);
-      } else {
-        toast.error(result.error || 'Erreur lors de l\'enregistrement');
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-      toast.error('Une erreur est survenue');
+    const data = {
+      teacher_id: salaryInfo.teacher.id,
+      amount,
+      payment_method: formData.payment_method,
+      period_month: Number(formData.period_month),
+      period_year: Number(formData.period_year),
+      payment_date: formData.payment_date,
+      description: formData.description || `Salaire ${getMonthLabel(formData.period_month)} ${formData.period_year}`,
+    };
+
+    const result = editingPayment
+      ? await updateTeacherPayment(editingPayment.id, data)
+      : await createTeacherPayment(data);
+
+    if (result.success) {
+      toast.success(editingPayment ? 'Paiement modifié' : 'Paiement enregistré');
+      setIsDialogOpen(false);
+      setEditingPayment(null);
+      printReceipt({ ...data, id: editingPayment?.id || result.data?.id }, salaryInfo.teacher);
+    } else {
+      toast.error(result.error || "Erreur lors de l'enregistrement");
     }
   };
 
-  const getStatusBadge = (status) => {
-    const variants = {
-      paid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      partial: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-      unpaid: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      no_salary: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-    };
-
-    const labels = {
-      paid: 'Payé',
-      partial: 'Partiel',
-      unpaid: 'Non payé',
-      no_salary: 'Aucun salaire',
-    };
-
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[status]}`}>
-        {labels[status]}
-      </span>
-    );
+  const printHtml = (html) => {
+    const win = window.open('', '_blank');
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }
+      }, 200);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 200);
   };
 
-  const getProgressBar = (paid, total) => {
-    if (total <= 0) return null;
-    const percentage = Math.min((paid / total) * 100, 100);
-    const color = percentage >= 100 ? 'bg-green-500' : percentage > 0 ? 'bg-yellow-500' : 'bg-red-500';
-    
-    return (
-      <div className="w-full bg-gray-200 rounded-full h-2">
-        <div className={`${color} h-2 rounded-full transition-all duration-300`} style={{ width: `${percentage}%` }}></div>
-      </div>
-    );
-  };
-
-  // Fonctions d'impression
-  const printPaymentReceipt = (payment) => {
-    const teacher = teachers.find(t => t.id === payment.teacher_id);
-    
-    const receiptContent = `
+  const printReceipt = (payment, teacher) => {
+    printHtml(`
       <html>
         <head>
-          <title>Reçu de Paiement - Salaire Enseignant</title>
+          <title>Reçu salaire enseignant</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .info { margin: 20px 0; }
-            .details { margin: 20px 0; }
-            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
+            body { font-family: Arial, sans-serif; margin: 28px; color: #111827; }
+            .receipt { border: 2px solid #111827; padding: 24px; max-width: 760px; margin: 0 auto; }
+            .header { text-align: center; border-bottom: 2px solid #111827; padding-bottom: 16px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin: 18px 0; }
+            .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+            th { background: #eff6ff; }
+            .amount { font-size: 24px; font-weight: 800; color: #0066CC; }
+            .footer { margin-top: 36px; display: flex; justify-content: space-between; font-size: 12px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>REÇU DE PAIEMENT</h1>
-            <h2>Salaire Enseignant</h2>
-            <p>Établissement LA SAGESSE</p>
-          </div>
-          
-          <div class="info">
-            <p><strong>Date:</strong> ${new Date(payment.payment_date).toLocaleDateString('fr-FR')}</p>
-            <p><strong>Numéro de reçu:</strong> #${payment.id.toString().padStart(6, '0')}</p>
-          </div>
-          
-          <div class="details">
-            <h3>Informations de l'enseignant</h3>
-            <p><strong>Nom:</strong> ${teacher?.first_name} ${teacher?.last_name}</p>
-            <p><strong>Téléphone:</strong> ${teacher?.phone}</p>
-            <p><strong>Spécialité:</strong> ${teacher?.specialty || 'Non spécifiée'}</p>
-          </div>
-          
-          <table>
-            <tr>
-              <th>Description</th>
-              <th>Montant</th>
-            </tr>
-            <tr>
-              <td>${payment.description}</td>
-              <td>${payment.amount} FCFA</td>
-            </tr>
-            <tr>
-              <th>Total</th>
-              <th>${payment.amount} FCFA</th>
-            </tr>
-          </table>
-          
-          <div class="details">
-            <p><strong>Mode de paiement:</strong> ${payment.payment_method || 'Non spécifié'}</p>
-            <p><strong>Période:</strong> ${payment.month || 'Non spécifiée'} ${payment.year || ''}</p>
-          </div>
-          
-          <div class="footer">
-            <p>Merci pour votre service!</p>
-            <p>Ce reçu sert de preuve de paiement</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(receiptContent);
-    printWindow.document.close();
-    printWindow.print();
-  };
-
-  const printTeacherBalance = (teacherId) => {
-    const teacher = teachers.find(t => t.id === teacherId);
-    const stats = teacherStats[teacherId];
-    const teacherPaymentsList = teacherPayments.filter(p => p.teacher_id === teacherId);
-    
-    const balanceContent = `
-      <html>
-        <head>
-          <title>État des Paiements - Salaire Enseignant</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .info { margin: 20px 0; }
-            .summary { background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 5px; }
-            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .paid { color: green; font-weight: bold; }
-            .remaining { color: red; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>ÉTAT DES PAIEMENTS</h1>
-            <h2>Salaire Enseignant</h2>
-            <p>Établissement LA SAGESSE</p>
-          </div>
-          
-          <div class="info">
-            <p><strong>Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
-            <p><strong>Période:</strong> ${stats?.year || '2025-2026'}</p>
-          </div>
-          
-          <div class="details">
-            <h3>Informations de l'enseignant</h3>
-            <p><strong>Nom:</strong> ${teacher?.first_name} ${teacher?.last_name}</p>
-            <p><strong>Téléphone:</strong> ${teacher?.phone}</p>
-            <p><strong>Spécialité:</strong> ${teacher?.specialty || 'Non spécifiée'}</p>
-          </div>
-          
-          <div class="summary">
-            <h3>Résumé des paiements</h3>
-            <p><strong>Salaire attendu:</strong> ${stats?.expectedSalary || 0} FCFA</p>
-            <p><strong>Montant payé:</strong> <span class="paid">${stats?.totalPaid || 0} FCFA</span></p>
-            <p><strong>Reste à payer:</strong> <span class="remaining">${stats?.remaining || 0} FCFA</span></p>
-            <p><strong>Statut:</strong> ${stats?.status === 'paid' ? 'Payé' : stats?.status === 'partial' ? 'Partiel' : 'Non payé'}</p>
-          </div>
-          
-          <h3>Historique des paiements</h3>
-          <table>
-            <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Mode de paiement</th>
-              <th>Montant</th>
-            </tr>
-            ${teacherPaymentsList.map(payment => `
+          <div class="receipt">
+            <div class="header">
+              <h1>REÇU DE PAIEMENT</h1>
+              <p>Salaire enseignant - Établissement LA SAGESSE</p>
+              <p>Reçu N° ${String(payment.id || '').padStart(6, '0')}</p>
+            </div>
+            <div class="grid">
+              <div class="box"><strong>Enseignant</strong><br>${getTeacherName(teacher)}</div>
+              <div class="box"><strong>Spécialité</strong><br>${teacher?.specialty || '-'}</div>
+              <div class="box"><strong>Période</strong><br>${getMonthLabel(payment.period_month)} ${payment.period_year}</div>
+              <div class="box"><strong>Date</strong><br>${formatDate(payment.payment_date)}</div>
+              <div class="box"><strong>Téléphone</strong><br>${teacher?.phone || '-'}</div>
+              <div class="box"><strong>Mode</strong><br>${payment.payment_method || 'Espèces'}</div>
+            </div>
+            <table>
+              <tr><th>Description</th><th>Montant</th></tr>
               <tr>
-                <td>${new Date(payment.payment_date).toLocaleDateString('fr-FR')}</td>
-                <td>${payment.description}</td>
-                <td>${payment.payment_method || 'Non spécifié'}</td>
-                <td>${payment.amount} FCFA</td>
+                <td>${payment.description || '-'}</td>
+                <td class="amount">${formatCurrency(payment.amount)}</td>
               </tr>
-            `).join('')}
-          </table>
-          
-          <div class="footer">
-            <p>Document généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</p>
+            </table>
+            <div class="footer">
+              <span>Signature enseignant</span>
+              <span>Cachet et signature direction</span>
+            </div>
           </div>
         </body>
       </html>
-    `;
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(balanceContent);
-    printWindow.document.close();
-    printWindow.print();
+    `);
   };
 
-  const printTeacherReport = () => {
-    const teacherList = filteredTeachers;
-    const totalExpected = teacherList.reduce((sum, teacher) => sum + (teacherStats[teacher.id]?.expectedSalary || 0), 0);
-    const totalPaid = teacherList.reduce((sum, teacher) => sum + (teacherStats[teacher.id]?.totalPaid || 0), 0);
-    const totalRemaining = totalExpected - totalPaid;
-    
-    const reportContent = `
+  const printReport = () => {
+    const rows = filteredTeachers.map((teacher) => {
+      const stats = teacherStats[teacher.id];
+      return `
+        <tr>
+          <td>${getTeacherName(teacher)}</td>
+          <td>${teacher.specialty || '-'}</td>
+          <td>${formatCurrency(stats?.expectedSalary)}</td>
+          <td>${formatCurrency(stats?.totalPaid)}</td>
+          <td>${formatCurrency(stats?.remaining)}</td>
+          <td>${stats?.status === 'paid' ? 'Payé' : stats?.status === 'partial' ? 'Partiel' : stats?.status === 'no_salary' ? 'Salaire non défini' : 'Non payé'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printHtml(`
       <html>
         <head>
-          <title>Rapport des Enseignants - Salaires</title>
+          <title>Rapport salaires enseignants</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .summary { background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 5px; }
-            .footer { margin-top: 40px; text-align: center; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .paid { color: green; font-weight: bold; }
-            .remaining { color: red; font-weight: bold; }
+            body { font-family: Arial, sans-serif; margin: 28px; color: #111827; }
+            h1, h2 { text-align: center; margin: 4px 0; }
+            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+            .box { border: 1px solid #cbd5e1; background: #f8fafc; padding: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+            th, td { border: 1px solid #cbd5e1; padding: 9px; text-align: left; }
+            th { background: #eff6ff; }
+            .footer { margin-top: 28px; font-size: 12px; text-align: center; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>RAPPORT DES ENSEIGNANTS</h1>
-            <h2>Salaires</h2>
-            <p>Établissement LA SAGESSE</p>
-          </div>
-          
-          <div class="info">
-            <p><strong>Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
-            <p><strong>Filtres:</strong> ${searchTerm ? `Recherche: ${searchTerm}` : 'Tous les enseignants'} | ${filters.year || 'Toutes les années'}</p>
-          </div>
-          
+          <h1>RAPPORT DES SALAIRES</h1>
+          <h2>${getMonthLabel(filters.period_month)} ${filters.period_year}</h2>
           <div class="summary">
-            <h3>Résumé général</h3>
-            <p><strong>Nombre d'enseignants:</strong> ${teacherList.length}</p>
-            <p><strong>Total des salaires attendus:</strong> ${totalExpected} FCFA</p>
-            <p><strong>Total payé:</strong> <span class="paid">${totalPaid} FCFA</span></p>
-            <p><strong>Total restant:</strong> <span class="remaining">${totalRemaining} FCFA</span></p>
-            <p><strong>Taux de paiement:</strong> ${totalExpected > 0 ? ((totalPaid / totalExpected) * 100).toFixed(1) : 0}%</p>
+            <div class="box"><strong>Salaires attendus</strong><br>${formatCurrency(pageStats.totalExpected)}</div>
+            <div class="box"><strong>Déjà payé</strong><br>${formatCurrency(pageStats.totalPaid)}</div>
+            <div class="box"><strong>Reste à payer</strong><br>${formatCurrency(pageStats.totalRemaining)}</div>
           </div>
-          
-          <h3>Détail par enseignant</h3>
           <table>
-            <tr>
-              <th>Enseignant</th>
-              <th>Spécialité</th>
-              <th>Salaire attendu</th>
-              <th>Payé</th>
-              <th>Reste</th>
-              <th>Statut</th>
-            </tr>
-            ${teacherList.map(teacher => {
-              const stats = teacherStats[teacher.id];
-              return `
-                <tr>
-                  <td>${teacher.first_name} ${teacher.last_name}</td>
-                  <td>${teacher.specialty || 'Non spécifiée'}</td>
-                  <td>${stats?.expectedSalary || 0} FCFA</td>
-                  <td class="paid">${stats?.totalPaid || 0} FCFA</td>
-                  <td class="remaining">${stats?.remaining || 0} FCFA</td>
-                  <td>${stats?.status === 'paid' ? 'Payé' : stats?.status === 'partial' ? 'Partiel' : 'Non payé'}</td>
-                </tr>
-              `;
-            }).join('')}
+            <tr><th>Enseignant</th><th>Spécialité</th><th>Salaire</th><th>Payé</th><th>Reste</th><th>Statut</th></tr>
+            ${rows}
           </table>
-          
-          <div class="footer">
-            <p>Rapport généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</p>
-          </div>
+          <div class="footer">Document généré le ${formatDate(new Date())}</div>
         </body>
       </html>
-    `;
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(reportContent);
-    printWindow.document.close();
-    printWindow.print();
+    `);
   };
+
+  const openDetails = (teacher) => {
+    setSelectedTeacher(teacher);
+    setIsDetailsOpen(true);
+  };
+
+  const selectedStats = selectedTeacher ? teacherStats[selectedTeacher.id] : null;
+  const formStats = getStatsForForm();
+  const formAmount = parseAmount(formData.amount);
+  const remainingAfterPayment = Math.max(formStats.remaining - (Number.isFinite(formAmount) ? formAmount : 0), 0);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">
-      <p className="text-muted-foreground">Chargement...</p>
-    </div>;
+    return (
+      <div className="flex min-h-[360px] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-lg border bg-white px-5 py-4 shadow-sm dark:bg-slate-950">
+          <RotateCcw className="h-5 w-5 animate-spin text-[#0066CC]" />
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Chargement des paiements</span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-6 pb-8 fade-in">
       {ToastComponent}
-      
-      {/* En-tête */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Users className="h-8 w-8 text-green-600" />
-            Paiements des Enseignants
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Gérez les salaires et paiements des enseignants
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={printTeacherReport}>
-            <Printer className="mr-2 h-4 w-4" />
-            Imprimer le rapport
-          </Button>
-          <Button onClick={() => handleOpenDialog()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Enregistrer un paiement
-          </Button>
-        </div>
-      </div>
 
-      {/* Statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total enseignants</p>
-                <p className="text-2xl font-bold">{filteredTeachers.length}</p>
-              </div>
-              <Users className="h-8 w-8 text-green-600" />
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-md bg-[#0066CC]/10 px-3 py-1 text-xs font-semibold uppercase text-[#003399] dark:text-blue-200">
+              <Wallet className="h-3.5 w-3.5" />
+              Paie mensuelle
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Payés</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {filteredTeachers.filter(t => teacherStats[t.id]?.status === 'paid').length}
-                </p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Partiels</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {filteredTeachers.filter(t => teacherStats[t.id]?.status === 'partial').length}
-                </p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-yellow-600" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Non payés</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {filteredTeachers.filter(t => teacherStats[t.id]?.status === 'unpaid').length}
-                </p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-red-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtres */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Rechercher un enseignant..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <select
-                value={filters.teacher_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Tous les enseignants</option>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.first_name} {teacher.last_name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.period_month}
-                onChange={(e) => setFilters((prev) => ({ ...prev, period_month: parseInt(e.target.value) }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                {months.map(month => (
-                  <option key={month.value} value={month.value}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.period_year}
-                onChange={(e) => setFilters((prev) => ({ ...prev, period_year: parseInt(e.target.value) }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="2024">2024</option>
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-              </select>
-
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Tous les statuts</option>
-                <option value="paid">Payé</option>
-                <option value="partial">Partiel</option>
-                <option value="unpaid">Non payé</option>
-              </select>
-            </div>
+            <h1 className="mt-4 text-3xl font-bold text-slate-950 dark:text-white">Paiements enseignants</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Suivez les salaires mensuels, encaissez un paiement total ou partiel, modifiez une erreur et imprimez un reçu clair.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={printReport} className="h-11 gap-2">
+              <Printer className="h-4 w-4" />
+              Rapport
+            </Button>
+            <Button onClick={() => openPaymentDialog()} className="h-11 gap-2 bg-[#0066CC] hover:bg-[#005bb8]">
+              <Banknote className="h-4 w-4" />
+              Nouveau paiement
+            </Button>
+          </div>
+        </div>
+      </section>
 
-      {/* Tableau des enseignants */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Liste des enseignants ({filteredTeachers.length}) - 
-            {months.find(m => m.value === filters.period_month)?.label} {filters.period_year}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Enseignant</TableHead>
-                <TableHead>Spécialité</TableHead>
-                <TableHead>Salaire attendu</TableHead>
-                <TableHead>Montant payé</TableHead>
-                <TableHead>Reste à payer</TableHead>
-                <TableHead>Progression</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTeachers.length > 0 ? (
-                filteredTeachers.map((teacher) => {
-                  const stats = teacherStats[teacher.id];
-                  
-                  return (
-                    <TableRow key={teacher.id}>
-                      <TableCell className="font-medium">
-                        {teacher.first_name} {teacher.last_name}
-                        <div className="text-sm text-muted-foreground">{teacher.phone}</div>
-                      </TableCell>
-                      <TableCell>{teacher.specialty || 'Non spécifiée'}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4" />
-                          {stats.expectedSalary.toFixed(2)} FCFA
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                          {stats.totalPaid.toFixed(2)} FCFA
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className={`flex items-center gap-1 ${stats.remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          <DollarSign className="h-4 w-4" />
-                          {stats.remaining.toFixed(2)} FCFA
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-32">
-                        {getProgressBar(stats.totalPaid, stats.expectedSalary)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(stats.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => printTeacherBalance(teacher.id)}
-                            title="Imprimer l'état des paiements"
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenDialog(teacher)}
-                            title="Enregistrer un paiement"
-                            disabled={stats.status === 'paid'}
-                          >
-                            <DollarSign className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setViewingPayment({
-                                teacher,
-                                stats,
-                                payments: stats.payments
-                              });
-                              setIsViewDialogOpen(true);
-                            }}
-                            title="Voir les détails"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    Aucun enseignant trouvé
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile icon={UserRound} label="Enseignants affichés" value={filteredTeachers.length} helper={`${pageStats.paidCount} payés, ${pageStats.partialCount} partiels`} tone="blue" />
+        <StatTile icon={Wallet} label="Salaires attendus" value={formatCurrency(pageStats.totalExpected)} helper={`${getMonthLabel(filters.period_month)} ${filters.period_year}`} tone="slate" />
+        <StatTile icon={CheckCircle2} label="Déjà payé" value={formatCurrency(pageStats.totalPaid)} helper="Selon les filtres" tone="green" />
+        <StatTile icon={Clock3} label="Reste à payer" value={formatCurrency(pageStats.totalRemaining)} helper="Solde de la période" tone="orange" />
+      </section>
 
-      {/* Dialog d'ajout de paiement */}
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.9fr_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Nom, téléphone, spécialité..." className="h-10 pl-10" />
+          </div>
+          <SelectField value={filters.teacher_id} onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}>
+            <option value="all">Tous les enseignants</option>
+            {teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{getTeacherName(teacher)}</option>)}
+          </SelectField>
+          <SelectField value={filters.period_month} onChange={(e) => setFilters((prev) => ({ ...prev, period_month: Number(e.target.value) }))}>
+            {months.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
+          </SelectField>
+          <SelectField value={filters.period_year} onChange={(e) => setFilters((prev) => ({ ...prev, period_year: Number(e.target.value) }))}>
+            {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+          </SelectField>
+          <SelectField value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}>
+            <option value="all">Tous les statuts</option>
+            <option value="paid">Payé</option>
+            <option value="partial">Partiel</option>
+            <option value="unpaid">Non payé</option>
+            <option value="no_salary">Salaire non défini</option>
+          </SelectField>
+          <Button type="button" variant="outline" onClick={() => {
+            setSearchTerm('');
+            setFilters({ teacher_id: 'all', period_month: currentMonth, period_year: currentYear, status: 'all' });
+          }} className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            Réinitialiser
+          </Button>
+        </div>
+        <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+          <Filter className="h-4 w-4" />
+          <span>{filteredTeachers.length} résultat(s)</span>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        {filteredTeachers.length > 0 ? filteredTeachers.map((teacher) => {
+          const stats = teacherStats[teacher.id];
+          return (
+            <Card key={teacher.id} className="border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-bold text-slate-950 dark:text-white">{getTeacherName(teacher)}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{teacher.specialty || 'Spécialité non renseignée'}</span>
+                      <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{teacher.phone || 'Sans téléphone'}</span>
+                      <StatusBadge status={stats.status} />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => openDetails(teacher)} title="Historique">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openPaymentDialog(teacher)} title="Encaisser" disabled={stats.status === 'paid' || stats.status === 'no_salary'}>
+                      <Banknote className="h-4 w-4 text-[#0066CC]" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                    <p className="text-xs text-slate-500">Salaire mensuel</p>
+                    <p className="font-bold">{formatCurrency(stats.expectedSalary)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                    <p className="text-xs text-slate-500">Payé</p>
+                    <p className="font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(stats.totalPaid)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                    <p className="text-xs text-slate-500">Reste</p>
+                    <p className="font-bold text-[#FF3300]">{formatCurrency(stats.remaining)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <ProgressBar paid={stats.totalPaid} total={stats.expectedSalary} />
+                  <span className="w-12 text-right text-xs font-semibold text-slate-500">
+                    {stats.expectedSalary > 0 ? `${Math.min((stats.totalPaid / stats.expectedSalary) * 100, 100).toFixed(0)}%` : '0%'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }) : (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950">
+            Aucun enseignant trouvé pour ces filtres.
+          </div>
+        )}
+      </section>
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[92vh] w-[min(660px,calc(100vw-2rem))] max-w-none overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>
-                {editingPayment ? 'Enregistrer un paiement' : 'Nouveau paiement enseignant'}
-              </DialogTitle>
-              <DialogDescription>
-                Enregistrez un paiement de salaire pour l'enseignant.
-              </DialogDescription>
+              <DialogTitle>{editingPayment ? 'Modifier le paiement' : 'Nouveau paiement enseignant'}</DialogTitle>
+              <DialogDescription>Le salaire mensuel est renseigné dans la fiche professeur. Ici, vous encaissez tout ou une partie du mois choisi.</DialogDescription>
             </DialogHeader>
-
-            <div className="grid gap-4 py-4">
+            <div className="space-y-4 py-5">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Enseignant *</label>
-                <select
-                  value={formData.teacher_id}
-                  onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  required
-                  disabled={!!editingPayment}
-                >
-                  <option value="">Sélectionner un enseignant</option>
-                  {teachers.map((teacher) => {
-                    const stats = teacherStats[teacher.id];
-                    return (
-                      <option key={teacher.id} value={teacher.id}>
-                        {teacher.first_name} {teacher.last_name} - {teacher.specialty || 'Non spécifiée'}
-                        {stats.remaining > 0 ? ` (Reste: ${stats.remaining.toFixed(2)} FCFA)` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                <SelectField value={formData.teacher_id} onChange={(e) => handleTeacherChange(e.target.value)} required disabled={!!editingPayment}>
+                  <option value="">Sélectionner</option>
+                  {teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>{getTeacherName(teacher)} - {teacher.specialty || 'Non spécifiée'}</option>
+                  ))}
+                </SelectField>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Mois *</label>
-                  <select
-                    value={formData.period_month}
-                    onChange={(e) => setFormData({ ...formData, period_month: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    required
-                  >
-                    {months.map(month => (
-                      <option key={month.value} value={month.value}>
-                        {month.label}
-                      </option>
-                    ))}
-                  </select>
+                  <SelectField value={formData.period_month} onChange={(e) => handlePeriodChange('period_month', e.target.value)} required>
+                    {months.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
+                  </SelectField>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Année *</label>
-                  <select
-                    value={formData.period_year}
-                    onChange={(e) => setFormData({ ...formData, period_year: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="2024">2024</option>
-                    <option value="2025">2025</option>
-                    <option value="2026">2026</option>
-                  </select>
+                  <SelectField value={formData.period_year} onChange={(e) => handlePeriodChange('period_year', e.target.value)} required>
+                    {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+                  </SelectField>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Montant *</label>
+                  <Input type="text" inputMode="decimal" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Date</label>
+                  <Input type="date" value={formData.payment_date} onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Mode</label>
+                  <SelectField value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
+                    <option value="Espèces">Espèces</option>
+                    <option value="Mobile Money">Mobile Money</option>
+                    <option value="Virement bancaire">Virement bancaire</option>
+                    <option value="Chèque">Chèque</option>
+                  </SelectField>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/40">
+                  <p className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+                    <TrendingUp className="h-4 w-4 text-[#0066CC]" />
+                    Solde après paiement
+                  </p>
+                  <p className="mt-2 text-slate-500">Salaire : {formatCurrency(formStats.salary)}</p>
+                  <p className="text-slate-500">Déjà payé : {formatCurrency(formStats.paidExcludingEdit)}</p>
+                  <p className="font-bold text-[#FF3300]">Reste : {formatCurrency(remainingAfterPayment)}</p>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium">Description</label>
+                  <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Ex: acompte, régularisation..." />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Montant *</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Méthode de paiement</label>
-                <select
-                  value={formData.payment_method}
-                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">Sélectionner</option>
-                  <option value="espèces">Espèces</option>
-                  <option value="mobile">Mobile Money</option>
-                  <option value="banque">Virement bancaire</option>
-                  <option value="chèque">Chèque</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Date de paiement</label>
-                <Input
-                  type="date"
-                  value={formData.payment_date}
-                  onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <Input
-                  placeholder="Description optionnelle"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
             </div>
-
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Annuler
-              </Button>
-              <Button type="submit">
-                Enregistrer le paiement
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
+              <Button type="submit" className="bg-[#0066CC] hover:bg-[#005bb8]">{editingPayment ? 'Modifier et imprimer' : 'Enregistrer et imprimer'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de visualisation des détails */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-h-[92vh] w-[min(820px,calc(100vw-2rem))] max-w-none overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Détails des paiements</DialogTitle>
+            <DialogTitle>Historique des paiements</DialogTitle>
+            <DialogDescription>{getMonthLabel(filters.period_month)} {filters.period_year}</DialogDescription>
           </DialogHeader>
-
-          {viewingPayment && (
-            <div className="py-2 space-y-6">
-              <div className="grid gap-4">
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-medium mb-2">Informations de l'enseignant</h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="font-medium">Nom:</span> {viewingPayment.teacher.first_name} {viewingPayment.teacher.last_name}</div>
-                    <div><span className="font-medium">Spécialité:</span> {viewingPayment.teacher.specialty || 'Non spécifiée'}</div>
-                    <div><span className="font-medium">Téléphone:</span> {viewingPayment.teacher.phone}</div>
-                    <div><span className="font-medium">Statut:</span> {getStatusBadge(viewingPayment.stats.status)}</div>
+          {selectedTeacher && selectedStats && (
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/40">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-bold">{getTeacherName(selectedTeacher)}</p>
+                    <p className="text-sm text-slate-500">{selectedTeacher.specialty || 'Non spécifiée'} · {selectedTeacher.phone || 'Sans téléphone'}</p>
                   </div>
+                  <StatusBadge status={selectedStats.status} />
                 </div>
-
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-medium mb-2">Résumé des paiements</h3>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Salaire attendu</p>
-                      <p className="text-lg font-bold">{viewingPayment.stats.expectedSalary.toFixed(2)} FCFA</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Montant payé</p>
-                      <p className="text-lg font-bold text-green-600">{viewingPayment.stats.totalPaid.toFixed(2)} FCFA</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Reste à payer</p>
-                      <p className={`text-lg font-bold ${viewingPayment.stats.remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {viewingPayment.stats.remaining.toFixed(2)} FCFA
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    {getProgressBar(viewingPayment.stats.totalPaid, viewingPayment.stats.expectedSalary)}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-medium mb-2">Historique des paiements</h3>
-                  {viewingPayment.payments.length > 0 ? (
-                    <div className="space-y-2">
-                      {viewingPayment.payments.map((payment) => (
-                        <div key={payment.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <div>
-                            <p className="font-medium">{payment.amount.toFixed(2)} FCFA</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(payment.payment_date).toLocaleDateString('fr-FR')} - {payment.payment_method || 'Non spécifié'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">{payment.description}</p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => printPaymentReceipt(payment)}
-                              title="Imprimer le reçu"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-center text-muted-foreground py-4">Aucun paiement enregistré</p>
-                  )}
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div><p className="text-xs text-slate-500">Salaire</p><p className="font-bold">{formatCurrency(selectedStats.expectedSalary)}</p></div>
+                  <div><p className="text-xs text-slate-500">Payé</p><p className="font-bold text-emerald-700">{formatCurrency(selectedStats.totalPaid)}</p></div>
+                  <div><p className="text-xs text-slate-500">Reste</p><p className="font-bold text-[#FF3300]">{formatCurrency(selectedStats.remaining)}</p></div>
                 </div>
               </div>
+              {selectedStats.payments.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedStats.payments.map((payment) => (
+                    <div key={payment.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-bold text-slate-950 dark:text-white">{formatCurrency(payment.amount)}</p>
+                        <p className="text-sm text-slate-500">{formatDate(payment.payment_date)} · {payment.payment_method || 'Espèces'} · {payment.description || '-'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(payment, selectedTeacher)} title="Modifier">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => printReceipt(payment, selectedTeacher)} title="Imprimer reçu">
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-slate-500">Aucun paiement enregistré pour cette période.</div>
+              )}
             </div>
           )}
-
           <DialogFooter>
-            <Button type="button" onClick={() => setIsViewDialogOpen(false)}>
-              Fermer
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsDetailsOpen(false)}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

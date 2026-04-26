@@ -1021,8 +1021,8 @@ function setupIPCHandlers(ipcMain) {
 
   handle('classes:create', { auth: true }, (event, data) => {
     const sql = `
-      INSERT INTO classes (name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO classes (name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee, uniform_class_fee, uniform_sport_fee)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const result = query(sql, [
       data.name,
@@ -1031,7 +1031,9 @@ function setupIPCHandlers(ipcMain) {
       data.max_students || 30,
       data.teacher_id || null,
       data.tuition_fee || 0,
-      data.uniform_fee || 0
+      data.uniform_fee || 0,
+      data.uniform_class_fee || data.uniform_fee || 0,
+      data.uniform_sport_fee || 0
     ]);
     const classId = result.lastInsertRowid;
 
@@ -1058,7 +1060,7 @@ function setupIPCHandlers(ipcMain) {
     const sql = `
       UPDATE classes 
       SET name = ?, level = ?, academic_year = ?, max_students = ?, teacher_id = ?,
-          tuition_fee = ?, uniform_fee = ?, updated_at = CURRENT_TIMESTAMP
+          tuition_fee = ?, uniform_fee = ?, uniform_class_fee = ?, uniform_sport_fee = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
     query(sql, [
@@ -1069,6 +1071,8 @@ function setupIPCHandlers(ipcMain) {
       data.teacher_id || null,
       data.tuition_fee || 0,
       data.uniform_fee || 0,
+      data.uniform_class_fee || data.uniform_fee || 0,
+      data.uniform_sport_fee || 0,
       id
     ]);
 

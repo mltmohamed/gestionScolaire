@@ -59,6 +59,8 @@ const emptyForm = {
   teacher_ids: [],
   tuition_fee: 0,
   uniform_fee: 0,
+  uniform_class_fee: 0,
+  uniform_sport_fee: 0,
 };
 
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('fr-FR')} FCFA`;
@@ -246,6 +248,8 @@ export default function Classes() {
       teacher_ids: (cls.teacher_ids || []).map((id) => Number(id)),
       tuition_fee: cls.tuition_fee || 0,
       uniform_fee: cls.uniform_fee || 0,
+      uniform_class_fee: cls.uniform_class_fee ?? cls.uniform_fee ?? 0,
+      uniform_sport_fee: cls.uniform_sport_fee || 0,
     });
   };
 
@@ -484,7 +488,7 @@ export default function Classes() {
                     </div>
                     <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                       <Shirt className="h-4 w-4 text-[#0066CC]" />
-                      <span className="truncate">{formatCurrency(cls.uniform_fee)}</span>
+                      <span className="truncate">{formatCurrency((Number(cls.uniform_class_fee ?? cls.uniform_fee ?? 0) + Number(cls.uniform_sport_fee || 0)))}</span>
                     </div>
                   </div>
                 </div>
@@ -565,8 +569,18 @@ export default function Classes() {
                       <Input type="number" step="0.01" min="0" value={formData.tuition_fee} onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Frais de tenue (FCFA)</label>
-                      <Input type="number" step="0.01" min="0" value={formData.uniform_fee} onChange={(e) => setFormData({ ...formData, uniform_fee: e.target.value })} />
+                      <label className="text-sm font-medium">Tenue de classe (FCFA)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.uniform_class_fee}
+                        onChange={(e) => setFormData({ ...formData, uniform_class_fee: e.target.value, uniform_fee: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm font-medium">Tenue sportive (FCFA)</label>
+                      <Input type="number" step="0.01" min="0" value={formData.uniform_sport_fee} onChange={(e) => setFormData({ ...formData, uniform_sport_fee: e.target.value })} />
                     </div>
                   </div>
                 </section>
@@ -670,7 +684,8 @@ export default function Classes() {
                   <InfoItem icon={Users} label="Élèves" value={`${formatNumber(viewingClass.student_count)}/${formatNumber(viewingClass.max_students)}`} />
                   <InfoItem icon={Calendar} label="Année scolaire" value={viewingClass.academic_year} />
                   <InfoItem icon={CircleDollarSign} label="Scolarité" value={formatCurrency(viewingClass.tuition_fee)} />
-                  <InfoItem icon={Shirt} label="Tenue" value={formatCurrency(viewingClass.uniform_fee)} />
+                  <InfoItem icon={Shirt} label="Tenue de classe" value={formatCurrency(viewingClass.uniform_class_fee ?? viewingClass.uniform_fee)} />
+                  <InfoItem icon={Shirt} label="Tenue sportive" value={formatCurrency(viewingClass.uniform_sport_fee)} />
                 </div>
               </section>
 

@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS classes (
   teacher_id INTEGER,
   tuition_fee DECIMAL(10,2) DEFAULT 0,
   uniform_fee DECIMAL(10,2) DEFAULT 0,
+  uniform_class_fee DECIMAL(10,2) DEFAULT 0,
+  uniform_sport_fee DECIMAL(10,2) DEFAULT 0,
   is_deleted INTEGER DEFAULT 0,
   deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

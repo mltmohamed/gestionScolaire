@@ -128,6 +128,8 @@ class DatabaseManager {
       // Ajouter les champs de frais pour les classes
       ensureColumn('classes', 'tuition_fee', 'DECIMAL(10,2) DEFAULT 0');
       ensureColumn('classes', 'uniform_fee', 'DECIMAL(10,2) DEFAULT 0');
+      ensureColumn('classes', 'uniform_class_fee', 'DECIMAL(10,2) DEFAULT 0');
+      ensureColumn('classes', 'uniform_sport_fee', 'DECIMAL(10,2) DEFAULT 0');
 
       // Ajouter le champ de salaire pour les enseignants
       ensureColumn('teachers', 'salary', 'DECIMAL(10,2) DEFAULT 0');
