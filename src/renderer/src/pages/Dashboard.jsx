@@ -262,7 +262,7 @@ export default function Dashboard() {
             <QuickAction icon={Users} label="Ajouter un enseignant" onClick={() => navigate('/teachers')} />
             <QuickAction icon={Banknote} label="Saisir une scolarité" onClick={() => navigate('/payments/tuition')} />
             <QuickAction icon={Landmark} label="Payer un enseignant" onClick={() => navigate('/payments/teachers')} />
-            <QuickAction icon={BookOpenCheck} label="Préparer les bulletins" onClick={() => navigate('/bulletin')} />
+            <QuickAction icon={BookOpenCheck} label="Préparer les bulletins" onClick={() => navigate('/bulletin/primary')} />
           </CardContent>
         </Card>
       </section>
