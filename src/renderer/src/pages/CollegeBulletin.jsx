@@ -93,7 +93,6 @@ export default function CollegeBulletin() {
   const [bulletinDataMap, setBulletinDataMap] = useState({});
 
   const [editingCell, setEditingCell] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingBulletin, setViewingBulletin] = useState(null);
   const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
@@ -102,7 +101,6 @@ export default function CollegeBulletin() {
   // États pour la navigation par classe
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [selectedMonthForClass, setSelectedMonthForClass] = useState(null);
-  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'month', 'students', 'bulletin'
 
   const collegeClasses = useMemo(() => {
@@ -182,157 +180,16 @@ export default function CollegeBulletin() {
     }
   };
 
-  const handleGenerateBulletin = async () => {
-    setIsGenerating(true);
-    try {
-      // Logic to generate bulletin PDF
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate generation
-      toast.success('Bulletin généré avec succès !');
-    } catch (error) {
-      toast.error('Erreur lors de la génération du bulletin');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleGenerateClassBulletins = async () => {
-    setIsGenerating(true);
-    try {
-      const selectedStudentsData = collegeStudents
-        .filter(s => selectedStudentIds.includes(s.id))
-        .sort((a, b) => a.last_name.localeCompare(b.last_name));
-
-      // Générer le HTML pour tous les bulletins
-      let allBulletinsHTML = `
-        <html>
-          <head>
-            <title>Bulletins de ${selectedClassId ? collegeClasses.find(c => c.id === selectedClassId)?.name : 'Classe'}</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              .bulletin { page-break-after: always; margin-bottom: 30px; }
-              .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
-              .student-info { margin: 20px 0; }
-              .grades-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-              .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-              .grades-table th { background-color: #f2f2f2; }
-              .footer { margin-top: 30px; text-align: center; }
-            </style>
-          </head>
-          <body>
-      `;
-
-      for (const student of selectedStudentsData) {
-        const studentBulletinData = await getBulletin(student.id, academicYear);
-        const bulletinHTML = generateBulletinHTML(student, studentBulletinData.data);
-        allBulletinsHTML += bulletinHTML;
-      }
-
-      allBulletinsHTML += `
-          </body>
-        </html>
-      `;
-
-      // Ouvrir une nouvelle fenêtre avec tous les bulletins
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(allBulletinsHTML);
-      printWindow.document.close();
-      
-      // Attendre un peu avant d'imprimer
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 1000);
-
-      toast.success(`${selectedStudentIds.length} bulletin(s) généré(s) avec succès !`);
-    } catch (error) {
-      console.error('Erreur lors de la génération des bulletins:', error);
-      toast.error('Erreur lors de la génération des bulletins');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const generateBulletinHTML = (student, bulletinData) => {
-    const selectedClass = collegeClasses.find(c => c.id === selectedClassId);
-    
-    return `
-      <div class="bulletin">
-        <div class="header">
-          <h1>BULLETIN SCOLAIRE</h1>
-          <h2>Établissement LA SAGESSE</h2>
-          <p>Année scolaire ${academicYear}</p>
-          <p>${bulletinData?.period || '1er trimestre'} - ${bulletinData?.sequence || 'Séquence 1'}</p>
-        </div>
-        
-        <div class="student-info">
-          <h3>Informations de l'élève</h3>
-          <p><strong>Nom:</strong> ${student.first_name} ${student.last_name}</p>
-          <p><strong>Matricule:</strong> ${student.matricule}</p>
-          <p><strong>Classe:</strong> ${selectedClass?.name}</p>
-        </div>
-        
-        <table class="grades-table">
-          <thead>
-            <tr>
-              <th>Matière</th>
-              ${MONTHS.map(month => `<th>${month.label}</th>`).join('')}
-              <th>Moyenne</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${COLLEGE_SUBJECTS.map(subject => {
-              const notes = MONTHS.map(month => bulletinData?.subjects?.[subject]?.[month.key] || '-');
-              const average = notes.filter(n => n !== '-' && n !== '').length > 0 
-                ? (notes.filter(n => n !== '-' && n !== '').reduce((sum, n) => sum + parseFloat(n), 0) / notes.filter(n => n !== '-' && n !== '').length).toFixed(2)
-                : '-';
-              
-              return `
-                <tr>
-                  <td style="text-align: left;">${subject}</td>
-                  ${notes.map(note => `<td>${note}</td>`).join('')}
-                  <td><strong>${average}</strong></td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-        
-        <div class="footer">
-          <h3>Appréciation générale</h3>
-          <p>${bulletinData?.appreciation || 'Aucune appréciation renseignée'}</p>
-          <p style="margin-top: 20px;">
-            <em>Fait à ${new Date().toLocaleDateString()}, le ${new Date().toLocaleDateString()}</em>
-          </p>
-        </div>
-      </div>
-    `;
-  };
-
   const handleViewBulletin = () => {
-    console.log('handleViewBulletin appelé - CollegeBulletin');
-    console.log('selectedStudent:', selectedStudent);
-    console.log('selectedClass:', selectedClass);
-    console.log('bulletinData:', bulletinData);
-    
     if (!selectedStudent || !selectedClass) {
-      console.log('Élève ou classe non sélectionné, retour - CollegeBulletin');
       return;
     }
     
     // Calculer les moyennes et statistiques
-    console.log('Début du calcul des sujets');
-    console.log('bulletinData.subjects:', bulletinData.subjects);
-    console.log('COLLEGE_SUBJECTS:', COLLEGE_SUBJECTS);
-    
     const subjectsData = COLLEGE_SUBJECTS.map(subject => {
-      console.log('Traitement de la matière:', subject);
-      console.log('Notes pour cette matière:', bulletinData.subjects[subject]);
-      
       const notes = MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || '').filter(note => note !== '');
-      console.log('Notes filtrées:', notes);
       
       const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
-      console.log('Moyenne calculée:', average);
       
       const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
       const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
@@ -346,26 +203,18 @@ export default function CollegeBulletin() {
         appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
       };
       
-      console.log('Résultat pour la matière:', result);
       return result;
     });
-    
-    console.log('subjectsData final:', subjectsData);
 
-    console.log('Calcul de la moyenne générale');
     const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
-    console.log('Matières avec moyenne:', subjectsWithAverage.length);
     
     const generalAverage = subjectsWithAverage.length > 0 
       ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
       : 0;
-    
-    console.log('Moyenne générale calculée:', generalAverage);
 
     const rank = calculateRank(generalAverage);
     const classAverage = calculateClassAverage();
     
-    console.log('Préparation des données du bulletin');
     const bulletinDataForView = {
       student: selectedStudent,
       class: selectedClass,
@@ -380,10 +229,7 @@ export default function CollegeBulletin() {
       generalAppreciation: getGeneralAppreciation(generalAverage)
     };
     
-    console.log('Données du bulletin préparées:', bulletinDataForView);
     setViewingBulletin(bulletinDataForView);
-    
-    console.log('Ouverture de la dialog de visualisation');
     setIsViewDialogOpen(true);
   };
 
@@ -459,7 +305,6 @@ export default function CollegeBulletin() {
       return;
     }
 
-    setIsGenerating(true);
     try {
       const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
       const classStudents = collegeStudents
@@ -511,8 +356,6 @@ export default function CollegeBulletin() {
     } catch (error) {
       console.error('Erreur lors de la génération des bulletins:', error);
       toast.error('Erreur lors de la génération des bulletins');
-    } finally {
-      setIsGenerating(false);
     }
   };
 

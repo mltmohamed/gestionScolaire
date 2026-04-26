@@ -162,13 +162,6 @@ export default function Classes() {
       return;
     }
 
-    // Debug: afficher les données envoyées
-    console.log('=== DONNÉES CLASSE ENVOYÉES ===');
-    console.log('teacher_ids:', formData.teacher_ids);
-    console.log('teacher_id:', formData.teacher_id);
-    console.log('level:', formData.level);
-    console.log('===============================');
-
     try {
       const result = editingClass
         ? await updateClass(editingClass.id, formData)
@@ -523,26 +516,17 @@ export default function Classes() {
                             id={`teacher-${teacher.id}`}
                             checked={isSelected}
                             onChange={(e) => {
-                              console.log('=== CHANGEMENT CHECKBOX ===');
-                              console.log('Teacher ID:', teacher.id, 'Type:', typeof teacher.id);
-                              console.log('Checked:', e.target.checked);
-                              console.log('Teacher IDs avant:', formData.teacher_ids);
-                              
                               const ids = [...formData.teacher_ids];
                               if (e.target.checked) {
                                 if (!ids.some(id => Number(id) === Number(teacher.id))) {
                                   ids.push(teacher.id);
-                                  console.log('Teacher ajouté');
                                 }
                               } else {
                                 const index = ids.findIndex(id => Number(id) === Number(teacher.id));
                                 if (index > -1) {
                                   ids.splice(index, 1);
-                                  console.log('Teacher supprimé');
                                 }
                               }
-                              console.log('Teacher IDs après:', ids);
-                              console.log('=========================');
                               setFormData({ ...formData, teacher_ids: ids });
                             }}
                             className="h-4 w-4 rounded border-gray-300"

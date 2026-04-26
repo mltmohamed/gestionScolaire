@@ -690,7 +690,6 @@ function setupIPCHandlers(ipcMain) {
     if (!guardian) {
       return { success: false, error: 'Erreur lors de l\'enregistrement du tuteur' };
     }
-    console.log('Tuteur enregistré:', { student_id: id, guardian_id: guardian.id });
     return { success: true, data: { id, guardian } };
   });
 
@@ -1078,11 +1077,6 @@ function setupIPCHandlers(ipcMain) {
     
     // S'assurer que teacher_ids est un tableau et insérer chaque professeur
     const teacherIds = Array.isArray(data.teacher_ids) ? data.teacher_ids : [];
-    console.log('=== MISE À JOUR CLASSES ===');
-    console.log('class_id:', id);
-    console.log('teacher_ids reçus:', teacherIds);
-    console.log('prevTeachers:', prevTeachers);
-    
     if (teacherIds.length > 0) {
       for (const tId of teacherIds) {
         if (tId) { // Vérifier que l'ID n'est pas vide
@@ -1109,9 +1103,6 @@ function setupIPCHandlers(ipcMain) {
         }
       }
     }
-
-    console.log('Nouveaux teachers assignés:', teacherIds);
-    console.log('===========================');
 
     return { success: true };
   });

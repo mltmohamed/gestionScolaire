@@ -93,7 +93,6 @@ export default function PrimaryBulletin() {
   });
 
   const [editingCell, setEditingCell] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingBulletin, setViewingBulletin] = useState(null);
   const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
@@ -102,7 +101,6 @@ export default function PrimaryBulletin() {
   // États pour la navigation par classe (comme CollegeBulletin)
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [selectedMonthForClass, setSelectedMonthForClass] = useState(null);
-  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'month', 'students', 'bulletin'
 
   // État pour gérer les données de bulletin de chaque élève
@@ -215,7 +213,6 @@ export default function PrimaryBulletin() {
       return;
     }
 
-    setIsGenerating(true);
     try {
       const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
       const classStudents = primaryStudents
@@ -267,8 +264,6 @@ export default function PrimaryBulletin() {
     } catch (error) {
       console.error('Erreur lors de la génération des bulletins:', error);
       toast.error('Erreur lors de la génération des bulletins');
-    } finally {
-      setIsGenerating(false);
     }
   };
 
@@ -381,33 +376,6 @@ export default function PrimaryBulletin() {
       console.error('Erreur sauvegarde bulletin:', error);
       toast.error('Une erreur est survenue');
     }
-  };
-
-  const handleGenerateBulletin = async () => {
-    setIsGenerating(true);
-    try {
-      // Logic to generate bulletin PDF
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate generation
-      toast.success('Bulletin généré avec succès !');
-    } catch (error) {
-      toast.error('Erreur lors de la génération du bulletin');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleViewBulletin = () => {
-    console.log('handleViewBulletin appelé');
-    console.log('selectedStudent:', selectedStudent);
-    console.log('selectedClass:', selectedClass);
-    console.log('bulletinData:', bulletinData);
-    
-    if (!selectedStudent || !selectedClass) {
-      console.log('Élève ou classe non sélectionné, retour');
-      return;
-    }
-    
-    // Cette fonction n'est plus utilisée - on utilise maintenant la logique directe dans le bouton
   };
 
   const selectedStudent = primaryStudents.find(s => s.id === selectedStudentId);

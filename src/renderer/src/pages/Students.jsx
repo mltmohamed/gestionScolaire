@@ -95,7 +95,6 @@ export default function Students() {
   });
 
   const handleOpenDialog = async (student = null) => {
-    console.log('Ouverture dialog étudiant:', student ? 'Modification' : 'Ajout');
     if (student) {
       let fullStudent = student;
       try {
@@ -149,7 +148,6 @@ export default function Students() {
       });
     }
     setIsDialogOpen(true);
-    console.log('État du dialog:', isDialogOpen);
   };
 
   const handleViewStudent = async (student) => {
@@ -165,11 +163,9 @@ export default function Students() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Soumission formulaire étudiant:', formData);
     try {
       if (editingStudent) {
         const result = await updateStudent(editingStudent.id, formData);
-        console.log('Résultat modification:', result);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la modification');
           return;
@@ -177,7 +173,6 @@ export default function Students() {
         toast.success('Élève modifié avec succès !');
       } else {
         const result = await createStudent(formData);
-        console.log('Résultat création:', result);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la création');
           return;
@@ -645,7 +640,7 @@ export default function Students() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Téléphone</label>
+                <label className="text-sm font-medium">Téléphone de l'élève</label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -653,7 +648,7 @@ export default function Students() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Adresse</label>
+                <label className="text-sm font-medium">Adresse de l'élève</label>
                 <Input
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}

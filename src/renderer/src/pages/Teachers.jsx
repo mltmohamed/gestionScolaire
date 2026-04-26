@@ -94,7 +94,6 @@ export default function Teachers() {
   });
 
   const handleOpenDialog = (teacher = null) => {
-    console.log('Ouverture dialog professeur:', teacher ? 'Modification' : 'Ajout');
     if (teacher) {
       setEditingTeacher(teacher);
       setFormData({
@@ -138,11 +137,9 @@ export default function Teachers() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Soumission formulaire professeur:', formData);
     try {
       if (editingTeacher) {
         const result = await updateTeacher(editingTeacher.id, formData);
-        console.log('Résultat modification:', result);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la modification');
           return;
@@ -150,7 +147,6 @@ export default function Teachers() {
         toast.success('Professeur modifié avec succès !');
       } else {
         const result = await createTeacher(formData);
-        console.log('Résultat création:', result);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la création');
           return;
