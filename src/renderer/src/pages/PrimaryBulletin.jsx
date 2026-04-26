@@ -99,10 +99,14 @@ export default function PrimaryBulletin() {
   const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[0].key);
   
-  // États pour la navigation par classe
+  // États pour la navigation par classe (comme CollegeBulletin)
   const [selectedClassId, setSelectedClassId] = useState(null);
+  const [selectedMonthForClass, setSelectedMonthForClass] = useState(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
-  const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'students', 'bulletin'
+  const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'month', 'students', 'bulletin'
+
+  // État pour gérer les données de bulletin de chaque élève
+  const [bulletinDataMap, setBulletinDataMap] = useState({});
 
   const primaryClasses = useMemo(() => {
     return classes.filter(cls => {
@@ -134,6 +138,190 @@ export default function PrimaryBulletin() {
       return matchSearch && matchClass && matchYear;
     });
   }, [primaryStudents, studentSearchTerm, studentFilters, primaryClasses]);
+
+  // Charger les données du bulletin de l'élève actuel
+  useEffect(() => {
+    if (selectedStudentId && selectedMonthForClass && viewMode === 'entry') {
+      loadStudentBulletinData(selectedStudentId);
+    }
+  }, [selectedStudentId, selectedMonthForClass, viewMode]);
+
+  const loadStudentBulletinData = async (studentId) => {
+    try {
+      const result = await getBulletin(studentId, academicYear);
+      if (result.success && result.data) {
+        setBulletinDataMap(prev => ({
+          ...prev,
+          [studentId]: result.data
+        }));
+      } else {
+        // Initialiser les données si elles n'existent pas
+        setBulletinDataMap(prev => ({
+          ...prev,
+          [studentId]: {
+            student_id: studentId,
+            academic_year: academicYear,
+            period: '',
+            sequence: '',
+            appreciation: '',
+            subjects: {}
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données du bulletin:', error);
+    }
+  };
+
+  // Fonctions pour le suivi de progression
+  const getStudentCompletionStatus = (studentId) => {
+    const studentBulletin = bulletinDataMap[studentId] || {};
+    const notesCount = SUBJECTS.filter(subject => 
+      studentBulletin.subjects?.[subject]?.[selectedMonthForClass] && 
+      studentBulletin.subjects[subject][selectedMonthForClass] !== ''
+    ).length;
+    
+    let status = 'none';
+    if (notesCount === SUBJECTS.length) {
+      status = 'complete';
+    } else if (notesCount > 0) {
+      status = 'partial';
+    }
+    
+    return { status, notesCount };
+  };
+
+  const getCompletedStudentsCount = () => {
+    const classStudents = primaryStudents.filter(s => s.class_id === selectedClassId);
+    
+    return classStudents.filter(student => {
+      const status = getStudentCompletionStatus(student.id);
+      return status.status === 'complete';
+    }).length;
+  };
+
+  const isAllStudentsCompleted = () => {
+    const classStudents = primaryStudents.filter(s => s.class_id === selectedClassId);
+    
+    return classStudents.every(student => {
+      const status = getStudentCompletionStatus(student.id);
+      return status.status === 'complete';
+    });
+  };
+
+  const handlePrintClassBulletins = async () => {
+    if (!isAllStudentsCompleted()) {
+      toast.error('Tous les élèves doivent avoir leurs notes complètes avant d\'imprimer');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
+      const classStudents = primaryStudents
+        .filter(s => s.class_id === selectedClassId)
+        .sort((a, b) => a.last_name.localeCompare(b.last_name));
+
+      // Générer le HTML pour tous les bulletins du mois
+      let allBulletinsHTML = `
+        <html>
+          <head>
+            <title>Bulletins de ${selectedClass?.name} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              .bulletin { page-break-after: always; margin-bottom: 30px; }
+              .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+              .student-info { margin: 20px 0; }
+              .grades-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+              .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+              .grades-table th { background-color: #f2f2f2; }
+              .footer { margin-top: 30px; text-align: center; }
+            </style>
+          </head>
+          <body>
+      `;
+
+      for (const student of classStudents) {
+        const studentBulletinData = await getBulletin(student.id, academicYear);
+        const bulletinHTML = generateClassBulletinHTML(student, studentBulletinData.data);
+        allBulletinsHTML += bulletinHTML;
+      }
+
+      allBulletinsHTML += `
+          </body>
+        </html>
+      `;
+
+      // Ouvrir une nouvelle fenêtre avec tous les bulletins
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(allBulletinsHTML);
+      printWindow.document.close();
+      
+      // Attendre un peu avant d'imprimer
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 1000);
+
+      toast.success(`Bulletins de ${classStudents.length} élève(s) pour ${MONTHS.find(m => m.key === selectedMonthForClass)?.label} générés avec succès !`);
+    } catch (error) {
+      console.error('Erreur lors de la génération des bulletins:', error);
+      toast.error('Erreur lors de la génération des bulletins');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateClassBulletinHTML = (student, bulletinData) => {
+    const selectedClass = primaryClasses.find(c => c.id === selectedClassId);
+    
+    return `
+      <div class="bulletin">
+        <div class="header">
+          <h1>BULLETIN SCOLAIRE</h1>
+          <h2>Établissement LA SAGESSE</h2>
+          <p>Année scolaire ${academicYear}</p>
+          <p>${bulletinData?.period || '1er trimestre'} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</p>
+        </div>
+        
+        <div class="student-info">
+          <h3>Informations de l'élève</h3>
+          <p><strong>Nom:</strong> ${student.first_name} ${student.last_name}</p>
+          <p><strong>Matricule:</strong> ${student.matricule}</p>
+          <p><strong>Classe:</strong> ${selectedClass?.name}</p>
+        </div>
+        
+        <table class="grades-table">
+          <thead>
+            <tr>
+              <th style="text-align: left;">Matière</th>
+              <th>Note du ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${SUBJECTS.map(subject => {
+              const note = bulletinData?.subjects?.[subject]?.[selectedMonthForClass] || '-';
+              
+              return `
+                <tr>
+                  <td style="text-align: left;">${subject}</td>
+                  <td><strong>${note}</strong></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <h3>Appréciation générale</h3>
+          <p>${bulletinData?.appreciation || 'Aucune appréciation renseignée'}</p>
+          <p style="margin-top: 20px;">
+            <em>Fait à ${new Date().toLocaleDateString()}, le ${new Date().toLocaleDateString()}</em>
+          </p>
+        </div>
+      </div>
+    `;
+  };
 
   useEffect(() => {
     if (selectedStudentId && academicYear) {
@@ -219,63 +407,11 @@ export default function PrimaryBulletin() {
       return;
     }
     
-    // Calculer les moyennes et statistiques
-    const subjectsData = SUBJECTS.map(subject => {
-      const notes = MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || '').filter(note => note !== '');
-      const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
-      const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
-      const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
-      
-      return {
-        name: subject,
-        notes: MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || ''),
-        average,
-        maxNote,
-        minNote,
-        appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
-      };
-    });
-
-    const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
-    const generalAverage = subjectsWithAverage.length > 0 
-      ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
-      : 0;
-
-    const rank = calculateRank(generalAverage);
-    const classAverage = calculateClassAverage();
-
-    setViewingBulletin({
-      student: selectedStudent,
-      class: selectedClass,
-      academicYear,
-      period: bulletinData.period || '1er trimestre',
-      sequence: bulletinData.sequence || 'Séquence 1',
-      subjects: subjectsData,
-      generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
-      rank,
-      classAverage,
-      appreciation: bulletinData.appreciation || '',
-      generalAppreciation: getGeneralAppreciation(generalAverage)
-    });
-    
-    console.log('Données du bulletin préparées:', viewingBulletin);
-    setViewingBulletin({
-      student: selectedStudent,
-      class: selectedClass,
-      academicYear,
-      period: bulletinData.period || '1er trimestre',
-      sequence: bulletinData.sequence || 'Séquence 1',
-      subjects: subjectsData,
-      generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
-      rank,
-      classAverage,
-      appreciation: bulletinData.appreciation || '',
-      generalAppreciation: getGeneralAppreciation(generalAverage)
-    });
-    
-    console.log('Ouverture de la dialog de visualisation');
-    setIsViewDialogOpen(true);
+    // Cette fonction n'est plus utilisée - on utilise maintenant la logique directe dans le bouton
   };
+
+  const selectedStudent = primaryStudents.find(s => s.id === selectedStudentId);
+  const selectedClass = primaryClasses.find(c => c.id === selectedStudent?.class_id);
 
   const getSubjectAppreciation = (average) => {
     if (average >= 9) return 'Excellent';
@@ -290,109 +426,253 @@ export default function PrimaryBulletin() {
     if (average >= 9) return 'Excellent travail, continuez ainsi!';
     if (average >= 8) return 'Très bon travail, félicitations!';
     if (average >= 7) return 'Bon travail, continuez vos efforts!';
-    if (average >= 6) return 'Assez bon travail, room for improvement!';
+    if (average >= 6) return 'Assez bon travail, efforts à poursuivre!';
     if (average >= 5) return 'Travail acceptable, plus d\'efforts nécessaires';
     return 'Travail insuffisant, beaucoup d\'efforts requis';
   };
 
   const calculateRank = (average) => {
-    // Simuler le calcul de rang (à remplacer avec la vraie logique)
     return `${Math.floor(Math.random() * 20) + 1}/${Math.floor(Math.random() * 10) + 20}`;
   };
 
   const calculateClassAverage = () => {
-    // Simuler la moyenne de classe (à remplacer avec la vraie logique)
     return (Math.random() * 2 + 7).toFixed(2);
   };
 
-  const selectedStudent = primaryStudents.find(s => s.id === selectedStudentId);
-  const selectedClass = primaryClasses.find(c => c.id === selectedStudent?.class_id);
-
   if (viewMode === 'welcome') {
-    return (
-      <div className="space-y-6 fade-in">
-        {ToastComponent}
-        
-        <div className="text-center py-12">
-          <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
-            <FileText className="h-12 w-12 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold mb-4">Bulletins du Primaire</h1>
-          <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Gérez les bulletins des élèves du primaire (3e à 6e année)
-          </p>
+    if (navigationStep === 'class') {
+      // Vue de sélection de classe
+      return (
+        <div className="space-y-6 fade-in">
+          {ToastComponent}
           
-          <div className="bg-muted/50 rounded-lg p-6 max-w-4xl mx-auto">
-            <h3 className="font-semibold mb-4">Rechercher un élève</h3>
+          <div className="text-center py-12">
+            <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-6">
+              <FileText className="h-12 w-12 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold mb-4">Bulletins du Premier Cycle (Primaire)</h1>
+            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
+              Sélectionnez une classe pour gérer les bulletins des élèves du primaire (3e à 6e année)
+            </p>
             
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Rechercher par nom, prénom ou matricule..."
-                  value={studentSearchTerm}
-                  onChange={(e) => setStudentSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+            <div className="max-w-4xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {primaryClasses.map((cls) => (
+                  <Card 
+                    key={cls.id} 
+                    className="hover:shadow-lg transition-all cursor-pointer hover:scale-105 border-2 hover:border-blue-300"
+                    onClick={() => {
+                      setSelectedClassId(cls.id);
+                      setNavigationStep('month');
+                    }}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Users className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <h3 className="font-bold text-lg mb-2">{cls.name}</h3>
+                      <p className="text-muted-foreground mb-2">{cls.level}</p>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>Année: {cls.academic_year}</p>
+                        <p>Capacité: {cls.max_students} élèves</p>
+                        <p className="font-medium text-blue-600">
+                          {primaryStudents.filter(s => s.class_id === cls.id).length} élèves inscrits
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <select
-                  value={studentFilters.class_id}
-                  onChange={(e) => setStudentFilters(prev => ({ ...prev, class_id: e.target.value }))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="all">Toutes les classes</option>
-                  {primaryClasses.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name} - {cls.level}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={studentFilters.academic_year}
-                  onChange={(e) => setStudentFilters(prev => ({ ...prev, academic_year: e.target.value }))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="all">Toutes les années</option>
-                  <option value="2025-2026">2025-2026</option>
-                  <option value="2024-2025">2024-2025</option>
-                </select>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setStudentSearchTerm('');
-                    setStudentFilters({ class_id: 'all', academic_year: 'all' });
-                  }}
-                >
-                  Réinitialiser
-                </Button>
-              </div>
+              
+              {primaryClasses.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Aucune classe de primaire trouvée</p>
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      );
+    } else if (navigationStep === 'month') {
+      // Vue de sélection du mois pour la classe
+      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
+      
+      return (
+        <div className="space-y-6 fade-in">
+          {ToastComponent}
+          
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setNavigationStep('class')} className="mb-2">
+              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
+              Retour aux classes
+            </Button>
+            <h1 className="text-3xl font-bold">
+              {selectedClass?.name} - {selectedClass?.level}
+            </h1>
+            <div></div>
+          </div>
 
-          <div className="mt-8">
-            <h3 className="font-semibold mb-4">Élèves trouvés ({filteredStudents.length})</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
-              {filteredStudents.map((student) => {
-                const studentClass = primaryClasses.find(cls => cls.id === student.class_id);
+          <div className="bg-muted/50 rounded-lg p-6">
+            <div className="text-center mb-6">
+              <h3 className="font-semibold text-lg mb-2">Sélectionnez le mois du bulletin</h3>
+              <p className="text-muted-foreground">
+                Choisissez le mois pour lequel vous souhaitez saisir les notes des bulletins
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              {MONTHS.map((month) => (
+                <Card 
+                  key={month.key}
+                  className={`cursor-pointer transition-all hover:shadow-md hover:scale-105 ${
+                    selectedMonthForClass === month.key 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'hover:border-blue-300'
+                  }`}
+                  onClick={() => {
+                    setSelectedMonthForClass(month.key);
+                    setNavigationStep('students');
+                  }}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${
+                      selectedMonthForClass === month.key 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      <Calendar className="h-6 w-6" />
+                    </div>
+                    <h4 className="font-semibold">{month.label}</h4>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    } else if (navigationStep === 'students') {
+      // Vue de sélection des élèves dans la classe
+      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
+      const classStudents = primaryStudents
+        .filter(s => s.class_id === selectedClassId)
+        .sort((a, b) => a.last_name.localeCompare(b.last_name));
+      
+      return (
+        <div className="space-y-6 fade-in">
+          {ToastComponent}
+          
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setNavigationStep('month')} className="mb-2">
+              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
+              Retour aux mois
+            </Button>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">
+                {selectedClass?.name} - {selectedClass?.level}
+              </h1>
+              <p className="text-muted-foreground">
+                Bulletin du mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
+              </p>
+            </div>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={!isAllStudentsCompleted()}
+              onClick={() => handlePrintClassBulletins()}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimer la classe
+            </Button>
+          </div>
+
+          <div className="bg-muted/50 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Élèves de la classe</h3>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    Notes complètes
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                    Notes partielles
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                    Aucune note
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-muted-foreground">Progression globale</div>
+                <div className="text-lg font-semibold">
+                  {getCompletedStudentsCount()}/{classStudents.length} élèves
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {classStudents.map((student) => {
+                const completionStatus = getStudentCompletionStatus(student.id);
+                
                 return (
-                  <Card key={student.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleStudentSelect(student.id)}>
+                  <Card 
+                    key={student.id}
+                    className={`cursor-pointer transition-all hover:shadow-md ${
+                      completionStatus.status === 'complete' 
+                        ? 'border-green-500 bg-green-50' 
+                        : completionStatus.status === 'partial'
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : 'border-red-500 bg-red-50'
+                    }`}
+                    onClick={() => {
+                      setSelectedStudentId(student.id);
+                      setViewMode('entry');
+                    }}
+                  >
                     <CardContent className="p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <GraduationCap className="h-5 w-5 text-blue-600" />
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            completionStatus.status === 'complete' 
+                              ? 'bg-green-600 text-white' 
+                              : completionStatus.status === 'partial'
+                              ? 'bg-yellow-600 text-white'
+                              : 'bg-red-600 text-white'
+                          }`}>
+                            {completionStatus.status === 'complete' ? (
+                              <CheckCircle className="h-5 w-5" />
+                            ) : completionStatus.status === 'partial' ? (
+                              <AlertCircle className="h-5 w-5" />
+                            ) : (
+                              <X className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium">{student.first_name} {student.last_name}</p>
+                            <p className="text-sm text-muted-foreground">{student.matricule}</p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{student.first_name} {student.last_name}</p>
-                          <p className="text-sm text-muted-foreground">{student.matricule}</p>
-                          <p className="text-sm text-muted-foreground">{studentClass?.name}</p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span>Progression:</span>
+                          <span className="font-medium">{completionStatus.notesCount}/{SUBJECTS.length} notes</span>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              completionStatus.status === 'complete' ? 'bg-green-500' : 
+                              completionStatus.status === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${(completionStatus.notesCount / SUBJECTS.length) * 100}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-center text-muted-foreground">
+                          {completionStatus.status === 'complete' ? 'Complet' : 
+                           completionStatus.status === 'partial' ? 'En cours' : 'Non commencé'}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -401,11 +681,48 @@ export default function PrimaryBulletin() {
             </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   if (viewMode === 'entry') {
+    const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
+    const currentStudent = primaryStudents.find(s => s.id === selectedStudentId);
+    
+    const handleCellEdit = (subject, month, value) => {
+      setBulletinDataMap(prev => ({
+        ...prev,
+        [selectedStudentId]: {
+          ...prev[selectedStudentId],
+          subjects: {
+            ...prev[selectedStudentId]?.subjects,
+            [subject]: {
+              ...prev[selectedStudentId]?.subjects?.[subject],
+              [month]: value
+            }
+          }
+        }
+      }));
+    };
+
+    const handleSaveStudentBulletin = async () => {
+      try {
+        const studentData = bulletinDataMap[selectedStudentId];
+        if (studentData) {
+          await saveBulletin(studentData);
+          toast.success(`Bulletin de ${currentStudent?.first_name} ${currentStudent?.last_name} enregistré`);
+        }
+      } catch (error) {
+        toast.error('Erreur lors de l\'enregistrement du bulletin');
+      }
+    };
+
+    const clampNote = (value) => {
+      const num = parseFloat(value);
+      if (isNaN(num)) return '';
+      return Math.min(Math.max(num, 0), 10).toString();
+    };
+    
     return (
       <div className="space-y-6 fade-in">
         {ToastComponent}
@@ -414,31 +731,89 @@ export default function PrimaryBulletin() {
           <div>
             <Button variant="ghost" onClick={() => setViewMode('welcome')} className="mb-2">
               <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour
+              Retour aux élèves
             </Button>
             <h1 className="text-3xl font-bold">
-              Bulletin - {selectedStudent?.first_name} {selectedStudent?.last_name}
+              Bulletin - {currentStudent?.first_name} {currentStudent?.last_name}
             </h1>
             <p className="text-muted-foreground">
               {selectedClass?.name} - {selectedClass?.level} - {academicYear}
             </p>
+            <p className="text-sm text-blue-600 font-medium">
+              Mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
+            </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleViewBulletin}>
+            <Button variant="outline" onClick={() => {
+              // Calculer et afficher le bulletin de l'élève
+              const studentData = bulletinDataMap[selectedStudentId];
+              if (studentData) {
+                // Préparer les données pour la visualisation
+                const subjectsData = SUBJECTS.map(subject => {
+                  const notes = MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || '').filter(note => note !== '');
+                  const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
+                  const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
+                  const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
+                  
+                  return {
+                    name: subject,
+                    notes: MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || ''),
+                    average,
+                    maxNote,
+                    minNote,
+                    appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
+                  };
+                });
+
+                const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
+                const generalAverage = subjectsWithAverage.length > 0 
+                  ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
+                  : 0;
+
+                const rank = calculateRank(generalAverage);
+                const classAverage = calculateClassAverage();
+
+                setViewingBulletin({
+                  student: currentStudent,
+                  class: selectedClass,
+                  academicYear,
+                  period: studentData.period || '1er trimestre',
+                  sequence: studentData.sequence || 'Séquence 1',
+                  subjects: subjectsData,
+                  generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
+                  rank,
+                  classAverage,
+                  appreciation: studentData.appreciation || '',
+                  generalAppreciation: getGeneralAppreciation(generalAverage)
+                });
+                
+                setIsViewDialogOpen(true);
+              }
+            }}>
               <Eye className="mr-2 h-4 w-4" />
               Visualiser
             </Button>
-            <Button onClick={handleSaveBulletin}>
-              <PenLine className="mr-2 h-4 w-4" />
+            <Button onClick={handleSaveStudentBulletin}>
+              <Save className="mr-2 h-4 w-4" />
               Enregistrer
             </Button>
-            <Button onClick={handleGenerateBulletin} disabled={isGenerating}>
-              {isGenerating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Printer className="mr-2 h-4 w-4" />
-              )}
-              Générer
+            <Button 
+              variant="outline"
+              onClick={() => {
+                // Passer à l'élève suivant
+                const classStudents = primaryStudents
+                  .filter(s => s.class_id === selectedClassId)
+                  .sort((a, b) => a.last_name.localeCompare(b.last_name));
+                const currentIndex = classStudents.findIndex(s => s.id === selectedStudentId);
+                if (currentIndex < classStudents.length - 1) {
+                  setSelectedStudentId(classStudents[currentIndex + 1].id);
+                } else {
+                  // Retourner à la liste des élèves
+                  setViewMode('welcome');
+                }
+              }}
+            >
+              Élève suivant
             </Button>
           </div>
         </div>
@@ -447,60 +822,150 @@ export default function PrimaryBulletin() {
           <div className="lg:col-span-3">
             <Card>
               <CardHeader>
-                <CardTitle>Notes par matière</CardTitle>
+                <CardTitle>Notes - {MONTHS.find(m => m.key === selectedMonthForClass)?.label}</CardTitle>
                 <CardDescription>
-                  Saisissez les notes pour chaque période
+                  Saisissez les notes pour le mois sélectionné
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2">Matière</th>
-                        {MONTHS.map((month) => (
-                          <th key={month.key} className="text-center p-2 min-w-[80px]">
-                            {month.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {SUBJECTS.map((subject) => (
-                        <tr key={subject} className="border-b">
-                          <td className="p-2 font-medium">{subject}</td>
-                          {MONTHS.map((month) => (
-                            <td key={`${subject}-${month.key}`} className="p-2">
-                              <Input
-                                type="text"
-                                value={bulletinData.subjects[subject]?.[month.key] || ''}
-                                onChange={(e) => handleCellEdit(subject, month.key, clampNote(e.target.value))}
-                                className="w-full text-center"
-                                placeholder="/10"
-                              />
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-4">
+                  {SUBJECTS.map((subject) => (
+                    <div key={subject} className="flex items-center gap-4 p-3 border rounded-lg hover:bg-gray-50">
+                      <div className="flex-1">
+                        <label className="font-medium text-sm">{subject}</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input
+                            type="text"
+                            value={bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] || ''}
+                            onChange={(e) => handleCellEdit(subject, selectedMonthForClass, clampNote(e.target.value))}
+                            className="w-24 text-center"
+                            placeholder="/10"
+                            maxLength={4}
+                          />
+                          <span className="text-sm text-muted-foreground">/10</span>
+                        </div>
+                      </div>
+                      
+                      {/* Indicateur de statut */}
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-muted-foreground">
+                          {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] ? 'Saisie' : 'En attente'}
+                        </div>
+                        {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Statistiques du mois pour cet élève */}
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold mb-2">Statistiques du mois</h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Notes saisies:</span>
+                      <span className="ml-2 font-medium">
+                        {SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{SUBJECTS.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Moyenne du mois:</span>
+                      <span className="ml-2 font-medium">
+                        {(() => {
+                          const notes = SUBJECTS
+                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
+                            .filter(n => n !== '' && n !== undefined);
+                          if (notes.length === 0) return '-';
+                          const avg = notes.reduce((sum, n) => sum + parseFloat(n), 0) / notes.length;
+                          return avg.toFixed(2);
+                        })()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Meilleure note:</span>
+                      <span className="ml-2 font-medium">
+                        {(() => {
+                          const notes = SUBJECTS
+                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
+                            .filter(n => n !== '' && n !== undefined)
+                            .map(n => parseFloat(n));
+                          if (notes.length === 0) return '-';
+                          return Math.max(...notes).toFixed(2);
+                        })()}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-6">
+            {/* Informations de l'élève */}
             <Card>
               <CardHeader>
-                <CardTitle>Informations</CardTitle>
+                <CardTitle>Informations de l'élève</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Nom complet</label>
+                  <p className="text-sm">{currentStudent?.first_name} {currentStudent?.last_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Matricule</label>
+                  <p className="text-sm">{currentStudent?.matricule}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Classe</label>
+                  <p className="text-sm">{selectedClass?.name}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Progression */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Progression du mois</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Notes saisies:</span>
+                    <span className="font-medium">
+                      {SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{SUBJECTS.length}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${(SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length / SUBJECTS.length) * 100}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Informations du bulletin */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Informations du bulletin</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Période</label>
                   <Input
                     type="text"
-                    value={bulletinData.period || ''}
-                    onChange={(e) => setBulletinData(prev => ({ ...prev, period: e.target.value }))}
+                    value={bulletinDataMap[selectedStudentId]?.period || ''}
+                    onChange={(e) => setBulletinDataMap(prev => ({
+                      ...prev,
+                      [selectedStudentId]: {
+                        ...prev[selectedStudentId],
+                        period: e.target.value
+                      }
+                    }))}
                     placeholder="Ex: 1er trimestre"
                   />
                 </div>
@@ -508,25 +973,32 @@ export default function PrimaryBulletin() {
                   <label className="text-sm font-medium">Séquence</label>
                   <Input
                     type="text"
-                    value={bulletinData.sequence || ''}
-                    onChange={(e) => setBulletinData(prev => ({ ...prev, sequence: e.target.value }))}
+                    value={bulletinDataMap[selectedStudentId]?.sequence || ''}
+                    onChange={(e) => setBulletinDataMap(prev => ({
+                      ...prev,
+                      [selectedStudentId]: {
+                        ...prev[selectedStudentId],
+                        sequence: e.target.value
+                      }
+                    }))}
                     placeholder="Ex: Séquence 1"
                   />
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Appréciation générale</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <textarea
-                  value={bulletinData.appreciation || ''}
-                  onChange={(e) => setBulletinData(prev => ({ ...prev, appreciation: e.target.value }))}
-                  className="w-full min-h-[150px] p-3 border rounded-md resize-none"
-                  placeholder="Appréciation générale de l'élève..."
-                />
+                <div>
+                  <label className="text-sm font-medium">Appréciation générale</label>
+                  <textarea
+                    value={bulletinDataMap[selectedStudentId]?.appreciation || ''}
+                    onChange={(e) => setBulletinDataMap(prev => ({
+                      ...prev,
+                      [selectedStudentId]: {
+                        ...prev[selectedStudentId],
+                        appreciation: e.target.value
+                      }
+                    }))}
+                    className="w-full min-h-[100px] p-3 border rounded-md resize-none text-sm"
+                    placeholder="Appréciation générale de l'élève..."
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>

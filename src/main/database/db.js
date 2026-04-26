@@ -132,6 +132,11 @@ class DatabaseManager {
       // Ajouter le champ de salaire pour les enseignants
       ensureColumn('teachers', 'salary', 'DECIMAL(10,2) DEFAULT 0');
 
+      // Ajouter les champs de mensualisation pour les paiements de scolarité
+      ensureColumn('student_payments', 'period_month', 'INTEGER');
+      ensureColumn('student_payments', 'period_year', 'INTEGER');
+      ensureColumn('student_payments', 'month_total', 'DECIMAL(10,2)');
+
       // Table guardians (tuteur)
       this.db.run(`
         CREATE TABLE IF NOT EXISTS guardians (

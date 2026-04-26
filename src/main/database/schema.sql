@@ -127,10 +127,13 @@ CREATE TABLE IF NOT EXISTS student_payments (
   student_id INTEGER NOT NULL,
   type TEXT NOT NULL, -- 'uniform', 'tuition'
   amount DECIMAL(10,2) NOT NULL,
+  month_total DECIMAL(10,2),
   payment_date DATE DEFAULT CURRENT_DATE,
   payment_method TEXT,
   description TEXT,
   academic_year TEXT,
+  period_month INTEGER, -- Mois du paiement (1-12) pour scolarité mensualisée
+  period_year INTEGER, -- Année du paiement pour scolarité mensualisée
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES students(id)
 );

@@ -1279,17 +1279,31 @@ function setupIPCHandlers(ipcMain) {
 
   handle('payments:createStudentPayment', { auth: true }, (event, data) => {
     const sql = `
-      INSERT INTO student_payments (student_id, type, amount, payment_date, payment_method, description, academic_year)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO student_payments (
+        student_id,
+        type,
+        amount,
+        month_total,
+        payment_date,
+        payment_method,
+        description,
+        academic_year,
+        period_month,
+        period_year
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const result = query(sql, [
       data.student_id,
       data.type,
       data.amount,
+      data.month_total ?? null,
       data.payment_date || new Date().toISOString().split('T')[0],
       data.payment_method || 'Espèces',
       data.description || null,
-      data.academic_year || null
+      data.academic_year || null,
+      data.period_month ?? null,
+      data.period_year ?? null,
     ]);
     return { success: true, data: { id: result.lastInsertRowid } };
   });
@@ -1298,17 +1312,20 @@ function setupIPCHandlers(ipcMain) {
     if (!id) return { success: false, error: 'ID paiement obligatoire' };
     const sql = `
       UPDATE student_payments
-      SET student_id = ?, type = ?, amount = ?, payment_date = ?, payment_method = ?, description = ?, academic_year = ?
+      SET student_id = ?, type = ?, amount = ?, month_total = ?, payment_date = ?, payment_method = ?, description = ?, academic_year = ?, period_month = ?, period_year = ?
       WHERE id = ?
     `;
     run(sql, [
       data.student_id,
       data.type,
       data.amount,
+      data.month_total ?? null,
       data.payment_date || new Date().toISOString().split('T')[0],
       data.payment_method || 'Espèces',
       data.description || null,
       data.academic_year || null,
+      data.period_month ?? null,
+      data.period_year ?? null,
       id,
     ]);
     return { success: true };

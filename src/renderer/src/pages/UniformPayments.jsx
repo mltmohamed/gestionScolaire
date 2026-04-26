@@ -196,7 +196,7 @@ export default function UniformPayments() {
   };
 
   // Fonctions d'impression
-  const printPaymentReceipt = (payment) => {
+  const printReceipt = (payment) => {
     const student = students.find(s => s.id === payment.student_id);
     const studentClass = classes.find(c => c.id === student?.class_id);
     
@@ -263,9 +263,45 @@ export default function UniformPayments() {
     `;
     
     const printWindow = window.open('', '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(receiptContent);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }
+      }, 200);
+      return;
+    }
+
+    printWindow.document.open();
     printWindow.document.write(receiptContent);
     printWindow.document.close();
-    printWindow.print();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        // noop
+      }
+    }, 200);
   };
 
   const printStudentBalance = (studentId) => {
@@ -344,9 +380,45 @@ export default function UniformPayments() {
     `;
     
     const printWindow = window.open('', '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(balanceContent);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }
+      }, 200);
+      return;
+    }
+
+    printWindow.document.open();
     printWindow.document.write(balanceContent);
     printWindow.document.close();
-    printWindow.print();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        // noop
+      }
+    }, 200);
   };
 
   const printClassReport = () => {

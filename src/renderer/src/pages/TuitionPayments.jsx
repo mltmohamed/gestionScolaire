@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import MonthlyTrackingDialog from '@/components/ui/monthly-tracking-dialog';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Search, GraduationCap, DollarSign, Plus, Eye, CheckCircle, XCircle, AlertTriangle, Calendar, Users, Printer, Download } from 'lucide-react';
+
+const MONTHS = [
+  { key: 10, label: 'Octobre' },
+  { key: 11, label: 'Novembre' },
+  { key: 12, label: 'Décembre' },
+  { key: 1, label: 'Janvier' },
+  { key: 2, label: 'Février' },
+  { key: 3, label: 'Mars' },
+  { key: 4, label: 'Avril' },
+  { key: 5, label: 'Mai' },
+  { key: 6, label: 'Juin' },
+];
 
 export default function TuitionPayments() {
   const { studentPayments, loading, createStudentPayment, updateStudentPayment, deleteStudentPayment } = usePayments();
@@ -28,6 +41,7 @@ export default function TuitionPayments() {
   const [viewingPayment, setViewingPayment] = useState(null);
   const [editingPayment, setEditingPayment] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [filters, setFilters] = useState({
     class_id: 'all',
     status: 'all',
@@ -41,6 +55,8 @@ export default function TuitionPayments() {
     description: '',
     academic_year: '2025-2026',
     payment_date: new Date().toISOString().split('T')[0],
+    period_month: '',
+    period_year: 2025,
   });
 
   // Filtrer les paiements de scolarité uniquement
@@ -48,28 +64,47 @@ export default function TuitionPayments() {
     return studentPayments.filter(payment => payment.type === 'tuition');
   }, [studentPayments]);
 
-  // Calculer les soldes pour chaque élève
+  // Calculer les soldes pour chaque élève avec suivi mensuel
   const studentBalances = useMemo(() => {
     const balances = {};
     
     students.forEach(student => {
       const studentClass = classes.find(cls => cls.id === student.class_id);
       const tuitionFee = studentClass?.tuition_fee || 0;
+      const monthlyFee = tuitionFee / 10; // 10 mois de paiement
       
       const payments = tuitionPayments.filter(p => p.student_id === student.id);
       const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
       
+      // Calculer les paiements par mois
+      const monthlyPayments = {};
+      MONTHS.forEach(month => {
+        const monthPayments = payments.filter(p => 
+          p.period_month === month.key && p.period_year === formData.period_year
+        );
+        const monthPaid = monthPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        
+        monthlyPayments[month.key] = {
+          paid: monthPaid,
+          expected: monthlyFee,
+          status: monthPaid >= monthlyFee ? 'paid' : monthPaid > 0 ? 'partial' : 'unpaid',
+          payments: monthPayments,
+        };
+      });
+      
       balances[student.id] = {
         tuitionFee,
+        monthlyFee,
         totalPaid,
         remaining: tuitionFee - totalPaid,
         status: tuitionFee > 0 ? (totalPaid >= tuitionFee ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid') : 'no_fee',
         paymentCount: payments.length,
+        monthlyPayments,
       };
     });
     
     return balances;
-  }, [students, classes, tuitionPayments]);
+  }, [students, classes, tuitionPayments, formData.period_year]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
@@ -93,17 +128,21 @@ export default function TuitionPayments() {
 
   const handleOpenDialog = (student = null) => {
     if (student) {
+      setSelectedStudent(student);
       const balance = studentBalances[student.id];
       setEditingPayment(student);
       setFormData({
         student_id: student.id,
-        amount: balance.remaining > 0 ? balance.remaining.toString() : '',
+        amount: balance.monthlyFee > 0 ? balance.monthlyFee.toString() : '',
         payment_method: '',
-        description: `Paiement scolarité - ${student.first_name} ${student.last_name}`,
+        description: `Scolarité - ${MONTHS.find(m => m.key === new Date().getMonth() + 1)?.label || 'Octobre'}`,
         academic_year: '2025-2026',
         payment_date: new Date().toISOString().split('T')[0],
+        period_month: new Date().getMonth() + 1,
+        period_year: formData.period_year,
       });
     } else {
+      setSelectedStudent(null);
       setEditingPayment(null);
       setFormData({
         student_id: '',
@@ -112,6 +151,8 @@ export default function TuitionPayments() {
         description: '',
         academic_year: '2025-2026',
         payment_date: new Date().toISOString().split('T')[0],
+        period_month: '',
+        period_year: 2025,
       });
     }
     setIsDialogOpen(true);
@@ -120,24 +161,21 @@ export default function TuitionPayments() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!formData.period_month) {
+      toast.error('Veuillez sélectionner le mois de paiement');
+      return;
+    }
+    
     const amount = parseFloat(formData.amount);
     const student = students.find(s => s.id === (editingPayment?.id || formData.student_id));
     const studentClass = classes.find(c => c.id === student?.class_id);
     const tuitionFee = studentClass?.tuition_fee || 0;
+    const monthlyFee = tuitionFee / 10;
     
-    // Validation: ne pas dépasser les frais de scolarité
-    if (amount > tuitionFee) {
-      toast.error(`Le montant ne peut pas dépasser les frais de scolarité de la classe (${tuitionFee.toFixed(2)} FCFA)`);
-      return;
-    }
-    
-    // Vérifier le total payé avec ce nouveau paiement
-    const currentPaid = editingPayment ? 
-      (studentBalances[student.id]?.totalPaid || 0) - (editingPayment.amount || 0) : 
-      (studentBalances[student.id]?.totalPaid || 0);
-    
-    if ((currentPaid + amount) > tuitionFee) {
-      toast.error(`Le total des paiements ne peut pas dépasser ${tuitionFee.toFixed(2)} FCFA`);
+    // Validation: vérifier le mois sélectionné
+    const monthData = studentBalances[student?.id]?.monthlyPayments?.[formData.period_month];
+    if (monthData && (monthData.paid + amount) > monthlyFee * 1.5) {
+      toast.error(`Le paiement dépasse largement le montant mensuel attendu (${monthlyFee.toFixed(2)} FCFA)`);
       return;
     }
     
@@ -146,11 +184,13 @@ export default function TuitionPayments() {
         ...formData,
         type: 'tuition',
         amount: amount,
+        period_month: parseInt(formData.period_month),
+        period_year: parseInt(formData.period_year),
       };
 
       const result = await createStudentPayment(paymentData);
       if (result.success) {
-        toast.success('Paiement enregistré avec succès !');
+        toast.success(`Paiement de ${MONTHS.find(m => m.key === formData.period_month)?.label} enregistré !`);
         setIsDialogOpen(false);
       } else {
         toast.error(result.error || 'Erreur lors de l\'enregistrement');
@@ -196,7 +236,7 @@ export default function TuitionPayments() {
   };
 
   // Fonctions d'impression
-  const printPaymentReceipt = (payment) => {
+  const printReceipt = (payment) => {
     const student = students.find(s => s.id === payment.student_id);
     const studentClass = classes.find(c => c.id === student?.class_id);
     
@@ -263,9 +303,45 @@ export default function TuitionPayments() {
     `;
     
     const printWindow = window.open('', '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(receiptContent);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }
+      }, 200);
+      return;
+    }
+
+    printWindow.document.open();
     printWindow.document.write(receiptContent);
     printWindow.document.close();
-    printWindow.print();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        // noop
+      }
+    }, 200);
   };
 
   const printStudentBalance = (studentId) => {
@@ -344,9 +420,45 @@ export default function TuitionPayments() {
     `;
     
     const printWindow = window.open('', '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(balanceContent);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }
+      }, 200);
+      return;
+    }
+
+    printWindow.document.open();
     printWindow.document.write(balanceContent);
     printWindow.document.close();
-    printWindow.print();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        // noop
+      }
+    }, 200);
   };
 
   const printClassReport = () => {
@@ -624,6 +736,9 @@ export default function TuitionPayments() {
                           <DollarSign className="h-4 w-4" />
                           {balance.tuitionFee.toFixed(2)} FCFA
                         </div>
+                        <div className="text-xs text-muted-foreground">
+                          {balance.monthlyFee.toFixed(2)}/mois
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -640,7 +755,22 @@ export default function TuitionPayments() {
                       <TableCell className="w-32">
                         {getProgressBar(balance.totalPaid, balance.tuitionFee)}
                       </TableCell>
-                      <TableCell>{getStatusBadge(balance.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {getStatusBadge(balance.status)}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-6 px-2"
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              setIsViewDialogOpen(true);
+                            }}
+                          >
+                            Voir les mois
+                          </Button>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button
@@ -874,6 +1004,17 @@ export default function TuitionPayments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de visualisation - Suivi mensuel */}
+      <MonthlyTrackingDialog
+        open={isViewDialogOpen}
+        onOpenChange={setIsViewDialogOpen}
+        student={selectedStudent}
+        balance={selectedStudent ? studentBalances[selectedStudent.id] : null}
+        classes={classes}
+        onAddPayment={(student) => handleOpenDialog(student)}
+      />
+
     </div>
   );
 }
