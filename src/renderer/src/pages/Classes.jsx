@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useClasses } from '@/hooks/useClasses';
 import { useTeachers } from '@/hooks/useTeachers';
 import { useToast } from '@/hooks/useToast.jsx';
 import { classAPI } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +14,132 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, Users, Eye, School, AlertTriangle, DollarSign } from 'lucide-react';
+import {
+  Banknote,
+  BookOpen,
+  Calendar,
+  CircleDollarSign,
+  Eye,
+  Filter,
+  GraduationCap,
+  Pencil,
+  Plus,
+  RotateCcw,
+  School,
+  Search,
+  ShieldCheck,
+  Shirt,
+  Trash2,
+  UserCheck,
+  Users,
+} from 'lucide-react';
 import { ConfirmHardDeleteDialog } from '@/components/ui/alert-dialog';
+
+const COLLEGE_LEVELS = ['7ème année', '8ème année', '9ème année'];
+
+const LEVEL_OPTIONS = [
+  "Jardin d'enfant",
+  '1ère année',
+  '2ème année',
+  '3ème année',
+  '4ème année',
+  '5ème année',
+  '6ème année',
+  '7ème année',
+  '8ème année',
+  '9ème année',
+];
+
+const emptyForm = {
+  name: '',
+  level: '',
+  academic_year: '2025-2026',
+  max_students: 30,
+  teacher_id: '',
+  teacher_ids: [],
+  tuition_fee: 0,
+  uniform_fee: 0,
+};
+
+const formatCurrency = (value) => `${Number(value || 0).toLocaleString('fr-FR')} FCFA`;
+const formatNumber = (value) => Number(value || 0).toLocaleString('fr-FR');
+const isCollegeLevel = (level) => COLLEGE_LEVELS.includes(level);
+
+function LoadingState() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center">
+      <div className="flex items-center gap-3 rounded-lg border bg-white px-5 py-4 shadow-sm dark:bg-slate-950">
+        <RotateCcw className="h-5 w-5 animate-spin text-[#0066CC]" />
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Chargement des classes</span>
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ value, onChange, children, className = '', required = false }) {
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      required={required}
+      className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
+    >
+      {children}
+    </select>
+  );
+}
+
+function StatTile({ icon: Icon, label, value, helper, tone }) {
+  const tones = {
+    blue: 'bg-[#0066CC]/10 text-[#0066CC] border-[#0066CC]/20',
+    green: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300',
+    red: 'bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/20',
+    orange: 'bg-[#FF6600]/10 text-[#FF3300] border-[#FF6600]/20',
+  };
+
+  return (
+    <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{value}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{helper}</p>
+          </div>
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${tones[tone]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InfoItem({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">{value || '-'}</p>
+    </div>
+  );
+}
+
+function TeacherChip({ teacher }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0066CC]/10 text-xs font-bold text-[#0066CC]">
+        {teacher.first_name?.[0]}{teacher.last_name?.[0]}
+      </div>
+      <div className="min-w-0">
+        <p className="truncate font-semibold text-slate-950 dark:text-white">{teacher.first_name} {teacher.last_name}</p>
+        <p className="truncate text-xs text-slate-500">{teacher.specialty || 'Spécialité non définie'}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Classes() {
   const { classes, loading, createClass, updateClass, deleteClass } = useClasses();
@@ -31,128 +154,131 @@ export default function Classes() {
     level: 'all',
     academic_year: 'all',
     teacher_id: 'all',
+    capacity: 'all',
   });
-  const [formData, setFormData] = useState({
-    name: '',
-    level: '',
-    academic_year: '2025-2026',
-    max_students: 30,
-    teacher_id: '',
-    teacher_ids: [],
-    tuition_fee: 0,
-    uniform_fee: 0,
-  });
+  const [formData, setFormData] = useState(emptyForm);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
-  const levelOptions = React.useMemo(() => {
+  const levelOptions = useMemo(() => {
     const values = new Set();
-    for (const c of classes) {
-      const v = String(c.level || '').trim();
-      if (v) values.add(v);
+    for (const cls of classes) {
+      const level = String(cls.level || '').trim();
+      if (level) values.add(level);
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
   }, [classes]);
 
-  const academicYearOptions = React.useMemo(() => {
+  const academicYearOptions = useMemo(() => {
     const values = new Set();
-    for (const c of classes) {
-      const v = String(c.academic_year || '').trim();
-      if (v) values.add(v);
+    for (const cls of classes) {
+      const year = String(cls.academic_year || '').trim();
+      if (year) values.add(year);
     }
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
+    return Array.from(values).sort((a, b) => b.localeCompare(a, 'fr'));
   }, [classes]);
 
-  const filteredClasses = classes.filter((cls) => {
+  const stats = useMemo(() => {
+    const total = classes.length;
+    const students = classes.reduce((sum, cls) => sum + Number(cls.student_count || 0), 0);
+    const capacity = classes.reduce((sum, cls) => sum + Number(cls.max_students || 0), 0);
+    const full = classes.filter((cls) => Number(cls.student_count || 0) >= Number(cls.max_students || 0) && Number(cls.max_students || 0) > 0).length;
+    const unassigned = classes.filter((cls) => !cls.teacher_id && !isCollegeLevel(cls.level)).length;
+    const occupancyRate = capacity > 0 ? Math.round((students / capacity) * 100) : 0;
+
+    return { total, students, capacity, full, unassigned, occupancyRate };
+  }, [classes]);
+
+  const filteredClasses = useMemo(() => {
     const q = (searchTerm || '').trim().toLowerCase();
-    const matchSearch = !q
-      ? true
-      : (cls.name || '').toLowerCase().includes(q) || (cls.level || '').toLowerCase().includes(q);
+    return classes.filter((cls) => {
+      const searchable = [
+        cls.name,
+        cls.level,
+        cls.academic_year,
+        cls.teacher_name,
+      ].filter(Boolean).join(' ').toLowerCase();
+      const occupancy = Number(cls.max_students || 0) > 0
+        ? (Number(cls.student_count || 0) / Number(cls.max_students || 0)) * 100
+        : 0;
 
-    const matchLevel = filters.level === 'all' ? true : String(cls.level || '').trim() === String(filters.level || '').trim();
-    const matchYear =
-      filters.academic_year === 'all'
-        ? true
-        : String(cls.academic_year || '').trim() === String(filters.academic_year || '').trim();
-    const matchTeacher =
-      filters.teacher_id === 'all'
-        ? true
-        : String(cls.teacher_id || '') === String(filters.teacher_id);
+      const matchSearch = !q || searchable.includes(q);
+      const matchLevel = filters.level === 'all' ? true : String(cls.level || '').trim() === String(filters.level || '').trim();
+      const matchYear = filters.academic_year === 'all' ? true : String(cls.academic_year || '').trim() === String(filters.academic_year || '').trim();
+      const matchTeacher = filters.teacher_id === 'all' ? true : String(cls.teacher_id || '') === String(filters.teacher_id);
+      const matchCapacity = filters.capacity === 'all'
+        || (filters.capacity === 'available' && occupancy < 100)
+        || (filters.capacity === 'full' && occupancy >= 100)
+        || (filters.capacity === 'almost' && occupancy >= 80 && occupancy < 100);
 
-    return matchSearch && matchLevel && matchYear && matchTeacher;
-  });
+      return matchSearch && matchLevel && matchYear && matchTeacher && matchCapacity;
+    });
+  }, [classes, searchTerm, filters]);
+
+  const activeFilterCount = [
+    searchTerm.trim(),
+    filters.level !== 'all',
+    filters.academic_year !== 'all',
+    filters.teacher_id !== 'all',
+    filters.capacity !== 'all',
+  ].filter(Boolean).length;
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setFilters({ level: 'all', academic_year: 'all', teacher_id: 'all', capacity: 'all' });
+  };
+
+  const loadClassData = async (cls) => {
+    try {
+      return await classAPI.getById(cls.id);
+    } catch (error) {
+      console.error('Erreur chargement classe:', error);
+      return null;
+    }
+  };
+
+  const fillForm = (cls) => {
+    setFormData({
+      name: cls.name || '',
+      level: cls.level || '',
+      academic_year: cls.academic_year || '',
+      max_students: cls.max_students || 30,
+      teacher_id: cls.teacher_id || '',
+      teacher_ids: (cls.teacher_ids || []).map((id) => Number(id)),
+      tuition_fee: cls.tuition_fee || 0,
+      uniform_fee: cls.uniform_fee || 0,
+    });
+  };
 
   const handleOpenDialog = async (cls = null) => {
     if (cls) {
       setEditingClass(cls);
-      try {
-        const result = await classAPI.getById(cls.id);
-        if (result && result.success) {
-          const d = result.data;
-          setFormData({
-            name: d.name || '',
-            level: d.level || '',
-            academic_year: d.academic_year || '',
-            max_students: d.max_students || 30,
-            teacher_id: d.teacher_id || '',
-            teacher_ids: (d.teacher_ids || []).map(id => Number(id)),
-            tuition_fee: d.tuition_fee || 0,
-            uniform_fee: d.uniform_fee || 0,
-          });
-        } else {
-          const d = result || cls;
-          setFormData({
-            name: d.name || '',
-            level: d.level || '',
-            academic_year: d.academic_year || '',
-            max_students: d.max_students || 30,
-            teacher_id: d.teacher_id || '',
-            teacher_ids: (d.teacher_ids || []).map(id => Number(id)),
-            tuition_fee: d.tuition_fee || 0,
-            uniform_fee: d.uniform_fee || 0,
-          });
-        }
-      } catch (error) {
-        console.error('Erreur chargement classe:', error);
-        setFormData({
-          name: cls.name || '',
-          level: cls.level || '',
-          academic_year: cls.academic_year || '',
-          max_students: cls.max_students || 30,
-          teacher_id: cls.teacher_id || '',
-          teacher_ids: (cls.teacher_ids || []).map(id => Number(id)),
-          tuition_fee: cls.tuition_fee || 0,
-          uniform_fee: cls.uniform_fee || 0,
-        });
-      }
+      const fullClass = await loadClassData(cls);
+      fillForm(fullClass || cls);
     } else {
       setEditingClass(null);
-      setFormData({
-        name: '',
-        level: '',
-        academic_year: '2025-2026',
-        max_students: 30,
-        teacher_id: '',
-        teacher_ids: [],
-        tuition_fee: 0,
-        uniform_fee: 0,
-      });
+      setFormData(emptyForm);
     }
     setIsDialogOpen(true);
   };
 
   const handleViewClass = async (cls) => {
-    try {
-      const result = await classAPI.getById(cls.id);
-      if (result.success) {
-        setViewingClass(result.data);
-      } else {
-        setViewingClass(cls);
+    const fullClass = await loadClassData(cls);
+    setViewingClass(fullClass || cls);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleTeacherToggle = (teacherId, checked) => {
+    const id = Number(teacherId);
+    setFormData((prev) => {
+      const ids = [...prev.teacher_ids];
+      if (checked && !ids.some((current) => Number(current) === id)) {
+        ids.push(id);
       }
-      setIsViewDialogOpen(true);
-    } catch (error) {
-      setViewingClass(cls);
-      setIsViewDialogOpen(true);
-    }
+      if (!checked) {
+        return { ...prev, teacher_ids: ids.filter((current) => Number(current) !== id) };
+      }
+      return { ...prev, teacher_ids: ids };
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -162,25 +288,27 @@ export default function Classes() {
       return;
     }
 
+    const payload = {
+      ...formData,
+      teacher_id: isCollegeLevel(formData.level) ? '' : formData.teacher_id,
+      teacher_ids: isCollegeLevel(formData.level) ? formData.teacher_ids : [],
+    };
+
     try {
       const result = editingClass
-        ? await updateClass(editingClass.id, formData)
-        : await createClass(formData);
+        ? await updateClass(editingClass.id, payload)
+        : await createClass(payload);
 
       if (result.success) {
         toast.success(editingClass ? 'Classe modifiée' : 'Classe créée');
         setIsDialogOpen(false);
       } else {
-        toast.error(result.error || 'Erreur lors de l\'enregistrement');
+        toast.error(result.error || 'Erreur lors de l’enregistrement');
       }
     } catch (error) {
       console.error('Erreur complète:', error);
       toast.error(error.message || 'Une erreur est survenue');
     }
-  };
-
-  const handleDeleteClick = (cls) => {
-    setDeleteDialog({ open: true, cls });
   };
 
   const handleConfirmDelete = async () => {
@@ -190,7 +318,7 @@ export default function Classes() {
     try {
       const result = await deleteClass(cls.id);
       if (result.success) {
-        toast.success('Classe et toutes les données associées supprimées définitivement');
+        toast.success('Classe supprimée définitivement');
       } else {
         toast.error(result.error || 'Erreur lors de la suppression');
       }
@@ -202,440 +330,377 @@ export default function Classes() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">
-      <p className="text-muted-foreground">Chargement...</p>
-    </div>;
+    return <LoadingState />;
   }
 
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-6 pb-8 fade-in">
       {ToastComponent}
-      
-      {/* En-tête */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Gestion des Classes</h1>
-          <p className="text-muted-foreground mt-1">
-            Gérez les classes et assignez les professeurs principaux
-          </p>
-        </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Ajouter une classe
-        </Button>
-      </div>
 
-      {/* Barre de recherche */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Rechercher une classe..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-md bg-[#0066CC]/10 px-3 py-1 text-xs font-semibold uppercase text-[#003399] dark:text-blue-200">
+              <School className="h-3.5 w-3.5" />
+              Organisation scolaire
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <select
-                value={filters.level}
-                onChange={(e) => setFilters((prev) => ({ ...prev, level: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Tous les niveaux</option>
-                {levelOptions.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.academic_year}
-                onChange={(e) => setFilters((prev) => ({ ...prev, academic_year: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Toutes les années</option>
-                {academicYearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.teacher_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Tous les professeurs</option>
-                <option value="">Non assigné</option>
-                {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.first_name} {t.last_name}
-                  </option>
-                ))}
-              </select>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilters({ level: 'all', academic_year: 'all', teacher_id: 'all' });
-                }}
-              >
-                Réinitialiser
-              </Button>
-            </div>
+            <h1 className="mt-4 text-3xl font-bold text-slate-950 dark:text-white">Gestion des classes</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Suivez les niveaux, les capacités, les enseignants assignés et les frais par classe.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <Button onClick={() => handleOpenDialog()} className="h-11 gap-2 bg-[#0066CC] hover:bg-[#005bb8]">
+            <Plus className="h-4 w-4" />
+            Nouvelle classe
+          </Button>
+        </div>
+      </section>
 
-      {/* Tableau des classes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Liste des classes ({filteredClasses.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Niveau</TableHead>
-                <TableHead>Année scolaire</TableHead>
-                <TableHead>Professeur principal</TableHead>
-                <TableHead>Nombre d'élèves</TableHead>
-                <TableHead>Capacité max</TableHead>
-                <TableHead>Frais scolarité</TableHead>
-                <TableHead>Frais tenue</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClasses.length > 0 ? (
-                filteredClasses.map((cls) => (
-                  <TableRow key={cls.id}>
-                    <TableCell className="font-medium">{cls.name}</TableCell>
-                    <TableCell>{cls.level}</TableCell>
-                    <TableCell>{cls.academic_year}</TableCell>
-                    <TableCell>{cls.teacher_name || 'Non assigné'}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        {cls.student_count || 0}/{cls.max_students}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        cls.student_count >= cls.max_students
-                          ? 'bg-[#CC0033]/10 text-[#CC0033] dark:bg-[#CC0033]/20 dark:text-white'
-                          : 'bg-[#0066CC]/10 text-[#003399] dark:bg-[#0066CC]/20 dark:text-white'
-                      }`}>
-                        {cls.student_count >= cls.max_students ? 'Complet' : 'Disponible'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="h-4 w-4 text-blue-600" />
-                        {cls.tuition_fee ? parseFloat(cls.tuition_fee).toFixed(2) : '0.00'} FCFA
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="h-4 w-4 text-purple-600" />
-                        {cls.uniform_fee ? parseFloat(cls.uniform_fee).toFixed(2) : '0.00'} FCFA
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleViewClass(cls)}
-                          title="Voir"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenDialog(cls)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteClick(cls)}
-                          title="⚠️ Supprimer définitivement (toutes les données)"
-                        >
-                          <AlertTriangle className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Aucune classe trouvée
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile icon={School} label="Classes" value={stats.total} helper={`${filteredClasses.length} affichées`} tone="blue" />
+        <StatTile icon={Users} label="Élèves affectés" value={`${formatNumber(stats.students)}/${formatNumber(stats.capacity)}`} helper={`${stats.occupancyRate}% de remplissage`} tone="green" />
+        <StatTile icon={ShieldCheck} label="Classes complètes" value={stats.full} helper="Capacité atteinte" tone="red" />
+        <StatTile icon={UserCheck} label="Sans titulaire" value={stats.unassigned} helper="Primaire à assigner" tone="orange" />
+      </section>
 
-      {/* Dialog d'ajout/modification */}
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="grid gap-3 xl:grid-cols-[1.35fr_0.9fr_0.9fr_1fr_0.9fr_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              type="text"
+              placeholder="Rechercher classe, niveau, enseignant..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-10 pl-10"
+            />
+          </div>
+
+          <SelectField value={filters.level} onChange={(e) => setFilters((prev) => ({ ...prev, level: e.target.value }))}>
+            <option value="all">Tous les niveaux</option>
+            {levelOptions.map((level) => <option key={level} value={level}>{level}</option>)}
+          </SelectField>
+
+          <SelectField value={filters.academic_year} onChange={(e) => setFilters((prev) => ({ ...prev, academic_year: e.target.value }))}>
+            <option value="all">Toutes les années</option>
+            {academicYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+          </SelectField>
+
+          <SelectField value={filters.teacher_id} onChange={(e) => setFilters((prev) => ({ ...prev, teacher_id: e.target.value }))}>
+            <option value="all">Tous les titulaires</option>
+            <option value="">Non assigné</option>
+            {teachers.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>{teacher.first_name} {teacher.last_name}</option>
+            ))}
+          </SelectField>
+
+          <SelectField value={filters.capacity} onChange={(e) => setFilters((prev) => ({ ...prev, capacity: e.target.value }))}>
+            <option value="all">Toutes capacités</option>
+            <option value="available">Disponible</option>
+            <option value="almost">Presque plein</option>
+            <option value="full">Complet</option>
+          </SelectField>
+
+          <Button type="button" variant="outline" onClick={resetFilters} className="h-10 gap-2">
+            <RotateCcw className="h-4 w-4" />
+            Réinitialiser
+          </Button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          <Filter className="h-4 w-4" />
+          <span>{activeFilterCount > 0 ? `${activeFilterCount} filtre(s) actif(s)` : 'Aucun filtre actif'}</span>
+          <span className="hidden sm:inline">•</span>
+          <span>{filteredClasses.length} résultat(s)</span>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        {filteredClasses.length > 0 ? filteredClasses.map((cls) => {
+          const studentCount = Number(cls.student_count || 0);
+          const maxStudents = Number(cls.max_students || 0);
+          const occupancy = maxStudents > 0 ? Math.min(Math.round((studentCount / maxStudents) * 100), 100) : 0;
+          const full = maxStudents > 0 && studentCount >= maxStudents;
+          const almostFull = occupancy >= 80 && !full;
+
+          return (
+            <Card key={cls.id} className="border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950">
+              <CardContent className="p-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#0066CC]/10 text-[#0066CC]">
+                        <School className="h-6 w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-lg font-bold text-slate-950 dark:text-white">{cls.name}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            <GraduationCap className="h-3 w-3" />
+                            {cls.level}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            <Calendar className="h-3 w-3" />
+                            {cls.academic_year}
+                          </span>
+                          <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${full ? 'bg-[#CC0033]/10 text-[#CC0033]' : almostFull ? 'bg-[#FF6600]/10 text-[#FF3300]' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>
+                            {full ? 'Complet' : almostFull ? 'Presque plein' : 'Disponible'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleViewClass(cls)} title="Voir la fiche">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(cls)} title="Modifier">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, cls })} title="Supprimer définitivement">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Occupation</span>
+                      <span className="font-semibold text-slate-950 dark:text-white">{studentCount}/{maxStudents} élèves</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className={`h-2 rounded-full ${full ? 'bg-[#CC0033]' : almostFull ? 'bg-[#FF6600]' : 'bg-[#0066CC]'}`} style={{ width: `${occupancy}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <UserCheck className="h-4 w-4 text-[#0066CC]" />
+                      <span className="truncate">{cls.teacher_name || (isCollegeLevel(cls.level) ? 'Intervenants' : 'Non assigné')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <CircleDollarSign className="h-4 w-4 text-[#0066CC]" />
+                      <span className="truncate">{formatCurrency(cls.tuition_fee)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <Shirt className="h-4 w-4 text-[#0066CC]" />
+                      <span className="truncate">{formatCurrency(cls.uniform_fee)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }) : (
+          <div className="xl:col-span-2 rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-800 dark:bg-slate-950">
+            <Search className="mx-auto h-10 w-10 text-slate-400" />
+            <p className="mt-3 font-semibold text-slate-950 dark:text-white">Aucune classe trouvée</p>
+            <p className="mt-1 text-sm text-slate-500">Modifiez les filtres ou ajoutez une nouvelle classe.</p>
+          </div>
+        )}
+      </section>
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>
-                {editingClass ? 'Modifier la classe' : 'Ajouter une classe'}
-              </DialogTitle>
+              <DialogTitle>{editingClass ? 'Modifier la classe' : 'Nouvelle classe'}</DialogTitle>
               <DialogDescription>
-                Remplissez les informations de la classe ci-dessous.
+                Configurez le niveau, l’année scolaire, les frais et les enseignants assignés.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Nom de la classe *</label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ex: 6ème A"
-                    required
-                  />
+            <div className="grid gap-6 py-5 lg:grid-cols-[220px_1fr]">
+              <aside className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                <div className="flex h-28 w-28 items-center justify-center rounded-xl bg-[#0066CC]/10 text-[#0066CC]">
+                  <School className="h-14 w-14" />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Niveau *</label>
-                  <select
-                    value={formData.level}
-                    onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="Jardin d'enfant">Jardin d'enfant</option>
-                    <option value="1ère année">1ère année</option>
-                    <option value="2ème année">2ème année</option>
-                    <option value="3ème année">3ème année</option>
-                    <option value="4ème année">4ème année</option>
-                    <option value="5ème année">5ème année</option>
-                    <option value="6ème année">6ème année</option>
-                    <option value="7ème année">7ème année</option>
-                    <option value="8ème année">8ème année</option>
-                    <option value="9ème année">9ème année</option>
-                  </select>
-                </div>
-              </div>
+                <p className="mt-4 text-sm font-semibold text-slate-950 dark:text-white">Dossier classe</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Une classe regroupe les élèves, les frais attendus et les enseignants responsables.
+                </p>
+              </aside>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Année scolaire *</label>
-                <Input
-                  value={formData.academic_year}
-                  onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })}
-                  placeholder="Ex: 2024-2025"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Capacité maximale</label>
-                <Input
-                  type="number"
-                  value={formData.max_students}
-                  onChange={(e) => setFormData({ ...formData, max_students: parseInt(e.target.value) })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Frais de scolarité (FCFA)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={formData.tuition_fee}
-                    onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Frais de tenue (FCFA)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={formData.uniform_fee}
-                    onChange={(e) => setFormData({ ...formData, uniform_fee: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {!['7ème année', '8ème année', '9ème année'].includes(formData.level) && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Professeur principal</label>
-                  <select
-                    value={formData.teacher_id}
-                    onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Non assigné</option>
-                    {teachers.map((teacher) => (
-                      <option key={teacher.id} value={teacher.id}>
-                        {teacher.first_name} {teacher.last_name}
-                        {teacher.specialty ? ` - ${teacher.specialty}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {['7ème année', '8ème année', '9ème année'].includes(formData.level) && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Professeurs intervenants (Collège)</label>
-                  <div className="grid grid-cols-2 gap-2 border rounded-md p-3 max-h-40 overflow-y-auto bg-muted/20">
-                    {teachers.map((teacher) => {
-                      const isSelected = formData.teacher_ids.some(id => Number(id) === Number(teacher.id));
-                      return (
-                        <div key={teacher.id} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`teacher-${teacher.id}`}
-                            checked={isSelected}
-                            onChange={(e) => {
-                              const ids = [...formData.teacher_ids];
-                              if (e.target.checked) {
-                                if (!ids.some(id => Number(id) === Number(teacher.id))) {
-                                  ids.push(teacher.id);
-                                }
-                              } else {
-                                const index = ids.findIndex(id => Number(id) === Number(teacher.id));
-                                if (index > -1) {
-                                  ids.splice(index, 1);
-                                }
-                              }
-                              setFormData({ ...formData, teacher_ids: ids });
-                            }}
-                            className="h-4 w-4 rounded border-gray-300"
-                          />
-                          <label htmlFor={`teacher-${teacher.id}`} className="text-xs truncate">
-                            {teacher.first_name} {teacher.last_name}
-                          </label>
-                        </div>
-                      );
-                    })}
+              <div className="space-y-6">
+                <section>
+                  <div className="mb-3 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-[#0066CC]" />
+                    <h3 className="font-semibold text-slate-950 dark:text-white">Informations générales</h3>
                   </div>
-                  <p className="text-[10px] text-muted-foreground italic">Sélectionnez les professeurs qui interviennent dans cette classe.</p>
-                  <p className="text-[10px] text-blue-600">Professeurs sélectionnés: {formData.teacher_ids.length} - IDs: {JSON.stringify(formData.teacher_ids)}</p>
-                </div>
-              )}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Nom de la classe *</label>
+                      <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: 6ème A" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Niveau *</label>
+                      <SelectField
+                        value={formData.level}
+                        onChange={(e) => setFormData({ ...formData, level: e.target.value, teacher_id: isCollegeLevel(e.target.value) ? '' : formData.teacher_id })}
+                        required
+                      >
+                        <option value="">Sélectionner</option>
+                        {LEVEL_OPTIONS.map((level) => <option key={level} value={level}>{level}</option>)}
+                      </SelectField>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Année scolaire *</label>
+                      <Input value={formData.academic_year} onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })} placeholder="Ex: 2025-2026" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Capacité maximale</label>
+                      <Input type="number" min="1" value={formData.max_students} onChange={(e) => setFormData({ ...formData, max_students: parseInt(e.target.value, 10) || 1 })} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Banknote className="h-4 w-4 text-[#FF6600]" />
+                    <h3 className="font-semibold text-slate-950 dark:text-white">Frais scolaires</h3>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Frais de scolarité (FCFA)</label>
+                      <Input type="number" step="0.01" min="0" value={formData.tuition_fee} onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Frais de tenue (FCFA)</label>
+                      <Input type="number" step="0.01" min="0" value={formData.uniform_fee} onChange={(e) => setFormData({ ...formData, uniform_fee: e.target.value })} />
+                    </div>
+                  </div>
+                </section>
+
+                {!isCollegeLevel(formData.level) && (
+                  <section>
+                    <div className="mb-3 flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-[#0066CC]" />
+                      <h3 className="font-semibold text-slate-950 dark:text-white">Professeur principal</h3>
+                    </div>
+                    <SelectField value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}>
+                      <option value="">Non assigné</option>
+                      {teachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.first_name} {teacher.last_name}{teacher.specialty ? ` - ${teacher.specialty}` : ''}
+                        </option>
+                      ))}
+                    </SelectField>
+                  </section>
+                )}
+
+                {isCollegeLevel(formData.level) && (
+                  <section>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-[#0066CC]" />
+                        <h3 className="font-semibold text-slate-950 dark:text-white">Professeurs intervenants</h3>
+                      </div>
+                      <span className="rounded-md bg-[#0066CC]/10 px-2.5 py-1 text-xs font-semibold text-[#0066CC]">
+                        {formData.teacher_ids.length} sélectionné(s)
+                      </span>
+                    </div>
+                    <div className="grid max-h-64 gap-2 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-800 md:grid-cols-2">
+                      {teachers.map((teacher) => {
+                        const isSelected = formData.teacher_ids.some((id) => Number(id) === Number(teacher.id));
+                        return (
+                          <label key={teacher.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${isSelected ? 'border-[#0066CC] bg-[#0066CC]/5' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900'}`}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => handleTeacherToggle(teacher.id, e.target.checked)}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold">{teacher.first_name} {teacher.last_name}</span>
+                              <span className="block truncate text-xs text-slate-500">{teacher.specialty || 'Spécialité non définie'}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+              </div>
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Annuler
-              </Button>
-              <Button type="submit">
-                {editingClass ? 'Modifier' : 'Ajouter'}
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
+              <Button type="submit" className="bg-[#0066CC] hover:bg-[#005bb8]">
+                {editingClass ? 'Enregistrer' : 'Créer la classe'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de visualisation */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[min(820px,calc(100vw-2rem))] max-w-none overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fiche classe</DialogTitle>
-            <DialogDescription>
-              Informations détaillées de la classe.
-            </DialogDescription>
+            <DialogDescription>Informations détaillées de la classe sélectionnée.</DialogDescription>
           </DialogHeader>
 
           {viewingClass && (
-            <div className="py-2 space-y-6">
-              <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-gradient-to-br from-[#0066CC]/10 via-white to-[#FF6600]/10 dark:from-[#0066CC]/20 dark:via-black dark:to-[#FF6600]/20 p-5">
-                <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')]" />
-                <div className="relative flex items-center gap-4">
-                  <div className="h-16 w-16 rounded-2xl bg-[#0066CC]/10 flex items-center justify-center border border-white/20 text-[#0066CC]">
-                    <School className="h-8 w-8" />
+            <div className="space-y-5 py-2">
+              <section className="rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/40">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-[#0066CC]/10 text-[#0066CC]">
+                    <School className="h-10 w-10" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xl font-extrabold tracking-tight text-black dark:text-white truncate">
-                      {viewingClass.name}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{viewingClass.level} • {viewingClass.academic_year}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-white/70 dark:bg-white/10 px-3 py-1 text-xs font-semibold text-black dark:text-white border border-black/10 dark:border-white/10">
-                        Capacité: {(viewingClass.student_count || 0)}/{viewingClass.max_students}
-                      </span>
-                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
-                        (viewingClass.student_count || 0) >= viewingClass.max_students
-                          ? 'bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/20 dark:text-white'
-                          : 'bg-[#0066CC]/10 text-[#003399] border-[#0066CC]/20 dark:text-white'
-                      }`}>
-                        {(viewingClass.student_count || 0) >= viewingClass.max_students ? 'Complet' : 'Disponible'}
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-2xl font-bold text-slate-950 dark:text-white">{viewingClass.name}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm dark:bg-slate-950 dark:text-slate-200">{viewingClass.level}</span>
+                      <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm dark:bg-slate-950 dark:text-slate-200">{viewingClass.academic_year}</span>
                     </div>
                   </div>
+                  <Button variant="outline" onClick={() => {
+                    setIsViewDialogOpen(false);
+                    handleOpenDialog(viewingClass);
+                  }} className="gap-2">
+                    <Pencil className="h-4 w-4" />
+                    Modifier
+                  </Button>
                 </div>
-              </div>
+              </section>
 
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-gray-900 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm font-bold text-black dark:text-white">Professeurs</p>
-                  <div className="h-1.5 w-16 rounded-full bg-gradient-to-r from-[#FF6600] to-[#FF3300]" />
+              <section>
+                <h3 className="mb-3 font-semibold text-slate-950 dark:text-white">Capacité et frais</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoItem icon={Users} label="Élèves" value={`${formatNumber(viewingClass.student_count)}/${formatNumber(viewingClass.max_students)}`} />
+                  <InfoItem icon={Calendar} label="Année scolaire" value={viewingClass.academic_year} />
+                  <InfoItem icon={CircleDollarSign} label="Scolarité" value={formatCurrency(viewingClass.tuition_fee)} />
+                  <InfoItem icon={Shirt} label="Tenue" value={formatCurrency(viewingClass.uniform_fee)} />
                 </div>
-                <div className="space-y-3">
-                  {!['7ème année', '8ème année', '9ème année'].includes(viewingClass.level) && (
-                    <div className="rounded-xl border border-[#0066CC]/20 bg-[#0066CC]/5 p-3">
-                      <p className="text-[11px] text-[#0066CC] font-bold uppercase tracking-wider">Professeur principal</p>
-                      <p className="text-sm font-semibold">{viewingClass.teacher_name || 'Non assigné'}</p>
-                    </div>
-                  )}
-                  
-                  {viewingClass.teachers && viewingClass.teachers.length > 0 && (
-                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-2">
-                      <p className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Intervenants ({viewingClass.teachers.length})</p>
-                      <div className="grid grid-cols-1 gap-2">
-                        {viewingClass.teachers.map((t) => (
-                          <div key={t.id} className="flex items-center gap-2 text-sm">
-                            <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px]">
-                              {t.first_name?.[0]}{t.last_name?.[0]}
-                            </div>
-                            <span>{t.first_name} {t.last_name} {t.specialty ? `(${t.specialty})` : ''}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              </section>
+
+              <section>
+                <h3 className="mb-3 font-semibold text-slate-950 dark:text-white">Encadrement</h3>
+                {!isCollegeLevel(viewingClass.level) && (
+                  <InfoItem icon={UserCheck} label="Professeur principal" value={viewingClass.teacher_name || 'Non assigné'} />
+                )}
+
+                {viewingClass.teachers && viewingClass.teachers.length > 0 ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {viewingClass.teachers.map((teacher) => (
+                      <TeacherChip key={teacher.id} teacher={teacher} />
+                    ))}
+                  </div>
+                ) : isCollegeLevel(viewingClass.level) ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500 dark:border-slate-800">
+                    Aucun professeur intervenant assigné.
+                  </div>
+                ) : null}
+              </section>
             </div>
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Fermer
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Dialog de confirmation de suppression définitive */}
+
       <ConfirmHardDeleteDialog
         open={deleteDialog.open}
         onOpenChange={(open) => setDeleteDialog({ open, cls: open ? deleteDialog.cls : null })}
@@ -645,8 +710,8 @@ export default function Classes() {
           'Tous les élèves de la classe',
           'Paiements des élèves',
           'Notes et bulletins',
-          'Tuteurs des élèves (si non partagés)',
-          'Données de la classe'
+          'Tuteurs des élèves si non partagés',
+          'Données de la classe',
         ]}
       />
     </div>
