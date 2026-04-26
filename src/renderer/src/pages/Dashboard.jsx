@@ -1,213 +1,351 @@
 import React from 'react';
-import { useDashboard } from '@/hooks/useDashboard';
-import { Users, GraduationCap, School, TrendingUp, Activity, User, DollarSign } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  ArrowRight,
+  Banknote,
+  BookOpenCheck,
+  CalendarDays,
+  CircleDollarSign,
+  GraduationCap,
+  Landmark,
+  Receipt,
+  RefreshCw,
+  School,
+  User,
+  UserPlus,
+  Users,
+  WalletCards,
+} from 'lucide-react';
+import { useDashboard } from '@/hooks/useDashboard';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export default function Dashboard() {
-  const { stats, loading } = useDashboard();
-  const navigate = useNavigate();
+const formatNumber = (value) => Number(value || 0).toLocaleString('fr-FR');
+const formatCurrency = (value) => `${formatNumber(value)} FCFA`;
 
-  if (loading || !stats) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0066CC] via-[#003399] to-[#0066CC] rounded-full blur-xl opacity-50 animate-pulse"></div>
-          <div className="relative w-16 h-16 border-4 border-black/10 border-t-[#0066CC] rounded-full animate-spin"></div>
-        </div>
+const formatDate = (date) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+};
+
+const getInitials = (name = '') => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'SM';
+};
+
+function LoadingState() {
+  return (
+    <div className="flex min-h-[420px] items-center justify-center">
+      <div className="flex items-center gap-3 rounded-lg border bg-white px-5 py-4 shadow-sm dark:bg-slate-950">
+        <RefreshCw className="h-5 w-5 animate-spin text-[#0066CC]" />
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Chargement du tableau de bord</span>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  const statCards = [
-    {
-      title: 'Élèves Inscrits',
-      value: stats.totalStudents,
-      icon: GraduationCap,
-      description: `${stats.activeStudents} actifs`,
-      gradient: 'from-[#0066CC] to-[#003399]',
-      shadow: 'shadow-black/10',
-    },
-    {
-      title: 'Enseignants',
-      value: stats.totalTeachers,
-      icon: Users,
-      description: 'Équipe pédagogique',
-      gradient: 'from-[#FF6600] to-[#FF3300]',
-      shadow: 'shadow-black/10',
-    },
-    {
-      title: 'Classes Ouvertes',
-      value: stats.totalClasses,
-      icon: School,
-      description: 'Niveaux disponibles',
-      gradient: 'from-[#CC0033] to-[#CC0033]',
-      shadow: 'shadow-black/10',
-    },
-  ];
-
-  const getAvatar = (student) => {
-    if (student.photo) {
-      return <img src={student.photo} alt="Avatar" className="h-10 w-10 rounded-full object-cover border border-white/20 shadow-sm" />;
-    }
-    const color = student.gender === 'F' ? 'text-[#CC0033] bg-[#CC0033]/10' : 'text-[#0066CC] bg-[#0066CC]/10';
-    return (
-      <div className={`h-10 w-10 rounded-full flex items-center justify-center border border-white/10 ${color}`}>
-        <User className="h-6 w-6" />
-      </div>
-    );
+function MetricCard({ title, value, detail, icon: Icon, tone = 'blue', action }) {
+  const tones = {
+    blue: 'bg-[#0066CC]/10 text-[#0066CC] border-[#0066CC]/20',
+    orange: 'bg-[#FF6600]/10 text-[#FF3300] border-[#FF6600]/20',
+    rose: 'bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/20',
+    emerald: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300',
   };
 
   return (
-    <div className="space-y-8 fade-in pb-8">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0066CC] via-[#003399] to-black p-8 md:p-12">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-20"></div>
-        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-[#003399]/20 rounded-full blur-3xl"></div>
-        
-        <div className="relative z-10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight">
-                Tableau de bord
-              </h1>
-              <p className="text-white/80 text-lg max-w-xl">
-                Suivez les performances et l'activité de votre établissement en temps réel.
-              </p>
+    <Card className="overflow-hidden border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${tones[tone]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          {action}
+        </div>
+        <div className="mt-5">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{value}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickAction({ icon: Icon, label, onClick }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onClick}
+      className="h-11 justify-start gap-3 border-slate-200 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
+    >
+      <Icon className="h-4 w-4 text-[#0066CC]" />
+      {label}
+    </Button>
+  );
+}
+
+function EmptyState({ label }) {
+  return (
+    <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+      {label}
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const { stats, loading, error, refresh } = useDashboard();
+  const navigate = useNavigate();
+
+  if (loading || !stats) {
+    return <LoadingState />;
+  }
+
+  const finance = stats.finance || {};
+  const activeRate = stats.totalStudents > 0 ? Math.round((stats.activeStudents / stats.totalStudents) * 100) : 0;
+  const collectionRate = finance.tuitionExpected > 0
+    ? Math.min(Math.round((finance.tuitionPaid / finance.tuitionExpected) * 100), 100)
+    : 0;
+  const netThisMonth = Number(finance.studentPaymentsThisMonth || 0) - Number(finance.teacherPaymentsThisMonth || 0);
+  const recentActivity = stats.recentActivity || [];
+  const classOccupancy = stats.classOccupancy || [];
+
+  const metrics = [
+    {
+      title: 'Élèves actifs',
+      value: formatNumber(stats.activeStudents),
+      detail: `${activeRate}% des élèves inscrits`,
+      icon: GraduationCap,
+      tone: 'blue',
+    },
+    {
+      title: 'Encaissements du mois',
+      value: formatCurrency(finance.studentPaymentsThisMonth),
+      detail: `Solde net ${formatCurrency(netThisMonth)}`,
+      icon: CircleDollarSign,
+      tone: 'emerald',
+    },
+    {
+      title: 'Reste scolarité',
+      value: formatCurrency(finance.tuitionRemaining),
+      detail: `${collectionRate}% déjà encaissé`,
+      icon: WalletCards,
+      tone: 'orange',
+    },
+    {
+      title: 'Classes ouvertes',
+      value: formatNumber(stats.totalClasses),
+      detail: `${formatNumber(stats.totalTeachers)} enseignants`,
+      icon: School,
+      tone: 'rose',
+    },
+  ];
+
+  return (
+    <div className="space-y-6 pb-8 fade-in">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="grid gap-6 p-6 lg:grid-cols-[1.4fr_0.9fr] lg:p-7">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-md bg-[#0066CC]/10 px-3 py-1 text-xs font-semibold uppercase text-[#003399] dark:text-blue-200">
+              <Activity className="h-3.5 w-3.5" />
+              Vue générale
             </div>
-            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/20">
-              <Activity className="w-6 h-6 text-white" />
-              <div>
-                <p className="text-white/80 text-sm">Élèves Actifs</p>
-                <p className="text-white font-semibold">{stats.activeStudents} sur {stats.totalStudents}</p>
+            <h1 className="mt-4 text-3xl font-bold text-slate-950 dark:text-white">
+              Tableau de bord
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Les chiffres essentiels de l’établissement, les opérations récentes et les zones à surveiller.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button onClick={() => navigate('/students')} className="gap-2 bg-[#0066CC] hover:bg-[#005bb8]">
+                <UserPlus className="h-4 w-4" />
+                Nouvel élève
+              </Button>
+              <Button onClick={() => navigate('/payments/tuition')} variant="outline" className="gap-2">
+                <Receipt className="h-4 w-4" />
+                Paiement
+              </Button>
+              <Button onClick={refresh} variant="ghost" size="icon" title="Actualiser">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs font-medium uppercase text-slate-500">État</p>
+              <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{activeRate}%</p>
+              <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                <div className="h-2 rounded-full bg-[#0066CC]" style={{ width: `${activeRate}%` }} />
               </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs font-medium uppercase text-slate-500">À affecter</p>
+              <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{formatNumber(stats.unassignedStudents)}</p>
+              <p className="mt-1 text-xs text-slate-500">élèves sans classe</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs font-medium uppercase text-slate-500">Aujourd’hui</p>
+              <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">
+                {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{formatNumber(stats.totalSubjects)} matières suivies</p>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Cartes de statistiques */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {statCards.map((stat) => (
-          <Card 
-            key={stat.title}
-            className={`group relative overflow-hidden border-0 bg-white dark:bg-gray-900 ${stat.shadow} hover:shadow-2xl transition-all duration-300 hover:-translate-y-1`}
-          >
-            <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`}></div>
-            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${stat.gradient}`}></div>
-            
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-2xl bg-gradient-to-br ${stat.gradient} shadow-lg`}>
-                  <stat.icon className="w-5 h-5 text-white" strokeWidth={2.5} />
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <MetricCard key={metric.title} {...metric} />
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <CardHeader className="flex-row items-center justify-between gap-4 pb-4">
+            <div>
+              <CardTitle className="text-lg">Occupation des classes</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Capacité et remplissage des groupes les plus chargés.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => navigate('/classes')} className="gap-2">
+              Gérer
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {classOccupancy.length > 0 ? classOccupancy.map((cls) => {
+              const rate = Math.min(Number(cls.occupancy_rate || 0), 100);
+              const isFull = Number(cls.student_count || 0) >= Number(cls.max_students || 0) && Number(cls.max_students || 0) > 0;
+              return (
+                <div key={cls.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-slate-950 dark:text-white">{cls.name}</p>
+                      <p className="text-sm text-slate-500">{cls.level}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-slate-950 dark:text-white">{formatNumber(cls.student_count)}/{formatNumber(cls.max_students)}</p>
+                      <p className={`text-xs font-medium ${isFull ? 'text-[#CC0033]' : 'text-slate-500'}`}>
+                        {isFull ? 'Capacité atteinte' : `${rate}% rempli`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div
+                      className={`h-2 rounded-full ${isFull ? 'bg-[#CC0033]' : 'bg-[#FF6600]'}`}
+                      style={{ width: `${rate}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            }) : (
+              <EmptyState label="Aucune classe enregistrée." />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Actions rapides</CardTitle>
+            <p className="text-sm text-slate-500">Les raccourcis les plus utiles au quotidien.</p>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <QuickAction icon={UserPlus} label="Inscrire un élève" onClick={() => navigate('/students')} />
+            <QuickAction icon={Users} label="Ajouter un enseignant" onClick={() => navigate('/teachers')} />
+            <QuickAction icon={Banknote} label="Saisir une scolarité" onClick={() => navigate('/payments/tuition')} />
+            <QuickAction icon={Landmark} label="Payer un enseignant" onClick={() => navigate('/payments/teachers')} />
+            <QuickAction icon={BookOpenCheck} label="Préparer les bulletins" onClick={() => navigate('/bulletin')} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <CardHeader className="flex-row items-center justify-between gap-4 pb-4">
+            <div>
+              <CardTitle className="text-lg">Dernières inscriptions</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Les nouveaux dossiers ajoutés récemment.</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/students')} className="gap-2">
+              Voir tout
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {stats.recentStudents?.length > 0 ? stats.recentStudents.map((student) => (
+              <div key={student.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <div className="flex min-w-0 items-center gap-3">
+                  {student.photo ? (
+                    <img src={student.photo} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0066CC]/10 text-[#0066CC]">
+                      <User className="h-5 w-5" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-950 dark:text-white">{student.first_name} {student.last_name}</p>
+                    <p className="truncate text-sm text-slate-500">{student.class_name || 'Non assigné'}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right text-sm text-slate-500">
+                  <CalendarDays className="mb-1 ml-auto h-4 w-4" />
+                  {formatDate(student.enrollment_date)}
                 </div>
               </div>
-              
-              <div className="space-y-1">
-                <p className="text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-                  {stat.value}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                  {stat.title}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  {stat.description}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Section combinée : Inscriptions et Paiements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Dernières inscriptions */}
-        <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-[#0066CC]/10 via-white/5 to-[#003399]/10 p-6 border-b border-black/10 dark:border-white/10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dernières inscriptions</h2>
-                <p className="text-sm text-gray-500 mt-1">Les nouveaux élèves de l'établissement.</p>
-              </div>
-              <Button onClick={() => navigate('/students')} className="bg-gradient-to-r from-[#0066CC] to-[#003399] hover:from-[#005bb8] hover:to-[#002b80] shadow-lg shadow-black/25">
-                Voir tout
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableBody>
-                {stats.recentStudents?.length > 0 ? (
-                  stats.recentStudents.map((student) => (
-                    <TableRow key={student.id} className="group hover:bg-gradient-to-r hover:from-[#0066CC]/5 hover:to-transparent dark:hover:from-[#0066CC]/10">
-                      <TableCell className="p-4">
-                        <div className="flex items-center gap-3">
-                          {getAvatar(student)}
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">{student.first_name} {student.last_name}</p>
-                            <p className="text-xs text-gray-500">{student.class_name || 'Non assigné'}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-gray-600 dark:text-gray-400 p-4">
-                        {new Date(student.enrollment_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow><TableCell colSpan={2} className="text-center py-12 text-gray-500">Aucune inscription récente.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
+            )) : (
+              <EmptyState label="Aucune inscription récente." />
+            )}
           </CardContent>
         </Card>
 
-        {/* Derniers paiements */}
-        <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-[#FF6600]/10 via-white/5 to-[#FF3300]/10 p-6 border-b border-black/10 dark:border-white/10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Paiements Récents</h2>
-                <p className="text-sm text-gray-500 mt-1">Derniers frais de scolarité reçus.</p>
-              </div>
-              <Button onClick={() => navigate('/payments')} className="bg-gradient-to-r from-[#FF6600] to-[#FF3300] hover:from-[#e65c00] hover:to-[#e62e00] shadow-lg shadow-black/25">
-                Voir tout
-              </Button>
+        <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <CardHeader className="flex-row items-center justify-between gap-4 pb-4">
+            <div>
+              <CardTitle className="text-lg">Activité financière</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">Paiements élèves et enseignants les plus récents.</p>
             </div>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/payments')} className="gap-2">
+              Ouvrir
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableBody>
-                {stats.recentTuition?.length > 0 ? (
-                  stats.recentTuition.map((payment) => (
-                    <TableRow key={payment.id} className="group hover:bg-gradient-to-r hover:from-[#FF6600]/5 hover:to-transparent dark:hover:from-[#FF6600]/10">
-                      <TableCell className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full flex items-center justify-center bg-[#FF6600]/15 dark:bg-[#FF6600]/20">
-                            <DollarSign className="h-5 w-5 text-[#FF3300]" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">{payment.first_name} {payment.last_name}</p>
-                            <p className="text-xs text-gray-500">{payment.description || 'Scolarité'}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-[#FF3300] p-4">
-                        +{payment.amount.toLocaleString()} FCFA
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow><TableCell colSpan={2} className="text-center py-12 text-gray-500">Aucun paiement récent.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
+          <CardContent className="space-y-3">
+            {recentActivity.length > 0 ? recentActivity.map((activity) => {
+              const isTeacherPayment = activity.activity_type === 'teacher_payment';
+              const amountClass = isTeacherPayment ? 'text-[#CC0033]' : 'text-emerald-700 dark:text-emerald-300';
+              return (
+                <div key={`${activity.activity_type}-${activity.id}`} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${isTeacherPayment ? 'bg-[#CC0033]/10 text-[#CC0033]' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>
+                      {isTeacherPayment ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-950 dark:text-white">{activity.person_name}</p>
+                      <p className="truncate text-sm text-slate-500">{activity.label}</p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`font-bold ${amountClass}`}>
+                      {isTeacherPayment ? '-' : '+'}{formatCurrency(activity.amount)}
+                    </p>
+                    <p className="text-xs text-slate-500">{formatDate(activity.activity_date)}</p>
+                  </div>
+                </div>
+              );
+            }) : (
+              <EmptyState label="Aucune activité financière récente." />
+            )}
           </CardContent>
         </Card>
-      </div>
+      </section>
     </div>
   );
 }

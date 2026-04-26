@@ -1158,25 +1158,74 @@ function setupIPCHandlers(ipcMain) {
     const stats = {};
     
     // Nombre d'élèves
-    stats.totalStudents = query('SELECT COUNT(*) as count FROM students')[0].count;
+    stats.totalStudents = query('SELECT COUNT(*) as count FROM students WHERE is_deleted = 0')[0].count;
     
     // Nombre de professeurs
-    stats.totalTeachers = query('SELECT COUNT(*) as count FROM teachers')[0].count;
+    stats.totalTeachers = query('SELECT COUNT(*) as count FROM teachers WHERE is_deleted = 0')[0].count;
     
     // Nombre de classes
-    stats.totalClasses = query('SELECT COUNT(*) as count FROM classes')[0].count;
+    stats.totalClasses = query('SELECT COUNT(*) as count FROM classes WHERE is_deleted = 0')[0].count;
     
     // Nombre de matières
     stats.totalSubjects = query('SELECT COUNT(*) as count FROM subjects')[0].count;
     
     // Élèves actifs
-    stats.activeStudents = query("SELECT COUNT(*) as count FROM students WHERE status = 'active'")[0].count;
+    stats.activeStudents = query("SELECT COUNT(*) as count FROM students WHERE status = 'active' AND is_deleted = 0")[0].count;
+    stats.inactiveStudents = query("SELECT COUNT(*) as count FROM students WHERE status != 'active' AND is_deleted = 0")[0].count;
+    stats.unassignedStudents = query("SELECT COUNT(*) as count FROM students WHERE class_id IS NULL AND is_deleted = 0")[0].count;
+
+    const financeRows = query(`
+      SELECT
+        COALESCE((SELECT SUM(amount) FROM student_payments), 0) as totalStudentPayments,
+        COALESCE((SELECT SUM(amount) FROM student_payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as studentPaymentsThisMonth,
+        COALESCE((SELECT SUM(amount) FROM student_payments WHERE type = 'tuition'), 0) as tuitionPaid,
+        COALESCE((SELECT SUM(c.tuition_fee) FROM students s LEFT JOIN classes c ON s.class_id = c.id WHERE s.status = 'active' AND s.is_deleted = 0), 0) as tuitionExpected,
+        COALESCE((SELECT SUM(amount) FROM teacher_payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as teacherPaymentsThisMonth
+    `)[0] || {};
+
+    stats.finance = {
+      totalStudentPayments: Number(financeRows.totalStudentPayments || 0),
+      studentPaymentsThisMonth: Number(financeRows.studentPaymentsThisMonth || 0),
+      teacherPaymentsThisMonth: Number(financeRows.teacherPaymentsThisMonth || 0),
+      tuitionPaid: Number(financeRows.tuitionPaid || 0),
+      tuitionExpected: Number(financeRows.tuitionExpected || 0),
+      tuitionRemaining: Math.max(Number(financeRows.tuitionExpected || 0) - Number(financeRows.tuitionPaid || 0), 0),
+    };
+
+    stats.classOccupancy = query(`
+      SELECT
+        c.id,
+        c.name,
+        c.level,
+        c.max_students,
+        COUNT(s.id) as student_count,
+        CASE
+          WHEN c.max_students > 0 THEN ROUND((COUNT(s.id) * 100.0) / c.max_students, 0)
+          ELSE 0
+        END as occupancy_rate
+      FROM classes c
+      LEFT JOIN students s ON s.class_id = c.id AND s.is_deleted = 0 AND s.status = 'active'
+      WHERE c.is_deleted = 0
+      GROUP BY c.id
+      ORDER BY occupancy_rate DESC, student_count DESC
+      LIMIT 5
+    `);
+
+    stats.genderDistribution = query(`
+      SELECT
+        COALESCE(NULLIF(gender, ''), 'N/A') as gender,
+        COUNT(*) as count
+      FROM students
+      WHERE is_deleted = 0
+      GROUP BY COALESCE(NULLIF(gender, ''), 'N/A')
+    `);
     
     // Derniers élèves inscrits
     stats.recentStudents = query(`
       SELECT s.*, c.name as class_name 
       FROM students s 
       LEFT JOIN classes c ON s.class_id = c.id 
+      WHERE s.is_deleted = 0
       ORDER BY s.enrollment_date DESC 
       LIMIT 5
     `);
@@ -1189,6 +1238,35 @@ function setupIPCHandlers(ipcMain) {
       WHERE p.type = 'tuition'
       ORDER BY p.payment_date DESC
       LIMIT 5
+    `);
+
+    stats.recentActivity = query(`
+      SELECT *
+      FROM (
+        SELECT
+          p.id,
+          'student_payment' as activity_type,
+          p.type as payment_type,
+          p.amount,
+          p.payment_date as activity_date,
+          s.first_name || ' ' || s.last_name as person_name,
+          COALESCE(p.description, CASE WHEN p.type = 'uniform' THEN 'Tenue scolaire' ELSE 'Scolarité' END) as label
+        FROM student_payments p
+        JOIN students s ON p.student_id = s.id
+        UNION ALL
+        SELECT
+          tp.id,
+          'teacher_payment' as activity_type,
+          'salary' as payment_type,
+          tp.amount,
+          tp.payment_date as activity_date,
+          t.first_name || ' ' || t.last_name as person_name,
+          COALESCE(tp.description, 'Paiement enseignant') as label
+        FROM teacher_payments tp
+        JOIN teachers t ON tp.teacher_id = t.id
+      )
+      ORDER BY activity_date DESC
+      LIMIT 8
     `);
     
     return { success: true, data: stats };
