@@ -398,7 +398,7 @@ export default function CollegeBulletin() {
   };
 
   const makePrintHtml = () => {
-    const className = `${selectedClass?.name || ''} ${selectedClass?.level || ''}`.trim();
+    const className = selectedClass?.name || '';
     const rankById = Object.fromEntries(rankedStudents.map((row) => [row.student.id, row.rank]));
     const termLabel = selectedTerm?.label || 'Composition';
 

@@ -258,6 +258,7 @@ function setupIPCHandlers(ipcMain) {
         students: query('SELECT * FROM students'),
         guardians: query('SELECT * FROM guardians'),
         classes: query('SELECT * FROM classes'),
+        class_teachers: query('SELECT * FROM class_teachers'),
         teachers: query('SELECT * FROM teachers'),
         subjects: query('SELECT * FROM subjects'),
         grades: query('SELECT * FROM grades'),
@@ -302,6 +303,7 @@ function setupIPCHandlers(ipcMain) {
     const students = getArr('students');
     const guardians = getArr('guardians');
     const classes = getArr('classes');
+    const classTeachers = getArr('class_teachers');
     const teachers = getArr('teachers');
     const subjects = getArr('subjects');
     const grades = getArr('grades');
@@ -317,6 +319,7 @@ function setupIPCHandlers(ipcMain) {
     statements.push({ sql: 'DELETE FROM teacher_payments' });
     statements.push({ sql: 'DELETE FROM bulletin_notes' });
     statements.push({ sql: 'DELETE FROM bulletin_meta' });
+    statements.push({ sql: 'DELETE FROM class_teachers' });
     statements.push({ sql: 'DELETE FROM guardians' });
     statements.push({ sql: 'DELETE FROM students' });
     statements.push({ sql: 'DELETE FROM subjects' });
@@ -326,8 +329,8 @@ function setupIPCHandlers(ipcMain) {
     // Important: insérer dans un ordre compatible avec les FKs
     for (const t of teachers) {
       statements.push({
-        sql: `INSERT INTO teachers (id, first_name, last_name, email, phone, address, specialty, hire_date, status, gender, photo, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO teachers (id, first_name, last_name, email, phone, address, specialty, hire_date, status, gender, photo, salary, is_deleted, deleted_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           t.id,
           t.first_name,
@@ -340,6 +343,9 @@ function setupIPCHandlers(ipcMain) {
           t.status,
           t.gender,
           t.photo,
+          t.salary || 0,
+          t.is_deleted,
+          t.deleted_at,
           t.created_at,
           t.updated_at,
         ],
@@ -348,16 +354,31 @@ function setupIPCHandlers(ipcMain) {
 
     for (const c of classes) {
       statements.push({
-        sql: `INSERT INTO classes (id, name, level, academic_year, max_students, teacher_id, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
-        params: [c.id, c.name, c.level, c.academic_year, c.max_students, c.teacher_id, c.created_at, c.updated_at],
+        sql: `INSERT INTO classes (id, name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee, uniform_class_fee, uniform_sport_fee, is_deleted, deleted_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          c.id,
+          c.name,
+          c.level,
+          c.academic_year,
+          c.max_students,
+          c.teacher_id,
+          c.tuition_fee || 0,
+          c.uniform_fee || 0,
+          c.uniform_class_fee ?? c.uniform_fee ?? 0,
+          c.uniform_sport_fee || 0,
+          c.is_deleted,
+          c.deleted_at,
+          c.created_at,
+          c.updated_at,
+        ],
       });
     }
 
     for (const s of students) {
       statements.push({
-        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, class_id, enrollment_date, status, photo, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, class_id, enrollment_date, status, photo, is_deleted, deleted_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           s.id,
           s.first_name,
@@ -372,6 +393,8 @@ function setupIPCHandlers(ipcMain) {
           s.enrollment_date,
           s.status,
           s.photo,
+          s.is_deleted,
+          s.deleted_at,
           s.created_at,
           s.updated_at,
         ],
@@ -405,6 +428,14 @@ function setupIPCHandlers(ipcMain) {
       });
     }
 
+    for (const ct of classTeachers) {
+      statements.push({
+        sql: `INSERT OR IGNORE INTO class_teachers (class_id, teacher_id, subject_id, created_at)
+              VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [ct.class_id, ct.teacher_id, ct.subject_id, ct.created_at],
+      });
+    }
+
     for (const gr of grades) {
       statements.push({
         sql: `INSERT INTO grades (id, student_id, subject_id, value, max_value, comment, date, term, created_at)
@@ -425,17 +456,20 @@ function setupIPCHandlers(ipcMain) {
 
     for (const p of studentPayments) {
       statements.push({
-        sql: `INSERT INTO student_payments (id, student_id, type, amount, payment_date, payment_method, description, academic_year, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO student_payments (id, student_id, type, amount, month_total, payment_date, payment_method, description, academic_year, period_month, period_year, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           p.id,
           p.student_id,
           p.type,
           p.amount,
+          p.month_total,
           p.payment_date,
           p.payment_method,
           p.description,
           p.academic_year,
+          p.period_month,
+          p.period_year,
           p.created_at,
         ],
       });
@@ -478,8 +512,8 @@ function setupIPCHandlers(ipcMain) {
 
     for (const m of bulletinMeta) {
       statements.push({
-        sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO bulletin_meta (student_id, academic_year, rang, decision, observations_generales, visas_json, bulletin_type, data_json, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           m.student_id,
           m.academic_year,
@@ -487,6 +521,8 @@ function setupIPCHandlers(ipcMain) {
           m.decision,
           m.observations_generales,
           m.visas_json,
+          m.bulletin_type,
+          m.data_json,
           m.created_at,
           m.updated_at,
         ],
@@ -507,6 +543,7 @@ function setupIPCHandlers(ipcMain) {
         counts: {
           teachers: teachers.length,
           classes: classes.length,
+          class_teachers: classTeachers.length,
           students: students.length,
           guardians: guardians.length,
           subjects: subjects.length,

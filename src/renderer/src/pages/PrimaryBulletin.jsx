@@ -392,7 +392,7 @@ export default function PrimaryBulletin() {
 
   const makePrintHtml = () => {
     const monthLabel = selectedMonth?.label || '';
-    const className = `${selectedClass?.name || ''} ${selectedClass?.level || ''}`.trim();
+    const className = selectedClass?.name || '';
     const rankedRows = studentsWithRanks;
     const monthRankById = Object.fromEntries(rankedRows.map((row) => [row.student.id, row.rank]));
     const annualAverages = classStudents.map((student) => {

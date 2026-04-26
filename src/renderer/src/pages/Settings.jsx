@@ -1,54 +1,67 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { 
-  User, 
-  Palette, 
-  Shield, 
-  Database, 
-  Globe,
-  Moon,
-  Sun,
-  Monitor,
-  Save,
-  Mail,
-  Smartphone,
-  Lock,
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
   Camera,
-  Trash2,
-  Download,
-  Upload,
+  Check,
   CheckCircle2,
+  Database,
+  Download,
+  HardDrive,
+  KeyRound,
+  Lock,
+  Mail,
+  Monitor,
+  Moon,
+  Palette,
+  Save,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  Smartphone,
+  Sun,
+  Trash2,
+  Upload,
+  User,
 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useTheme } from '@/context/ThemeContext';
 import { useProfile } from '@/context/ProfileContext';
+import { cn } from '@/utils/cn';
+
+const NAV_ITEMS = [
+  { id: 'profile', label: 'Profil', hint: 'Identite et contact', icon: User },
+  { id: 'appearance', label: 'Apparence', hint: 'Theme et langue', icon: Palette },
+  { id: 'security', label: 'Securite', hint: 'Mot de passe', icon: ShieldCheck },
+  { id: 'data', label: 'Donnees', hint: 'Sauvegarde locale', icon: Database },
+];
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Clair', icon: Sun },
+  { value: 'dark', label: 'Sombre', icon: Moon },
+  { value: 'system', label: 'Systeme', icon: Monitor },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: 'fr', label: 'Francais', detail: 'Interface en francais' },
+  { value: 'en', label: 'English', detail: 'Interface anglaise' },
+];
 
 export default function Settings() {
   const { toast, ToastComponent } = useToast();
   const { theme, setTheme } = useTheme();
   const { profile, setProfile, initials } = useProfile();
-  const [activeTab, setActiveTab] = useState('profile');
   const photoInputRef = useRef(null);
 
+  const [activeSection, setActiveSection] = useState('profile');
+  const [preferences, setPreferences] = useState({ theme: 'system', language: 'fr' });
   const [securityForm, setSecurityForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [securityLoading, setSecurityLoading] = useState(false);
-
   const [dataLoading, setDataLoading] = useState({ export: false, import: false });
-  
-  // États pour les différents paramètres
-  const [preferences, setPreferences] = useState({
-    theme: 'system',
-    language: 'fr',
-  });
 
   useEffect(() => {
     try {
@@ -56,33 +69,48 @@ export default function Settings() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
-          setPreferences((prev) => ({ ...prev, ...parsed }));
+          setPreferences((prev) => ({ ...prev, ...parsed, theme: parsed.theme || theme }));
+          return;
         }
       }
     } catch {
-      // ignorer
+      // Ignore invalid local preferences.
     }
-  }, []);
-
-  useEffect(() => {
-    // Si aucun réglage n'a encore été sauvegardé, on aligne l'UI sur le thème courant.
-    try {
-      const raw = localStorage.getItem('settings.preferences');
-      if (!raw) {
-        setPreferences((prev) => ({ ...prev, theme }));
-      }
-    } catch {
-      // ignorer
-    }
+    setPreferences((prev) => ({ ...prev, theme }));
   }, [theme]);
 
-  const handleSave = () => {
+  const completion = useMemo(() => {
+    const fields = [profile.name, profile.email, profile.phone, profile.photo];
+    const filled = fields.filter((value) => Boolean(String(value || '').trim())).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [profile]);
+
+  const persistPreferences = (nextPreferences = preferences) => {
     try {
-      localStorage.setItem('settings.preferences', JSON.stringify(preferences));
+      localStorage.setItem('settings.preferences', JSON.stringify(nextPreferences));
     } catch {
-      // ignorer
+      // Ignore localStorage failures.
     }
-    toast.success('Paramètres enregistrés avec succès !');
+  };
+
+  const handleSave = () => {
+    persistPreferences(preferences);
+    setTheme(preferences.theme);
+    toast.success('Parametres enregistres');
+  };
+
+  const updateTheme = (value) => {
+    const next = { ...preferences, theme: value };
+    setPreferences(next);
+    persistPreferences(next);
+    setTheme(value);
+  };
+
+  const updateLanguage = (value) => {
+    const next = { ...preferences, language: value };
+    setPreferences(next);
+    persistPreferences(next);
+    toast.success('Preference de langue enregistree');
   };
 
   const handleExportData = async () => {
@@ -95,15 +123,13 @@ export default function Settings() {
     setDataLoading((prev) => ({ ...prev, export: true }));
     try {
       const result = await window.electronAPI.exportData();
-      if (result && result.success) {
-        toast.success('Export terminé');
-      } else if (result && result.error === 'Cancelled') {
-        // ignorer
-      } else {
-        toast.error((result && result.error) || 'Erreur export');
+      if (result?.success) {
+        toast.success('Export termine');
+      } else if (result?.error !== 'Cancelled') {
+        toast.error(result?.error || 'Erreur export');
       }
     } catch (error) {
-      toast.error((error && error.message) || 'Erreur export');
+      toast.error(error?.message || 'Erreur export');
     } finally {
       setDataLoading((prev) => ({ ...prev, export: false }));
     }
@@ -116,22 +142,20 @@ export default function Settings() {
       return;
     }
 
-    if (!window.confirm('Importer remplacera les données actuelles (élèves, professeurs, classes, paiements). Continuer ?')) {
+    if (!window.confirm('Importer remplacera les donnees actuelles. Continuer ?')) {
       return;
     }
 
     setDataLoading((prev) => ({ ...prev, import: true }));
     try {
       const result = await window.electronAPI.importData();
-      if (result && result.success) {
-        toast.success('Import terminé');
-      } else if (result && result.error === 'Cancelled') {
-        // ignorer
-      } else {
-        toast.error((result && result.error) || 'Erreur import');
+      if (result?.success) {
+        toast.success('Import termine');
+      } else if (result?.error !== 'Cancelled') {
+        toast.error(result?.error || 'Erreur import');
       }
     } catch (error) {
-      toast.error((error && error.message) || 'Erreur import');
+      toast.error(error?.message || 'Erreur import');
     } finally {
       setDataLoading((prev) => ({ ...prev, import: false }));
     }
@@ -144,26 +168,26 @@ export default function Settings() {
     }
   };
 
-  const handlePhotoChange = (e) => {
-    const file = e.target.files && e.target.files[0];
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type || !file.type.startsWith('image/')) {
-      toast.error('Veuillez sélectionner une image');
+    if (!file.type?.startsWith('image/')) {
+      toast.error('Veuillez selectionner une image');
       return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       setProfile({ ...profile, photo: reader.result });
-      toast.success('Photo de profil mise à jour');
+      toast.success('Photo de profil mise a jour');
     };
     reader.readAsDataURL(file);
   };
 
   const handleRemovePhoto = () => {
     setProfile({ ...profile, photo: null });
-    toast.success('Photo supprimée');
+    toast.success('Photo supprimee');
   };
 
   const handleChangePassword = async () => {
@@ -178,11 +202,11 @@ export default function Settings() {
       return;
     }
     if (next.length < 6) {
-      toast.error('Le nouveau mot de passe doit contenir au moins 6 caractères');
+      toast.error('Le nouveau mot de passe doit contenir au moins 6 caracteres');
       return;
     }
     if (next !== confirm) {
-      toast.error('La confirmation ne correspond pas au nouveau mot de passe');
+      toast.error('La confirmation ne correspond pas');
       return;
     }
     if (!window.electronAPI || !window.electronAPI.changePassword) {
@@ -193,404 +217,325 @@ export default function Settings() {
     setSecurityLoading(true);
     try {
       const result = await window.electronAPI.changePassword(current, next);
-      if (result && result.success) {
-        toast.success('Mot de passe modifié avec succès');
+      if (result?.success) {
+        toast.success('Mot de passe modifie');
         setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       } else {
-        toast.error((result && result.error) || 'Erreur lors de la modification');
+        toast.error(result?.error || 'Erreur lors de la modification');
       }
     } catch (error) {
-      toast.error((error && error.message) || 'Erreur lors de la modification');
+      toast.error(error?.message || 'Erreur lors de la modification');
     } finally {
       setSecurityLoading(false);
     }
   };
 
-  const tabs = [
-    { id: 'profile', label: 'Profil', icon: User },
-    { id: 'appearance', label: 'Apparence', icon: Palette },
-    { id: 'security', label: 'Sécurité', icon: Shield },
-    { id: 'data', label: 'Données', icon: Database },
-  ];
-
   return (
-    <div className="space-y-8 fade-in pb-8">
+    <div className="space-y-5 fade-in pb-8">
       {ToastComponent}
 
-      {/* En-tête */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-8 md:p-10">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-20"></div>
-        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
-        
-        <div className="relative z-10">
-          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
-            Paramètres
-          </h1>
-          <p className="text-violet-100 text-lg max-w-xl">
-            Personnalisez votre expérience et gérez vos préférences
-          </p>
-        </div>
-      </div>
-
-      {/* Contenu principal */}
-      <div className="grid gap-8 lg:grid-cols-12">
-        {/* Sidebar des onglets */}
-        <div className="lg:col-span-3">
-          <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden sticky top-6">
-            <CardContent className="p-4 space-y-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                    activeTab === tab.id
-                      ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-500/25'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 dark:hover:text-violet-400'
-                  }`}
-                >
-                  <tab.icon className={`w-5 h-5 transition-transform duration-200 group-hover:scale-110 ${
-                    activeTab === tab.id ? 'text-white' : 'text-gray-400 group-hover:text-violet-500'
-                  }`} />
-                  <span>{tab.label}</span>
-                  {activeTab === tab.id && (
-                    <div className="absolute right-3 w-2 h-2 rounded-full bg-white animate-pulse"></div>
-                  )}
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Contenu des onglets */}
-        <div className="lg:col-span-9 space-y-6">
-          {/* Profil */}
-          {activeTab === 'profile' && (
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 p-6 border-b border-violet-100 dark:border-violet-900/30">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Informations personnelles</h2>
-                <p className="text-sm text-gray-500 mt-1">Gérez vos informations de profil</p>
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white dark:border-slate-800">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
+                <SettingsIcon className="h-3.5 w-3.5 text-amber-300" />
+                Centre de configuration
               </div>
-              <CardContent className="p-6 space-y-6">
-                {/* Avatar */}
-                <div className="flex items-center gap-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition-opacity"></div>
+              <h1 className="text-2xl font-bold tracking-normal">Parametres</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-300">
+                Ajustez le profil, l'apparence, la securite et les sauvegardes depuis un seul espace.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-white/10 p-2 text-center">
+              <HeroMetric label="Profil" value={`${completion}%`} />
+              <HeroMetric label="Theme" value={themeLabel(preferences.theme)} />
+              <HeroMetric label="Stockage" value="Local" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-[280px_1fr]">
+          <aside className="border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/50 lg:border-b-0 lg:border-r">
+            <div className="space-y-2">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveSection(item.id)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-md border px-3 py-3 text-left transition',
+                      active
+                        ? 'border-[#0066CC] bg-white text-slate-950 shadow-sm dark:bg-slate-950 dark:text-white'
+                        : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-white dark:text-slate-300 dark:hover:border-slate-800 dark:hover:bg-slate-950'
+                    )}
+                  >
+                    <span className={cn('flex h-10 w-10 items-center justify-center rounded-md', active ? 'bg-[#0066CC] text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">{item.label}</span>
+                      <span className="block truncate text-xs text-slate-500">{item.hint}</span>
+                    </span>
+                    {active && <Check className="h-4 w-4 text-[#0066CC]" />}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <main className="p-5">
+            {activeSection === 'profile' && (
+              <SectionPanel title="Profil administrateur" description="Informations visibles dans l'en-tete et la barre laterale.">
+                <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
                     <button
                       type="button"
                       onClick={handleSelectPhoto}
-                      className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold shadow-xl cursor-pointer group-hover:scale-105 transition-transform overflow-hidden"
+                      className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-lg bg-[#0066CC] text-3xl font-bold text-white shadow-sm"
                     >
-                      {profile.photo ? (
-                        <img src={profile.photo} alt="Avatar" className="h-full w-full object-cover" />
-                      ) : (
-                        initials
-                      )}
+                      {profile.photo ? <img src={profile.photo} alt="Avatar" className="h-full w-full object-cover" /> : initials}
                     </button>
-                    <button type="button" onClick={handleSelectPhoto} className="absolute -bottom-2 -right-2 p-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border-2 border-violet-200 dark:border-violet-800 hover:scale-110 transition-transform">
-                      <Camera className="w-4 h-4 text-violet-600" />
-                    </button>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    <p className="mt-4 text-sm font-semibold text-slate-950 dark:text-white">Photo de profil</p>
+                    <p className="mt-1 text-xs text-slate-500">PNG, JPG ou JPEG.</p>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={handleSelectPhoto}>
+                        <Camera className="mr-2 h-4 w-4" />
+                        Choisir
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={handleRemovePhoto} disabled={!profile.photo} className="text-red-600 hover:text-red-700">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Retirer
+                      </Button>
+                    </div>
                   </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Nom complet">
+                      <Input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} placeholder="Nom de l'administrateur" />
+                    </Field>
+                    <Field label="Role">
+                      <Input value={profile.role} disabled />
+                    </Field>
+                    <Field label="Email">
+                      <IconInput icon={Mail} type="email" value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} placeholder="admin@ecole.com" />
+                    </Field>
+                    <Field label="Telephone">
+                      <IconInput icon={Smartphone} value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} placeholder="+223 ..." />
+                    </Field>
+                  </div>
+                </div>
+
+                <ActionBar>
+                  <Button onClick={handleSave} className="bg-[#0066CC] hover:bg-[#005bb8]">
+                    <Save className="mr-2 h-4 w-4" />
+                    Enregistrer
+                  </Button>
+                </ActionBar>
+              </SectionPanel>
+            )}
+
+            {activeSection === 'appearance' && (
+              <SectionPanel title="Apparence" description="Choisissez un affichage confortable pour votre usage quotidien.">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Photo de profil</h3>
-                    <p className="text-sm text-gray-500 mt-1">Cliquez pour changer votre photo</p>
-                    <div className="flex gap-2 mt-3">
-                      <input
-                        ref={photoInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handlePhotoChange}
-                      />
-                      <Button type="button" onClick={handleSelectPhoto} variant="outline" size="sm" className="border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Importer
-                      </Button>
-                      <Button type="button" onClick={handleRemovePhoto} variant="outline" size="sm" className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400" disabled={!profile.photo}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Supprimer
-                      </Button>
+                    <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Theme</Label>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {THEME_OPTIONS.map((option) => {
+                        const Icon = option.icon;
+                        const active = preferences.theme === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateTheme(option.value)}
+                            className={cn(
+                              'rounded-lg border p-4 text-left transition hover:border-[#0066CC]',
+                              active ? 'border-[#0066CC] bg-blue-50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className={cn('flex h-10 w-10 items-center justify-center rounded-md', active ? 'bg-[#0066CC] text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+                                <Icon className="h-5 w-5" />
+                              </span>
+                              {active && <CheckCircle2 className="h-5 w-5 text-[#0066CC]" />}
+                            </div>
+                            <p className="mt-4 font-semibold text-slate-950 dark:text-white">{option.label}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Langue</Label>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {LANGUAGE_OPTIONS.map((option) => {
+                        const active = preferences.language === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateLanguage(option.value)}
+                            className={cn(
+                              'flex items-center justify-between rounded-lg border p-4 text-left transition hover:border-[#0066CC]',
+                              active ? 'border-[#0066CC] bg-blue-50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'
+                            )}
+                          >
+                            <span>
+                              <span className="block font-semibold text-slate-950 dark:text-white">{option.label}</span>
+                              <span className="text-sm text-slate-500">{option.detail}</span>
+                            </span>
+                            {active && <CheckCircle2 className="h-5 w-5 text-[#0066CC]" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
+              </SectionPanel>
+            )}
 
-                {/* Champs du formulaire */}
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nom complet</Label>
-                    <Input
-                      value={profile.name}
-                      onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                      className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                    />
+            {activeSection === 'security' && (
+              <SectionPanel title="Securite" description="Mettez a jour le mot de passe de connexion.">
+                <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
+                  <div className="grid gap-4">
+                    <Field label="Mot de passe actuel">
+                      <IconInput icon={Lock} type="password" value={securityForm.currentPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, currentPassword: event.target.value }))} placeholder="Mot de passe actuel" />
+                    </Field>
+                    <Field label="Nouveau mot de passe">
+                      <IconInput icon={KeyRound} type="password" value={securityForm.newPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, newPassword: event.target.value }))} placeholder="Au moins 6 caracteres" />
+                    </Field>
+                    <Field label="Confirmation">
+                      <IconInput icon={KeyRound} type="password" value={securityForm.confirmPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} placeholder="Repeter le nouveau mot de passe" />
+                    </Field>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Rôle</Label>
-                    <Input
-                      value={profile.role}
-                      disabled
-                      className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl text-gray-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <Input
-                        type="email"
-                        value={profile.email}
-                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        className="pl-10 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Téléphone</Label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <Input
-                        value={profile.phone}
-                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                        className="pl-10 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                      />
-                    </div>
+
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                    <ShieldCheck className="mb-3 h-6 w-6" />
+                    <p className="font-semibold">Conseil securite</p>
+                    <p className="mt-2 leading-6">Utilisez un mot de passe unique, garde par l'administration et renouvele en cas de changement de responsable.</p>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4">
-                  <Button 
-                    onClick={handleSave}
-                    className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl px-6"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Enregistrer les modifications
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Apparence */}
-          {activeTab === 'appearance' && (
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 p-6 border-b border-violet-100 dark:border-violet-900/30">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Apparence</h2>
-                <p className="text-sm text-gray-500 mt-1">Personnalisez l'apparence de l'application</p>
-              </div>
-              <CardContent className="p-6 space-y-8">
-                {/* Thème */}
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold text-gray-700 dark:text-gray-300">Thème de l'application</Label>
-                  <div className="grid grid-cols-3 gap-4">
-                    {[
-                      { value: 'light', icon: Sun, label: 'Clair' },
-                      { value: 'dark', icon: Moon, label: 'Sombre' },
-                      { value: 'system', icon: Monitor, label: 'Système' }
-                    ].map((theme) => (
-                      <button
-                        key={theme.value}
-                        onClick={() => setPreferences({ ...preferences, theme: theme.value })}
-                        className={`group relative p-6 rounded-2xl border-2 transition-all duration-200 ${
-                          preferences.theme === theme.value
-                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700'
-                        }`}
-                      >
-                        <theme.icon className={`w-8 h-8 mx-auto mb-3 transition-transform group-hover:scale-110 ${
-                          preferences.theme === theme.value ? 'text-violet-600' : 'text-gray-400'
-                        }`} />
-                        <p className={`text-sm font-medium text-center ${
-                          preferences.theme === theme.value ? 'text-violet-600' : 'text-gray-600 dark:text-gray-400'
-                        }`}>
-                          {theme.label}
-                        </p>
-                        {preferences.theme === theme.value && (
-                          <div className="absolute top-2 right-2">
-                            <CheckCircle2 className="w-5 h-5 text-violet-600" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Langue */}
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold text-gray-700 dark:text-gray-300">Langue</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { value: 'fr', icon: Globe, label: 'Français' },
-                      { value: 'en', icon: Globe, label: 'English' }
-                    ].map((lang) => (
-                      <button
-                        key={lang.value}
-                        onClick={() => setPreferences({ ...preferences, language: lang.value })}
-                        className={`group flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 ${
-                          preferences.language === lang.value
-                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-violet-300'
-                        }`}
-                      >
-                        <lang.icon className={`w-5 h-5 ${
-                          preferences.language === lang.value ? 'text-violet-600' : 'text-gray-400'
-                        }`} />
-                        <span className={`font-medium ${
-                          preferences.language === lang.value ? 'text-violet-600' : 'text-gray-600 dark:text-gray-400'
-                        }`}>
-                          {lang.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button 
-                    onClick={handleSave}
-                    className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl px-6"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Appliquer
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Sécurité */}
-          {activeTab === 'security' && (
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 p-6 border-b border-violet-100 dark:border-violet-900/30">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Sécurité</h2>
-                <p className="text-sm text-gray-500 mt-1">Gérez votre mot de passe et la sécurité de votre compte</p>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      Mot de passe actuel
-                    </Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={securityForm.currentPassword}
-                      onChange={(e) =>
-                        setSecurityForm((prev) => ({ ...prev, currentPassword: e.target.value }))
-                      }
-                      className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nouveau mot de passe</Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={securityForm.newPassword}
-                      onChange={(e) =>
-                        setSecurityForm((prev) => ({ ...prev, newPassword: e.target.value }))
-                      }
-                      className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Confirmer le mot de passe</Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={securityForm.confirmPassword}
-                      onChange={(e) =>
-                        setSecurityForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
-                      }
-                      className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-between pt-4">
-                  <Button
-                    variant="outline"
-                    disabled
-                    className="border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Supprimer le compte
-                  </Button>
-                  <Button 
-                    onClick={handleChangePassword}
-                    disabled={securityLoading}
-                    className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl px-6"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
+                <ActionBar>
+                  <Button onClick={handleChangePassword} disabled={securityLoading} className="bg-[#0066CC] hover:bg-[#005bb8]">
+                    <Save className="mr-2 h-4 w-4" />
                     {securityLoading ? 'Modification...' : 'Changer le mot de passe'}
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                </ActionBar>
+              </SectionPanel>
+            )}
 
-          {/* Données */}
-          {activeTab === 'data' && (
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 p-6 border-b border-violet-100 dark:border-violet-900/30">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Données</h2>
-                <p className="text-sm text-gray-500 mt-1">Exportez ou importez vos données</p>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="p-6 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700 transition-colors">
-                    <Download className="w-10 h-10 text-violet-600 mb-4" />
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Exporter les données</h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      Téléchargez toutes vos données dans un fichier JSON
-                    </p>
-                    <Button
-                      onClick={handleExportData}
-                      disabled={dataLoading.export}
-                      className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25 rounded-xl"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      {dataLoading.export ? 'Export...' : 'Exporter'}
-                    </Button>
-                  </div>
-
-                  <div className="p-6 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700 transition-colors">
-                    <Upload className="w-10 h-10 text-purple-600 mb-4" />
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Importer les données</h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      Restaurez vos données depuis un fichier JSON
-                    </p>
-                    <Button
-                      onClick={handleImportData}
-                      disabled={dataLoading.import}
-                      variant="outline"
-                      className="w-full border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 rounded-xl"
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      {dataLoading.import ? 'Import...' : 'Importer'}
-                    </Button>
-                  </div>
+            {activeSection === 'data' && (
+              <SectionPanel title="Donnees" description="Sauvegardez ou restaurez les donnees de l'application.">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <DataAction
+                    icon={Download}
+                    title="Exporter"
+                    description="Creez une sauvegarde JSON complete de l'ecole."
+                    buttonLabel={dataLoading.export ? 'Export...' : 'Exporter les donnees'}
+                    onClick={handleExportData}
+                    disabled={dataLoading.export}
+                  />
+                  <DataAction
+                    icon={Upload}
+                    title="Importer"
+                    description="Restaurez une sauvegarde. Les donnees actuelles seront remplacees."
+                    buttonLabel={dataLoading.import ? 'Import...' : 'Importer une sauvegarde'}
+                    onClick={handleImportData}
+                    disabled={dataLoading.import}
+                    variant="outline"
+                  />
                 </div>
 
-                <div className="p-6 rounded-2xl bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800">
-                  <div className="flex items-start gap-4">
-                    <Database className="w-6 h-6 text-violet-600 mt-1" />
+                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+                  <div className="flex gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      <HardDrive className="h-5 w-5" />
+                    </span>
                     <div>
-                      <h3 className="font-bold text-gray-900 dark:text-white mb-2">Base de données locale</h3>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Vos données sont stockées localement dans un fichier SQLite. Aucune donnée n'est envoyée vers des serveurs externes.
+                      <p className="font-semibold text-slate-950 dark:text-white">Stockage local</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        Les donnees restent sur cet ordinateur. Exportez regulierement une sauvegarde et conservez-la sur un support externe.
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>100% local et sécurisé</span>
-                      </div>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </SectionPanel>
+            )}
+          </main>
         </div>
-      </div>
+      </section>
     </div>
   );
+}
+
+function HeroMetric({ label, value }) {
+  return (
+    <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-lg font-bold">{value}</p>
+    </div>
+  );
+}
+
+function SectionPanel({ title, description, children }) {
+  return (
+    <section className="space-y-5">
+      <div>
+        <h2 className="text-xl font-bold text-slate-950 dark:text-white">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function IconInput({ icon: Icon, className, ...props }) {
+  return (
+    <div className="relative">
+      <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <Input className={cn('pl-10', className)} {...props} />
+    </div>
+  );
+}
+
+function ActionBar({ children }) {
+  return <div className="mt-6 flex justify-end border-t border-slate-200 pt-4 dark:border-slate-800">{children}</div>;
+}
+
+function DataAction({ icon: Icon, title, description, buttonLabel, onClick, disabled, variant = 'default' }) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+      <span className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        <Icon className="h-5 w-5" />
+      </span>
+      <h3 className="mt-4 font-bold text-slate-950 dark:text-white">{title}</h3>
+      <p className="mt-1 min-h-[44px] text-sm leading-6 text-slate-500">{description}</p>
+      <Button onClick={onClick} disabled={disabled} variant={variant} className={cn('mt-4 w-full', variant === 'default' && 'bg-[#0066CC] hover:bg-[#005bb8]')}>
+        <Icon className="mr-2 h-4 w-4" />
+        {buttonLabel}
+      </Button>
+    </div>
+  );
+}
+
+function themeLabel(value) {
+  if (value === 'light') return 'Clair';
+  if (value === 'dark') return 'Sombre';
+  return 'Auto';
 }
