@@ -1,1098 +1,1005 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
-import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2, Calendar, CheckCircle, AlertCircle, TrendingUp, Save, Keyboard } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  BarChart3,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Printer,
+  Save,
+  School,
+  Search,
+  Sparkles,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 const MONTHS = [
-  { key: 'oct', label: 'OCT.' },
-  { key: 'nov', label: 'NOV.' },
-  { key: 'dec', label: 'DEC.' },
-  { key: 'jan', label: 'JANV.' },
-  { key: 'feb', label: 'FEV.' },
-  { key: 'mar', label: 'MAR.' },
-  { key: 'apr', label: 'AVR.' },
-  { key: 'may', label: 'MAI.' },
-  { key: 'jun', label: 'JUIN' },
+  { key: 'oct', label: 'Octobre', short: 'OCT.' },
+  { key: 'nov', label: 'Novembre', short: 'NOV.' },
+  { key: 'dec', label: 'Decembre', short: 'DEC.' },
+  { key: 'jan', label: 'Janvier', short: 'JANV.' },
+  { key: 'feb', label: 'Fevrier', short: 'FEV.' },
+  { key: 'mar', label: 'Mars', short: 'MARS' },
+  { key: 'apr', label: 'Avril', short: 'AVR.' },
+  { key: 'may', label: 'Mai', short: 'MAI' },
+  { key: 'jun', label: 'Juin', short: 'JUIN' },
 ];
 
 const SUBJECTS = [
   'Lecture',
-  'Écriture',
+  'Ecriture',
   'Vocabulaire',
   'Dessin',
   'Chant',
-  'Récitation',
+  'Recitation',
   'Grammaire',
   'Conjugaison',
-  'Mathématiques',
-  'Exp. É./Réc.',
-  'Dictée',
-  'Quest. Dictée',
+  'Mathematiques',
+  'Exp. E./Rec.',
+  'Dictee',
+  'Quest. Dictee',
   'Quest. de Cours',
-  'Économie Familiale',
+  'Economie Familiale',
   'Morale',
   'Anglais',
   'Informatique',
   'Conduite',
 ];
 
-function clampNote(value) {
-  if (value === '' || value === null || value === undefined) return '';
-  const n = Number(String(value).replace(',', '.'));
-  if (Number.isNaN(n)) return '';
-  return Math.min(10, Math.max(0, n));
+const META_SUBJECTS = ['TOTAL', 'Moy. de Classe', 'Moy. de Compo', 'Moy. Generale', 'Classement'];
+
+function makeDefaultAcademicYear() {
+  const month = new Date().getMonth();
+  const year = new Date().getFullYear();
+  const start = month >= 7 ? year : year - 1;
+  return `${start}-${start + 1}`;
 }
 
-function formatNumber(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return '';
-  return Number(n).toFixed(2);
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function extractLevel(cls) {
+  const raw = normalizeText(`${cls?.level || ''} ${cls?.name || ''}`);
+  const match = raw.match(/\b([3-6])\s*(e|eme|ere|annee)?\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function isPrimaryClass(cls) {
+  const level = extractLevel(cls);
+  return level >= 3 && level <= 6;
+}
+
+function sortStudents(a, b) {
+  const last = String(a.last_name || '').localeCompare(String(b.last_name || ''), 'fr', { sensitivity: 'base' });
+  if (last !== 0) return last;
+  return String(a.first_name || '').localeCompare(String(b.first_name || ''), 'fr', { sensitivity: 'base' });
+}
+
+function emptyNoteGrid() {
+  return SUBJECTS.reduce((acc, subject) => {
+    acc[subject] = MONTHS.reduce((months, month) => {
+      months[month.key] = '';
+      return months;
+    }, {});
+    return acc;
+  }, {});
+}
+
+function notesArrayToGrid(notes = []) {
+  const grid = emptyNoteGrid();
+  for (const row of Array.isArray(notes) ? notes : []) {
+    const subject = SUBJECTS.find((s) => s === row.subject);
+    const month = MONTHS.find((m) => m.key === row.month_key);
+    if (!subject || !month) continue;
+    grid[subject][month.key] = row.note === null || row.note === undefined ? '' : String(row.note);
+  }
+  return grid;
+}
+
+function gridToNotesArray(grid) {
+  const notes = [];
+  for (const subject of SUBJECTS) {
+    for (const month of MONTHS) {
+      const value = grid?.[subject]?.[month.key];
+      if (value === '' || value === null || value === undefined) continue;
+      const note = Number(String(value).replace(',', '.'));
+      if (Number.isFinite(note) && note >= 0 && note <= 10) {
+        notes.push({ subject, month_key: month.key, note });
+      }
+    }
+  }
+  return notes;
+}
+
+function sanitizeNote(value) {
+  const cleaned = String(value || '').replace(',', '.').replace(/[^\d.]/g, '');
+  if (cleaned === '') return '';
+  const parts = cleaned.split('.');
+  const numeric = Number(parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
+  if (!Number.isFinite(numeric)) return '';
+  return String(Math.min(10, Math.max(0, numeric)));
+}
+
+function average(values) {
+  const numbers = values.map((v) => Number(String(v).replace(',', '.'))).filter((n) => Number.isFinite(n));
+  if (!numbers.length) return null;
+  return numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
+}
+
+function maxFinite(values) {
+  const numbers = values.map((v) => Number(String(v).replace(',', '.'))).filter((n) => Number.isFinite(n));
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
+function isFilledNote(value) {
+  return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(String(value).replace(',', '.')));
+}
+
+function completeMonthAverage(grid, monthKey) {
+  const values = SUBJECTS.map((subject) => grid?.[subject]?.[monthKey]);
+  if (!values.every(isFilledNote)) return null;
+  return average(values);
+}
+
+function completeAnnualAverage(grid) {
+  const monthlyAverages = MONTHS.map((month) => completeMonthAverage(grid, month.key));
+  if (!monthlyAverages.every((value) => value !== null)) return null;
+  return average(monthlyAverages);
+}
+
+function formatScore(value, digits = 2) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '';
+  return Number(value).toFixed(digits);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getStudentName(student) {
+  return `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Eleve';
 }
 
 export default function PrimaryBulletin() {
-  const { students } = useStudents();
-  const { classes } = useClasses();
+  const { students, loading: studentsLoading } = useStudents();
+  const { classes, loading: classesLoading } = useClasses();
   const { toast, ToastComponent } = useToast();
+  const { success: showSuccess, error: showError } = toast;
   const { loading: bulletinLoading, getBulletin, saveBulletin } = useBulletin();
 
-  const defaultAcademicYear = useMemo(() => {
-    const y = new Date().getFullYear();
-    return `${y}-${y + 1}`;
-  }, []);
-
-  const [viewMode, setViewMode] = useState('welcome'); // 'welcome', 'entry', 'generate'
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
-  const [studentSearchTerm, setStudentSearchTerm] = useState('');
-  const [studentFilters, setStudentFilters] = useState({
-    class_id: 'all',
-    academic_year: 'all',
-  });
-
-  const [bulletinData, setBulletinData] = useState({
-    student_id: '',
-    academic_year: '',
-    period: '',
-    sequence: '',
-    appreciation: '',
-    subjects: {},
-  });
-
-  const [editingCell, setEditingCell] = useState(null);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [viewingBulletin, setViewingBulletin] = useState(null);
-  const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
-  const [selectedMonth, setSelectedMonth] = useState(MONTHS[0].key);
-  
-  // États pour la navigation par classe (comme CollegeBulletin)
-  const [selectedClassId, setSelectedClassId] = useState(null);
-  const [selectedMonthForClass, setSelectedMonthForClass] = useState(null);
-  const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'month', 'students', 'bulletin'
-
-  // État pour gérer les données de bulletin de chaque élève
-  const [bulletinDataMap, setBulletinDataMap] = useState({});
+  const [academicYear, setAcademicYear] = useState(makeDefaultAcademicYear);
+  const [step, setStep] = useState('class');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedMonthKey, setSelectedMonthKey] = useState('');
+  const [query, setQuery] = useState('');
+  const [bulletins, setBulletins] = useState({});
+  const [loadingClassData, setLoadingClassData] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [activeStudentId, setActiveStudentId] = useState('');
 
   const primaryClasses = useMemo(() => {
-    return classes.filter(cls => {
-      const level = String(cls.level || '').trim().toLowerCase();
-      // Supporter plusieurs formats pour les niveaux du primaire
-      return ['3e année', '4e année', '5e année', '6e année', '3ème année', '4ème année', '5ème année', '6ème année'].includes(level);
+    return classes.filter(isPrimaryClass).sort((a, b) => {
+      const levelDelta = (extractLevel(a) || 0) - (extractLevel(b) || 0);
+      if (levelDelta !== 0) return levelDelta;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
     });
   }, [classes]);
 
-  const primaryStudents = useMemo(() => {
-    return students.filter(student => {
-      const studentClass = primaryClasses.find(cls => cls.id === student.class_id);
-      return studentClass !== undefined;
+  const selectedClass = useMemo(
+    () => primaryClasses.find((cls) => String(cls.id) === String(selectedClassId)),
+    [primaryClasses, selectedClassId]
+  );
+
+  const selectedMonth = useMemo(
+    () => MONTHS.find((month) => month.key === selectedMonthKey),
+    [selectedMonthKey]
+  );
+
+  const classStudents = useMemo(() => {
+    return students
+      .filter((student) => String(student.class_id || '') === String(selectedClassId || ''))
+      .sort(sortStudents);
+  }, [students, selectedClassId]);
+
+  const visibleStudents = useMemo(() => {
+    const needle = normalizeText(query);
+    if (!needle) return classStudents;
+    return classStudents.filter((student) => {
+      return normalizeText(`${student.first_name} ${student.last_name} ${student.matricule}`).includes(needle);
     });
-  }, [students, primaryClasses]);
+  }, [classStudents, query]);
 
-  const filteredStudents = useMemo(() => {
-    return primaryStudents.filter(student => {
-      const q = (studentSearchTerm || '').trim().toLowerCase();
-      const matchSearch = !q || 
-        (student.first_name || '').toLowerCase().includes(q) || 
-        (student.last_name || '').toLowerCase().includes(q) ||
-        (student.matricule || '').toLowerCase().includes(q);
+  const classStatsById = useMemo(() => {
+    return primaryClasses.reduce((acc, cls) => {
+      acc[cls.id] = students.filter((student) => String(student.class_id || '') === String(cls.id)).length;
+      return acc;
+    }, {});
+  }, [primaryClasses, students]);
 
-      const matchClass = studentFilters.class_id === 'all' || String(student.class_id || '') === String(studentFilters.class_id);
-      const studentClass = primaryClasses.find(cls => cls.id === student.class_id);
-      const matchYear = studentFilters.academic_year === 'all' || (studentClass?.academic_year || '') === studentFilters.academic_year;
+  const selectedMonthValues = useCallback(
+    (studentId) => SUBJECTS.map((subject) => bulletins[studentId]?.notes?.[subject]?.[selectedMonthKey] || ''),
+    [bulletins, selectedMonthKey]
+  );
 
-      return matchSearch && matchClass && matchYear;
+  const getCompletion = useCallback(
+    (studentId) => {
+      const filled = selectedMonthValues(studentId).filter((value) => value !== '').length;
+      return {
+        filled,
+        total: SUBJECTS.length,
+        percent: Math.round((filled / SUBJECTS.length) * 100),
+        complete: filled === SUBJECTS.length,
+      };
+    },
+    [selectedMonthValues]
+  );
+
+  const globalStats = useMemo(() => {
+    const completed = classStudents.filter((student) => getCompletion(student.id).complete).length;
+    const filledCells = classStudents.reduce((sum, student) => sum + getCompletion(student.id).filled, 0);
+    const totalCells = classStudents.length * SUBJECTS.length;
+    const monthAverages = classStudents
+      .map((student) => average(selectedMonthValues(student.id)))
+      .filter((value) => value !== null);
+    return {
+      completed,
+      filledCells,
+      totalCells,
+      percent: totalCells ? Math.round((filledCells / totalCells) * 100) : 0,
+      classAverage: average(monthAverages),
+    };
+  }, [classStudents, getCompletion, selectedMonthValues]);
+
+  const studentsWithRanks = useMemo(() => {
+    const rows = classStudents.map((student) => ({
+      student,
+      monthAverage: average(selectedMonthValues(student.id)),
+    }));
+    const ranked = rows
+      .filter((row) => row.monthAverage !== null)
+      .sort((a, b) => b.monthAverage - a.monthAverage);
+    const rankById = {};
+    ranked.forEach((row, index) => {
+      rankById[row.student.id] = index + 1;
     });
-  }, [primaryStudents, studentSearchTerm, studentFilters, primaryClasses]);
+    return rows.map((row) => ({ ...row, rank: rankById[row.student.id] || '' }));
+  }, [classStudents, selectedMonthValues]);
 
-  // Charger les données du bulletin de l'élève actuel
-  useEffect(() => {
-    if (selectedStudentId && selectedMonthForClass && viewMode === 'entry') {
-      loadStudentBulletinData(selectedStudentId);
-    }
-  }, [selectedStudentId, selectedMonthForClass, viewMode]);
-
-  const loadStudentBulletinData = async (studentId) => {
+  const loadClassBulletins = useCallback(async () => {
+    if (!selectedClassId || !academicYear) return;
+    setLoadingClassData(true);
     try {
-      const result = await getBulletin(studentId, academicYear);
-      if (result.success && result.data) {
-        setBulletinDataMap(prev => ({
-          ...prev,
-          [studentId]: result.data
-        }));
-      } else {
-        // Initialiser les données si elles n'existent pas
-        setBulletinDataMap(prev => ({
-          ...prev,
-          [studentId]: {
-            student_id: studentId,
-            academic_year: academicYear,
-            period: '',
-            sequence: '',
-            appreciation: '',
-            subjects: {}
+      const entries = await Promise.all(
+        classStudents.map(async (student) => {
+          const data = await getBulletin(student.id, academicYear);
+          let metaData = {};
+          try {
+            metaData = data?.meta?.data_json ? JSON.parse(data.meta.data_json) : {};
+          } catch {
+            metaData = {};
           }
-        }));
-      }
+          return [
+            student.id,
+            {
+              notes: notesArrayToGrid(data?.notes),
+              appreciation: metaData.appreciation || data?.meta?.observations_generales || '',
+              decision: data?.meta?.decision || '',
+              rang: data?.meta?.rang || '',
+            },
+          ];
+        })
+      );
+      setBulletins(Object.fromEntries(entries));
+      setActiveStudentId(classStudents[0]?.id || '');
     } catch (error) {
-      console.error('Erreur lors du chargement des données du bulletin:', error);
+      console.error('Erreur chargement bulletins primaire:', error);
+      showError('Impossible de charger les bulletins de cette classe');
+    } finally {
+      setLoadingClassData(false);
     }
-  };
-
-  // Fonctions pour le suivi de progression
-  const getStudentCompletionStatus = (studentId) => {
-    const studentBulletin = bulletinDataMap[studentId] || {};
-    const notesCount = SUBJECTS.filter(subject => 
-      studentBulletin.subjects?.[subject]?.[selectedMonthForClass] && 
-      studentBulletin.subjects[subject][selectedMonthForClass] !== ''
-    ).length;
-    
-    let status = 'none';
-    if (notesCount === SUBJECTS.length) {
-      status = 'complete';
-    } else if (notesCount > 0) {
-      status = 'partial';
-    }
-    
-    return { status, notesCount };
-  };
-
-  const getCompletedStudentsCount = () => {
-    const classStudents = primaryStudents.filter(s => s.class_id === selectedClassId);
-    
-    return classStudents.filter(student => {
-      const status = getStudentCompletionStatus(student.id);
-      return status.status === 'complete';
-    }).length;
-  };
-
-  const isAllStudentsCompleted = () => {
-    const classStudents = primaryStudents.filter(s => s.class_id === selectedClassId);
-    
-    return classStudents.every(student => {
-      const status = getStudentCompletionStatus(student.id);
-      return status.status === 'complete';
-    });
-  };
-
-  const handlePrintClassBulletins = async () => {
-    if (!isAllStudentsCompleted()) {
-      toast.error('Tous les élèves doivent avoir leurs notes complètes avant d\'imprimer');
-      return;
-    }
-
-    try {
-      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
-      const classStudents = primaryStudents
-        .filter(s => s.class_id === selectedClassId)
-        .sort((a, b) => a.last_name.localeCompare(b.last_name));
-
-      // Générer le HTML pour tous les bulletins du mois
-      let allBulletinsHTML = `
-        <html>
-          <head>
-            <title>Bulletins de ${selectedClass?.name} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              .bulletin { page-break-after: always; margin-bottom: 30px; }
-              .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
-              .student-info { margin: 20px 0; }
-              .grades-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-              .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-              .grades-table th { background-color: #f2f2f2; }
-              .footer { margin-top: 30px; text-align: center; }
-            </style>
-          </head>
-          <body>
-      `;
-
-      for (const student of classStudents) {
-        const studentBulletinData = await getBulletin(student.id, academicYear);
-        const bulletinHTML = generateClassBulletinHTML(student, studentBulletinData.data);
-        allBulletinsHTML += bulletinHTML;
-      }
-
-      allBulletinsHTML += `
-          </body>
-        </html>
-      `;
-
-      // Ouvrir une nouvelle fenêtre avec tous les bulletins
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(allBulletinsHTML);
-      printWindow.document.close();
-      
-      // Attendre un peu avant d'imprimer
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 1000);
-
-      toast.success(`Bulletins de ${classStudents.length} élève(s) pour ${MONTHS.find(m => m.key === selectedMonthForClass)?.label} générés avec succès !`);
-    } catch (error) {
-      console.error('Erreur lors de la génération des bulletins:', error);
-      toast.error('Erreur lors de la génération des bulletins');
-    }
-  };
-
-  const generateClassBulletinHTML = (student, bulletinData) => {
-    const selectedClass = primaryClasses.find(c => c.id === selectedClassId);
-    
-    return `
-      <div class="bulletin">
-        <div class="header">
-          <h1>BULLETIN SCOLAIRE</h1>
-          <h2>Établissement LA SAGESSE</h2>
-          <p>Année scolaire ${academicYear}</p>
-          <p>${bulletinData?.period || '1er trimestre'} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</p>
-        </div>
-        
-        <div class="student-info">
-          <h3>Informations de l'élève</h3>
-          <p><strong>Nom:</strong> ${student.first_name} ${student.last_name}</p>
-          <p><strong>Matricule:</strong> ${student.matricule}</p>
-          <p><strong>Classe:</strong> ${selectedClass?.name}</p>
-        </div>
-        
-        <table class="grades-table">
-          <thead>
-            <tr>
-              <th style="text-align: left;">Matière</th>
-              <th>Note du ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${SUBJECTS.map(subject => {
-              const note = bulletinData?.subjects?.[subject]?.[selectedMonthForClass] || '-';
-              
-              return `
-                <tr>
-                  <td style="text-align: left;">${subject}</td>
-                  <td><strong>${note}</strong></td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-        
-        <div class="footer">
-          <h3>Appréciation générale</h3>
-          <p>${bulletinData?.appreciation || 'Aucune appréciation renseignée'}</p>
-          <p style="margin-top: 20px;">
-            <em>Fait à ${new Date().toLocaleDateString()}, le ${new Date().toLocaleDateString()}</em>
-          </p>
-        </div>
-      </div>
-    `;
-  };
+  }, [academicYear, classStudents, getBulletin, selectedClassId, showError]);
 
   useEffect(() => {
-    if (selectedStudentId && academicYear) {
-      loadBulletinData();
+    if (step === 'entry') {
+      loadClassBulletins();
     }
-  }, [selectedStudentId, academicYear]);
+  }, [loadClassBulletins, step]);
 
-  const loadBulletinData = useCallback(async () => {
-    try {
-      const result = await getBulletin(selectedStudentId, academicYear);
-      if (result.success && result.data) {
-        setBulletinData(result.data);
-      } else {
-        // Initialize empty bulletin data
-        setBulletinData({
-          student_id: selectedStudentId,
-          academic_year: academicYear,
-          period: '',
-          sequence: '',
-          appreciation: '',
-          subjects: {},
-        });
-      }
-    } catch (error) {
-      console.error('Erreur chargement bulletin:', error);
-      toast.error('Erreur lors du chargement du bulletin');
-    }
-  }, [selectedStudentId, academicYear, getBulletin, toast]);
-
-  const handleStudentSelect = (studentId) => {
-    setSelectedStudentId(studentId);
-    setViewMode('entry');
-  };
-
-  const handleCellEdit = (subject, field, value) => {
-    setBulletinData(prev => ({
+  const updateNote = (studentId, subject, value) => {
+    const note = sanitizeNote(value);
+    setBulletins((prev) => ({
       ...prev,
-      subjects: {
-        ...prev.subjects,
-        [subject]: {
-          ...prev.subjects[subject],
-          [field]: value,
+      [studentId]: {
+        ...prev[studentId],
+        notes: {
+          ...(prev[studentId]?.notes || emptyNoteGrid()),
+          [subject]: {
+            ...((prev[studentId]?.notes || emptyNoteGrid())[subject] || {}),
+            [selectedMonthKey]: note,
+          },
         },
       },
     }));
   };
 
-  const handleSaveBulletin = async () => {
+  const updateAppreciation = (studentId, value) => {
+    setBulletins((prev) => ({
+      ...prev,
+      [studentId]: {
+        notes: emptyNoteGrid(),
+        ...prev[studentId],
+        appreciation: value,
+      },
+    }));
+  };
+
+  const saveOneStudent = async (student) => {
+    const row = bulletins[student.id] || { notes: emptyNoteGrid() };
+    const rank = studentsWithRanks.find((item) => item.student.id === student.id)?.rank || '';
+    const result = await saveBulletin(student.id, academicYear, {
+      notes: gridToNotesArray(row.notes),
+      meta: {
+        bulletin_type: 'primary',
+        rang: rank ? `${rank}/${classStudents.length}` : row.rang || '',
+        decision: row.decision || '',
+        observations_generales: row.appreciation || '',
+        data_json: JSON.stringify({
+          appreciation: row.appreciation || '',
+          selected_month: selectedMonthKey,
+        }),
+      },
+    });
+    if (!result?.success) throw new Error(result?.error || 'Erreur sauvegarde bulletin');
+  };
+
+  const handleSaveAll = async () => {
+    if (!classStudents.length) return false;
+    setSaving(true);
     try {
-      const result = await saveBulletin(bulletinData);
-      if (result.success) {
-        toast.success('Bulletin enregistré avec succès !');
-      } else {
-        toast.error(result.error || 'Erreur lors de l\'enregistrement');
+      for (const student of classStudents) {
+        await saveOneStudent(student);
       }
+      showSuccess('Bulletins de la classe enregistres');
+      return true;
     } catch (error) {
-      console.error('Erreur sauvegarde bulletin:', error);
-      toast.error('Une erreur est survenue');
+      console.error('Erreur sauvegarde bulletins:', error);
+      showError(error?.message || 'Erreur lors de la sauvegarde');
+      return false;
+    } finally {
+      setSaving(false);
     }
   };
 
-  const selectedStudent = primaryStudents.find(s => s.id === selectedStudentId);
-  const selectedClass = primaryClasses.find(c => c.id === selectedStudent?.class_id);
+  const makePrintHtml = () => {
+    const monthLabel = selectedMonth?.label || '';
+    const className = `${selectedClass?.name || ''} ${selectedClass?.level || ''}`.trim();
+    const rankedRows = studentsWithRanks;
+    const monthRankById = Object.fromEntries(rankedRows.map((row) => [row.student.id, row.rank]));
+    const annualAverages = classStudents.map((student) => {
+      const grid = bulletins[student.id]?.notes || emptyNoteGrid();
+      return {
+        id: student.id,
+        avg: completeAnnualAverage(grid),
+      };
+    });
+    const classYearComplete = classStudents.length > 0 && annualAverages.every((row) => row.avg !== null);
+    const annualRankById = {};
+    if (classYearComplete) {
+      [...annualAverages]
+        .sort((a, b) => b.avg - a.avg)
+        .forEach((row, index) => {
+          annualRankById[row.id] = index + 1;
+        });
+    }
+    const firstAnnualAverage = classYearComplete ? maxFinite(annualAverages.map((row) => row.avg)) : null;
 
-  const getSubjectAppreciation = (average) => {
-    if (average >= 9) return 'Excellent';
-    if (average >= 8) return 'Très bien';
-    if (average >= 7) return 'Bien';
-    if (average >= 6) return 'Assez bien';
-    if (average >= 5) return 'Passable';
-    return 'Insuffisant';
-  };
+    const bulletinsHtml = classStudents
+      .map((student) => {
+        const row = bulletins[student.id] || { notes: emptyNoteGrid() };
+        const monthAverage = average(selectedMonthValues(student.id));
+        const annualAverage = annualAverages.find((item) => item.id === student.id)?.avg;
+        const monthRank = monthRankById[student.id] ? `${monthRankById[student.id]}/${classStudents.length}` : '';
+        const annualRank = annualRankById[student.id] ? `${annualRankById[student.id]}/${classStudents.length}` : '';
 
-  const getGeneralAppreciation = (average) => {
-    if (average >= 9) return 'Excellent travail, continuez ainsi!';
-    if (average >= 8) return 'Très bon travail, félicitations!';
-    if (average >= 7) return 'Bon travail, continuez vos efforts!';
-    if (average >= 6) return 'Assez bon travail, efforts à poursuivre!';
-    if (average >= 5) return 'Travail acceptable, plus d\'efforts nécessaires';
-    return 'Travail insuffisant, beaucoup d\'efforts requis';
-  };
-
-  const calculateRank = (average) => {
-    return `${Math.floor(Math.random() * 20) + 1}/${Math.floor(Math.random() * 10) + 20}`;
-  };
-
-  const calculateClassAverage = () => {
-    return (Math.random() * 2 + 7).toFixed(2);
-  };
-
-  if (viewMode === 'welcome') {
-    if (navigationStep === 'class') {
-      // Vue de sélection de classe
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="text-center py-12">
-            <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-6">
-              <FileText className="h-12 w-12 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">Bulletins du Premier Cycle (Primaire)</h1>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Sélectionnez une classe pour gérer les bulletins des élèves du primaire (3e à 6e année)
-            </p>
-            
-            <div className="max-w-4xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {primaryClasses.map((cls) => (
-                  <Card 
-                    key={cls.id} 
-                    className="hover:shadow-lg transition-all cursor-pointer hover:scale-105 border-2 hover:border-blue-300"
-                    onClick={() => {
-                      setSelectedClassId(cls.id);
-                      setNavigationStep('month');
-                    }}
-                  >
-                    <CardContent className="p-6 text-center">
-                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Users className="h-8 w-8 text-blue-600" />
-                      </div>
-                      <h3 className="font-bold text-lg mb-2">{cls.name}</h3>
-                      <p className="text-muted-foreground mb-2">{cls.level}</p>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p>Année: {cls.academic_year}</p>
-                        <p>Capacité: {cls.max_students} élèves</p>
-                        <p className="font-medium text-blue-600">
-                          {primaryStudents.filter(s => s.class_id === cls.id).length} élèves inscrits
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              
-              {primaryClasses.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Aucune classe de primaire trouvée</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    } else if (navigationStep === 'month') {
-      // Vue de sélection du mois pour la classe
-      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
-      
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setNavigationStep('class')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux classes
-            </Button>
-            <h1 className="text-3xl font-bold">
-              {selectedClass?.name} - {selectedClass?.level}
-            </h1>
-            <div></div>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-6">
-            <div className="text-center mb-6">
-              <h3 className="font-semibold text-lg mb-2">Sélectionnez le mois du bulletin</h3>
-              <p className="text-muted-foreground">
-                Choisissez le mois pour lequel vous souhaitez saisir les notes des bulletins
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              {MONTHS.map((month) => (
-                <Card 
-                  key={month.key}
-                  className={`cursor-pointer transition-all hover:shadow-md hover:scale-105 ${
-                    selectedMonthForClass === month.key 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'hover:border-blue-300'
-                  }`}
-                  onClick={() => {
-                    setSelectedMonthForClass(month.key);
-                    setNavigationStep('students');
-                  }}
-                >
-                  <CardContent className="p-4 text-center">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${
-                      selectedMonthForClass === month.key 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      <Calendar className="h-6 w-6" />
-                    </div>
-                    <h4 className="font-semibold">{month.label}</h4>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    } else if (navigationStep === 'students') {
-      // Vue de sélection des élèves dans la classe
-      const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
-      const classStudents = primaryStudents
-        .filter(s => s.class_id === selectedClassId)
-        .sort((a, b) => a.last_name.localeCompare(b.last_name));
-      
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setNavigationStep('month')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux mois
-            </Button>
-            <div className="text-center">
-              <h1 className="text-3xl font-bold">
-                {selectedClass?.name} - {selectedClass?.level}
-              </h1>
-              <p className="text-muted-foreground">
-                Bulletin du mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
-              </p>
-            </div>
-            <Button 
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={!isAllStudentsCompleted()}
-              onClick={() => handlePrintClassBulletins()}
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer la classe
-            </Button>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
+        return `
+          <section class="bulletin">
+            <div class="topline">
               <div>
-                <h3 className="font-semibold text-lg mb-2">Élèves de la classe</h3>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    Notes complètes
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    Notes partielles
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    Aucune note
-                  </span>
-                </div>
+                <p class="tiny">Annee scolaire</p>
+                <strong>${escapeHtml(academicYear)}</strong>
               </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Progression globale</div>
-                <div className="text-lg font-semibold">
-                  {getCompletedStudentsCount()}/{classStudents.length} élèves
-                </div>
+              <div class="title">
+                <p class="tiny">Bulletin primaire 3e a 6e</p>
+                <h1>Compositions mensuelles</h1>
+              </div>
+              <div>
+                <p class="tiny">Classe</p>
+                <strong>${escapeHtml(className)}</strong>
               </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classStudents.map((student) => {
-                const completionStatus = getStudentCompletionStatus(student.id);
-                
-                return (
-                  <Card 
-                    key={student.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      completionStatus.status === 'complete' 
-                        ? 'border-green-500 bg-green-50' 
-                        : completionStatus.status === 'partial'
-                        ? 'border-yellow-500 bg-yellow-50'
-                        : 'border-red-500 bg-red-50'
-                    }`}
-                    onClick={() => {
-                      setSelectedStudentId(student.id);
-                      setViewMode('entry');
-                    }}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            completionStatus.status === 'complete' 
-                              ? 'bg-green-600 text-white' 
-                              : completionStatus.status === 'partial'
-                              ? 'bg-yellow-600 text-white'
-                              : 'bg-red-600 text-white'
-                          }`}>
-                            {completionStatus.status === 'complete' ? (
-                              <CheckCircle className="h-5 w-5" />
-                            ) : completionStatus.status === 'partial' ? (
-                              <AlertCircle className="h-5 w-5" />
-                            ) : (
-                              <X className="h-5 w-5" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium">{student.first_name} {student.last_name}</p>
-                            <p className="text-sm text-muted-foreground">{student.matricule}</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span>Progression:</span>
-                          <span className="font-medium">{completionStatus.notesCount}/{SUBJECTS.length} notes</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              completionStatus.status === 'complete' ? 'bg-green-500' : 
-                              completionStatus.status === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${(completionStatus.notesCount / SUBJECTS.length) * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-center text-muted-foreground">
-                          {completionStatus.status === 'complete' ? 'Complet' : 
-                           completionStatus.status === 'partial' ? 'En cours' : 'Non commencé'}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+            <div class="identity">
+              <span><b>Eleve:</b> ${escapeHtml(getStudentName(student))}</span>
+              <span><b>Matricule:</b> ${escapeHtml(student.matricule || '-')}</span>
+              <span><b>Mois saisi:</b> ${escapeHtml(monthLabel)}</span>
             </div>
-          </div>
-        </div>
-      );
+            <table class="marks">
+              <thead>
+                <tr>
+                  <th class="subject">Matieres / Mois</th>
+                  ${MONTHS.map((month) => `<th>${escapeHtml(month.short)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${SUBJECTS.map((subject) => `
+                  <tr>
+                    <td class="subject">${escapeHtml(subject)}</td>
+                    ${MONTHS.map((month) => {
+                      const value = row.notes?.[subject]?.[month.key] || '';
+                      const active = month.key === selectedMonthKey ? ' active' : '';
+                      return `<td class="${active}">${escapeHtml(value)}</td>`;
+                    }).join('')}
+                  </tr>
+                `).join('')}
+                ${META_SUBJECTS.map((label) => {
+                  const selectedValue =
+                    label === 'TOTAL' ? formatScore(selectedMonthValues(student.id).reduce((sum, value) => sum + (Number(value) || 0), 0), 1) :
+                    label === 'Moy. de Classe' ? formatScore(monthAverage) :
+                    label === 'Moy. de Compo' ? formatScore(monthAverage) :
+                    label === 'Moy. Generale' ? formatScore(monthAverage) :
+                    monthRank;
+                  return `
+                    <tr class="meta-row">
+                      <td class="subject">${escapeHtml(label)}</td>
+                      ${MONTHS.map((month) => `<td class="${month.key === selectedMonthKey ? 'active' : ''}">${month.key === selectedMonthKey ? escapeHtml(selectedValue) : ''}</td>`).join('')}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+            <table class="visas">
+              <thead>
+                <tr><th>Mois</th><th>Maitre</th><th>Directeur</th><th>Les parents</th><th>Observations</th></tr>
+              </thead>
+              <tbody>
+                ${MONTHS.map((month) => `
+                  <tr>
+                    <td>${escapeHtml(month.label.toUpperCase())}</td>
+                    <td></td><td></td><td></td>
+                    <td>${month.key === selectedMonthKey ? escapeHtml(row.appreciation || '') : ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div class="summary">
+              <span><b>Moyenne annuelle:</b> ${classYearComplete ? formatScore(annualAverage) : '____'} /10</span>
+              <span><b>Rang annuel:</b> ${escapeHtml(classYearComplete ? annualRank : '____')}</span>
+              <span><b>Moyenne du 1er:</b> ${classYearComplete ? formatScore(firstAnnualAverage) : '____'} /10</span>
+            </div>
+            <div class="decision">
+              <b>Observations Generales</b>
+              <p>${escapeHtml(row.appreciation || '')}</p>
+              <div class="checks">
+                <span>Passe en classe superieure <i></i></span>
+                <span>Redouble <i></i></span>
+                <span>Exclu(e) <i></i></span>
+              </div>
+            </div>
+            <div class="signatures">
+              <strong>Le maitre</strong>
+              <strong>Le directeur</strong>
+            </div>
+          </section>
+        `;
+      })
+      .join('');
+
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Bulletins ${escapeHtml(className)} - ${escapeHtml(monthLabel)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 9mm; }
+            * { box-sizing: border-box; }
+            body { margin: 0; color: #111827; font-family: Arial, sans-serif; background: white; }
+            .bulletin { min-height: 277mm; page-break-after: always; padding: 6mm; border: 1.5px solid #111827; }
+            .bulletin:last-child { page-break-after: auto; }
+            .topline { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 12px; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; }
+            .title { text-align: center; }
+            h1 { margin: 2px 0 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0; }
+            .tiny { margin: 0; font-size: 10px; text-transform: uppercase; color: #4b5563; }
+            .identity { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin: 8px 0; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            th, td { border: 1px solid #111827; padding: 3px 4px; font-size: 10.5px; height: 20px; text-align: center; }
+            th { background: #eef2f7; font-weight: 800; }
+            .subject { width: 25%; text-align: left; font-weight: 700; }
+            .marks td.active { background: #fef3c7; font-weight: 800; }
+            .meta-row td { font-weight: 800; background: #f8fafc; }
+            .visas { margin-top: 10px; }
+            .visas th:first-child, .visas td:first-child { width: 21%; text-align: left; font-weight: 800; }
+            .summary { display: grid; grid-template-columns: 1fr 0.7fr 1fr; gap: 8px; border: 1px solid #111827; margin-top: 12px; padding: 8px; font-size: 12px; }
+            .decision { border: 1px solid #111827; margin-top: 12px; min-height: 58px; text-align: center; padding: 6px; }
+            .decision p { min-height: 20px; margin: 5px 0; font-size: 11px; }
+            .checks { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; text-align: left; font-size: 11px; }
+            .checks i { display: inline-block; width: 34px; height: 16px; border: 1px solid #111827; vertical-align: middle; margin-left: 6px; }
+            .signatures { display: flex; justify-content: space-between; margin-top: 22px; padding: 0 22px; text-transform: uppercase; font-size: 12px; }
+          </style>
+        </head>
+        <body>${bulletinsHtml}</body>
+      </html>
+    `;
+  };
+
+  const handlePrint = async () => {
+    const saved = await handleSaveAll();
+    if (!saved) return;
+
+    const previousFrame = document.getElementById('primary-bulletin-print-frame');
+    if (previousFrame) previousFrame.remove();
+
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'primary-bulletin-print-frame';
+    printFrame.title = 'Impression des bulletins';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.opacity = '0';
+    document.body.appendChild(printFrame);
+
+    const frameWindow = printFrame.contentWindow;
+    const frameDocument = frameWindow?.document;
+    if (!frameWindow || !frameDocument) {
+      printFrame.remove();
+      showError('Impossible de preparer l impression');
+      return;
     }
-  }
 
-  if (viewMode === 'entry') {
-    const selectedClass = primaryClasses.find(cls => cls.id === selectedClassId);
-    const currentStudent = primaryStudents.find(s => s.id === selectedStudentId);
-    
-    const handleCellEdit = (subject, month, value) => {
-      setBulletinDataMap(prev => ({
-        ...prev,
-        [selectedStudentId]: {
-          ...prev[selectedStudentId],
-          subjects: {
-            ...prev[selectedStudentId]?.subjects,
-            [subject]: {
-              ...prev[selectedStudentId]?.subjects?.[subject],
-              [month]: value
-            }
-          }
-        }
-      }));
-    };
+    frameDocument.open();
+    frameDocument.write(makePrintHtml());
+    frameDocument.close();
 
-    const handleSaveStudentBulletin = async () => {
-      try {
-        const studentData = bulletinDataMap[selectedStudentId];
-        if (studentData) {
-          await saveBulletin(studentData);
-          toast.success(`Bulletin de ${currentStudent?.first_name} ${currentStudent?.last_name} enregistré`);
-        }
-      } catch (error) {
-        toast.error('Erreur lors de l\'enregistrement du bulletin');
-      }
-    };
+    setTimeout(() => {
+      frameWindow.focus();
+      frameWindow.print();
+      setTimeout(() => printFrame.remove(), 1000);
+    }, 350);
+  };
 
-    const clampNote = (value) => {
-      const num = parseFloat(value);
-      if (isNaN(num)) return '';
-      return Math.min(Math.max(num, 0), 10).toString();
-    };
-    
+  const canPrint = classStudents.length > 0 && globalStats.completed === classStudents.length;
+  const loading = studentsLoading || classesLoading;
+
+  if (loading) {
     return (
-      <div className="space-y-6 fade-in">
-        {ToastComponent}
-        
-        <div className="flex items-center justify-between">
-          <div>
-            <Button variant="ghost" onClick={() => setViewMode('welcome')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux élèves
-            </Button>
-            <h1 className="text-3xl font-bold">
-              Bulletin - {currentStudent?.first_name} {currentStudent?.last_name}
-            </h1>
-            <p className="text-muted-foreground">
-              {selectedClass?.name} - {selectedClass?.level} - {academicYear}
-            </p>
-            <p className="text-sm text-blue-600 font-medium">
-              Mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => {
-              // Calculer et afficher le bulletin de l'élève
-              const studentData = bulletinDataMap[selectedStudentId];
-              if (studentData) {
-                // Préparer les données pour la visualisation
-                const subjectsData = SUBJECTS.map(subject => {
-                  const notes = MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || '').filter(note => note !== '');
-                  const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
-                  const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
-                  const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
-                  
-                  return {
-                    name: subject,
-                    notes: MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || ''),
-                    average,
-                    maxNote,
-                    minNote,
-                    appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
-                  };
-                });
-
-                const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
-                const generalAverage = subjectsWithAverage.length > 0 
-                  ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
-                  : 0;
-
-                const rank = calculateRank(generalAverage);
-                const classAverage = calculateClassAverage();
-
-                setViewingBulletin({
-                  student: currentStudent,
-                  class: selectedClass,
-                  academicYear,
-                  period: studentData.period || '1er trimestre',
-                  sequence: studentData.sequence || 'Séquence 1',
-                  subjects: subjectsData,
-                  generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
-                  rank,
-                  classAverage,
-                  appreciation: studentData.appreciation || '',
-                  generalAppreciation: getGeneralAppreciation(generalAverage)
-                });
-                
-                setIsViewDialogOpen(true);
-              }
-            }}>
-              <Eye className="mr-2 h-4 w-4" />
-              Visualiser
-            </Button>
-            <Button onClick={handleSaveStudentBulletin}>
-              <Save className="mr-2 h-4 w-4" />
-              Enregistrer
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => {
-                // Passer à l'élève suivant
-                const classStudents = primaryStudents
-                  .filter(s => s.class_id === selectedClassId)
-                  .sort((a, b) => a.last_name.localeCompare(b.last_name));
-                const currentIndex = classStudents.findIndex(s => s.id === selectedStudentId);
-                if (currentIndex < classStudents.length - 1) {
-                  setSelectedStudentId(classStudents[currentIndex + 1].id);
-                } else {
-                  // Retourner à la liste des élèves
-                  setViewMode('welcome');
-                }
-              }}
-            >
-              Élève suivant
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notes - {MONTHS.find(m => m.key === selectedMonthForClass)?.label}</CardTitle>
-                <CardDescription>
-                  Saisissez les notes pour le mois sélectionné
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {SUBJECTS.map((subject) => (
-                    <div key={subject} className="flex items-center gap-4 p-3 border rounded-lg hover:bg-gray-50">
-                      <div className="flex-1">
-                        <label className="font-medium text-sm">{subject}</label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Input
-                            type="text"
-                            value={bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] || ''}
-                            onChange={(e) => handleCellEdit(subject, selectedMonthForClass, clampNote(e.target.value))}
-                            className="w-24 text-center"
-                            placeholder="/10"
-                            maxLength={4}
-                          />
-                          <span className="text-sm text-muted-foreground">/10</span>
-                        </div>
-                      </div>
-                      
-                      {/* Indicateur de statut */}
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-muted-foreground">
-                          {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] ? 'Saisie' : 'En attente'}
-                        </div>
-                        {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] && (
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Statistiques du mois pour cet élève */}
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-semibold mb-2">Statistiques du mois</h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Notes saisies:</span>
-                      <span className="ml-2 font-medium">
-                        {SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{SUBJECTS.length}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Moyenne du mois:</span>
-                      <span className="ml-2 font-medium">
-                        {(() => {
-                          const notes = SUBJECTS
-                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
-                            .filter(n => n !== '' && n !== undefined);
-                          if (notes.length === 0) return '-';
-                          const avg = notes.reduce((sum, n) => sum + parseFloat(n), 0) / notes.length;
-                          return avg.toFixed(2);
-                        })()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Meilleure note:</span>
-                      <span className="ml-2 font-medium">
-                        {(() => {
-                          const notes = SUBJECTS
-                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
-                            .filter(n => n !== '' && n !== undefined)
-                            .map(n => parseFloat(n));
-                          if (notes.length === 0) return '-';
-                          return Math.max(...notes).toFixed(2);
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            {/* Informations de l'élève */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Informations de l'élève</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Nom complet</label>
-                  <p className="text-sm">{currentStudent?.first_name} {currentStudent?.last_name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Matricule</label>
-                  <p className="text-sm">{currentStudent?.matricule}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Classe</label>
-                  <p className="text-sm">{selectedClass?.name}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Progression */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Progression du mois</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Notes saisies:</span>
-                    <span className="font-medium">
-                      {SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{SUBJECTS.length}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${(SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length / SUBJECTS.length) * 100}%` 
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Informations du bulletin */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Informations du bulletin</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Période</label>
-                  <Input
-                    type="text"
-                    value={bulletinDataMap[selectedStudentId]?.period || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        period: e.target.value
-                      }
-                    }))}
-                    placeholder="Ex: 1er trimestre"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Séquence</label>
-                  <Input
-                    type="text"
-                    value={bulletinDataMap[selectedStudentId]?.sequence || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        sequence: e.target.value
-                      }
-                    }))}
-                    placeholder="Ex: Séquence 1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Appréciation générale</label>
-                  <textarea
-                    value={bulletinDataMap[selectedStudentId]?.appreciation || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        appreciation: e.target.value
-                      }
-                    }))}
-                    className="w-full min-h-[100px] p-3 border rounded-md resize-none text-sm"
-                    placeholder="Appréciation générale de l'élève..."
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+      <div className="flex min-h-[55vh] items-center justify-center">
+        <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#0066CC]" />
+        <span className="text-sm text-slate-600">Chargement des donnees...</span>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Dialog de visualisation du bulletin */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Visualisation du Bulletin</DialogTitle>
-          </DialogHeader>
+    <div className="space-y-5 fade-in">
+      {ToastComponent}
 
-          {viewingBulletin && (
-            <div className="py-2 space-y-6">
-              {/* En-tête du bulletin */}
-              <div className="text-center border-b pb-4">
-                <h1 className="text-2xl font-bold">BULLETIN SCOLAIRE</h1>
-                <p className="text-lg font-semibold">Établissement LA SAGESSE</p>
-                <p className="text-sm text-muted-foreground">Année scolaire {viewingBulletin.academicYear}</p>
-                <p className="text-sm text-muted-foreground">{viewingBulletin.period} - {viewingBulletin.sequence}</p>
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                Premier cycle - 3e a 6e
+              </div>
+              <h1 className="text-2xl font-bold tracking-normal">Bulletins mensuels</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-300">
+                Selectionnez une classe, choisissez le mois, renseignez toute la classe sur une seule grille, puis imprimez les bulletins par ordre alphabetique.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-white/10 p-2 text-center">
+              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+                <p className="text-xs text-slate-500">Classes</p>
+                <p className="text-xl font-bold">{primaryClasses.length}</p>
+              </div>
+              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+                <p className="text-xs text-slate-500">Eleves</p>
+                <p className="text-xl font-bold">{students.filter((student) => primaryClasses.some((cls) => String(cls.id) === String(student.class_id))).length}</p>
+              </div>
+              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+                <p className="text-xs text-slate-500">Mois</p>
+                <p className="text-xl font-bold">{MONTHS.length}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid border-b border-slate-200 bg-slate-50 md:grid-cols-3">
+          {[
+            { id: 'class', label: 'Classe', icon: School, done: Boolean(selectedClassId) },
+            { id: 'month', label: 'Mois', icon: CalendarDays, done: Boolean(selectedMonthKey) },
+            { id: 'entry', label: 'Saisie et impression', icon: FileText, done: globalStats.percent === 100 && classStudents.length > 0 },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            const active = step === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (item.id === 'class') setStep('class');
+                  if (item.id === 'month' && selectedClassId) setStep('month');
+                  if (item.id === 'entry' && selectedClassId && selectedMonthKey) setStep('entry');
+                }}
+                className={cn(
+                  'flex items-center justify-between border-b border-slate-200 px-5 py-4 text-left transition-colors md:border-b-0 md:border-r',
+                  active ? 'bg-white' : 'hover:bg-white/80',
+                  index === 2 && 'md:border-r-0'
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <span className={cn('flex h-9 w-9 items-center justify-center rounded-md', active ? 'bg-[#0066CC] text-white' : item.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600')}>
+                    {item.done && !active ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-950">{item.label}</span>
+                    <span className="text-xs text-slate-500">Etape {index + 1}</span>
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-5">
+          {step === 'class' && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Choisir la classe</h2>
+                  <p className="text-sm text-slate-500">Seules les classes de 3e, 4e, 5e et 6e sont affichees ici.</p>
+                </div>
+                <div className="w-full md:w-56">
+                  <label className="text-xs font-medium text-slate-600">Annee scolaire</label>
+                  <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="mt-1 h-10" />
+                </div>
               </div>
 
-              {/* Informations de l'élève */}
-              <div className="grid grid-cols-2 gap-4 border-b pb-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Informations de l'élève</h3>
-                  <p><strong>Nom:</strong> {viewingBulletin.student.first_name} {viewingBulletin.student.last_name}</p>
-                  <p><strong>Matricule:</strong> {viewingBulletin.student.matricule}</p>
-                  <p><strong>Classe:</strong> {viewingBulletin.class.name}</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Résultats</h3>
-                  <p><strong>Moyenne générale:</strong> <span className="text-lg font-bold text-blue-600">{viewingBulletin.generalAverage}/20</span></p>
-                  <p><strong>Rang:</strong> {viewingBulletin.rank}</p>
-                  <p><strong>Moyenne classe:</strong> {viewingBulletin.classAverage}/20</p>
-                </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {primaryClasses.map((cls) => (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedClassId(cls.id);
+                      setSelectedMonthKey('');
+                      setBulletins({});
+                      setStep('month');
+                    }}
+                    className="group rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#0066CC] hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase text-[#0066CC]">Niveau {extractLevel(cls) || '-'}</p>
+                        <h3 className="mt-1 text-lg font-bold text-slate-950">{cls.name}</h3>
+                        <p className="text-sm text-slate-500">{cls.level || 'Premier cycle'} - {cls.academic_year || academicYear}</p>
+                      </div>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-600 group-hover:bg-[#0066CC] group-hover:text-white">
+                        <Users className="h-5 w-5" />
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <span className="text-sm text-slate-500">Effectif</span>
+                      <strong className="text-slate-950">{classStatsById[cls.id] || 0} eleve(s)</strong>
+                    </div>
+                  </button>
+                ))}
               </div>
 
-              {/* Tableau des notes */}
+              {primaryClasses.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                  Aucune classe de 3e a 6e n'a ete trouvee.
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 'month' && (
+            <div className="space-y-4">
+              <Button variant="ghost" onClick={() => setStep('class')} className="px-0 text-slate-600">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Retour aux classes
+              </Button>
               <div>
-                <h3 className="font-semibold mb-4">Notes par matière</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="border border-gray-300 px-4 py-2 text-left">Matière</th>
-                        {MONTHS.map(month => (
-                          <th key={month.key} className="border border-gray-300 px-2 py-2 text-center text-sm">{month.label}</th>
-                        ))}
-                        <th className="border border-gray-300 px-2 py-2 text-center">Moyenne</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Max</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Min</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Appréciation</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewingBulletin.subjects.map((subject, index) => (
-                        <tr key={subject.name} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="border border-gray-300 px-4 py-2 font-medium">{subject.name}</td>
-                          {subject.notes.map((note, noteIndex) => (
-                            <td key={noteIndex} className="border border-gray-300 px-2 py-2 text-center">
-                              {note || '-'}
-                            </td>
-                          ))}
-                          <td className="border border-gray-300 px-2 py-2 text-center font-semibold">
-                            {subject.average || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            {subject.maxNote || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            {subject.minNote || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              subject.appreciation === 'Excellent' ? 'bg-green-100 text-green-800' :
-                              subject.appreciation === 'Très bien' ? 'bg-blue-100 text-blue-800' :
-                              subject.appreciation === 'Bien' ? 'bg-cyan-100 text-cyan-800' :
-                              subject.appreciation === 'Assez bien' ? 'bg-yellow-100 text-yellow-800' :
-                              subject.appreciation === 'Passable' ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {subject.appreciation || '-'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <h2 className="text-lg font-semibold text-slate-950">{selectedClass?.name}</h2>
+                <p className="text-sm text-slate-500">Choisissez le mois a renseigner pour toute la classe.</p>
               </div>
-
-              {/* Appréciations */}
-              <div className="space-y-4">
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">Appréciation générale du professeur</h3>
-                  <p className="text-sm italic">{viewingBulletin.appreciation || 'Aucune appréciation renseignée'}</p>
-                </div>
-                
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">Appréciation générale</h3>
-                  <p className="text-sm font-medium text-blue-600">{viewingBulletin.generalAppreciation}</p>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {MONTHS.map((month) => (
+                  <button
+                    key={month.key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonthKey(month.key);
+                      setStep('entry');
+                    }}
+                    className={cn(
+                      'rounded-lg border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
+                      selectedMonthKey === month.key ? 'border-[#0066CC] bg-blue-50' : 'border-slate-200 bg-white hover:border-[#0066CC]'
+                    )}
+                  >
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-950 text-white">
+                      <CalendarDays className="h-5 w-5" />
+                    </span>
+                    <h3 className="mt-4 font-bold text-slate-950">{month.label}</h3>
+                    <p className="text-sm text-slate-500">Composition mensuelle</p>
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Fermer
-            </Button>
-            <Button onClick={() => {
-              // Logique d'impression du bulletin
-              window.print();
-            }}>
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          {step === 'entry' && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <Button variant="ghost" onClick={() => setStep('month')} className="mb-2 px-0 text-slate-600">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Retour aux mois
+                  </Button>
+                  <h2 className="text-xl font-bold text-slate-950">{selectedClass?.name} - {selectedMonth?.label}</h2>
+                  <p className="text-sm text-slate-500">{classStudents.length} eleve(s), ordre alphabetique pour la saisie et l'impression.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={loadClassBulletins} disabled={loadingClassData || bulletinLoading}>
+                    {loadingClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    Recharger
+                  </Button>
+                  <Button variant="outline" onClick={handleSaveAll} disabled={saving || loadingClassData}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Enregistrer tout
+                  </Button>
+                  <Button onClick={handlePrint} disabled={saving || loadingClassData || classStudents.length === 0} className="bg-[#0066CC] hover:bg-[#005bb8]">
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimer la classe
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric icon={Users} label="Eleves" value={classStudents.length} />
+                <Metric icon={CheckCircle2} label="Bulletins complets" value={`${globalStats.completed}/${classStudents.length}`} tone="emerald" />
+                <Metric icon={BarChart3} label="Progression" value={`${globalStats.percent}%`} tone="blue" />
+                <Metric icon={AlertCircle} label="Moyenne classe" value={formatScore(globalStats.classAverage) || '-'} tone="amber" />
+              </div>
+
+              {!canPrint && classStudents.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Suggestion appliquee : l'impression reste disponible, mais la progression vous montre exactement ce qui manque avant une impression finale propre.
+                </div>
+              )}
+
+              <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+                <aside className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="relative mb-3">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un eleve..." className="pl-9" />
+                  </div>
+                  <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
+                    {visibleStudents.map((student) => {
+                      const completion = getCompletion(student.id);
+                      const active = String(activeStudentId) === String(student.id);
+                      return (
+                        <button
+                          key={student.id}
+                          type="button"
+                          onClick={() => setActiveStudentId(student.id)}
+                          className={cn(
+                            'w-full rounded-md border p-3 text-left transition',
+                            active ? 'border-[#0066CC] bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-950">{getStudentName(student)}</p>
+                              <p className="text-xs text-slate-500">{student.matricule || 'Sans matricule'}</p>
+                            </div>
+                            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', completion.complete ? 'bg-emerald-100 text-emerald-700' : completion.filled ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500')}>
+                              {completion.filled}/{completion.total}
+                            </span>
+                          </div>
+                          <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                            <div className="h-1.5 rounded-full bg-[#0066CC]" style={{ width: `${completion.percent}%` }} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+
+                <main className="rounded-lg border border-slate-200 bg-white">
+                  {loadingClassData ? (
+                    <div className="flex min-h-[420px] items-center justify-center">
+                      <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#0066CC]" />
+                      <span className="text-sm text-slate-600">Chargement des notes...</span>
+                    </div>
+                  ) : activeStudentId ? (
+                    <StudentEntry
+                      student={classStudents.find((student) => String(student.id) === String(activeStudentId))}
+                      bulletin={bulletins[activeStudentId]}
+                      selectedMonthKey={selectedMonthKey}
+                      selectedMonth={selectedMonth}
+                      rank={studentsWithRanks.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
+                      classSize={classStudents.length}
+                      classAverage={globalStats.classAverage}
+                      onChangeNote={(subject, value) => updateNote(activeStudentId, subject, value)}
+                      onChangeAppreciation={(value) => updateAppreciation(activeStudentId, value)}
+                    />
+                  ) : (
+                    <div className="p-8 text-center text-sm text-slate-500">Selectionnez un eleve pour commencer.</div>
+                  )}
+                </main>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value, tone = 'slate' }) {
+  const tones = {
+    slate: 'bg-slate-100 text-slate-700',
+    blue: 'bg-blue-100 text-blue-700',
+    emerald: 'bg-emerald-100 text-emerald-700',
+    amber: 'bg-amber-100 text-amber-700',
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-500">{label}</span>
+        <span className={cn('flex h-9 w-9 items-center justify-center rounded-md', tones[tone])}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function StudentEntry({
+  student,
+  bulletin,
+  selectedMonthKey,
+  selectedMonth,
+  rank,
+  classSize,
+  classAverage,
+  onChangeNote,
+  onChangeAppreciation,
+}) {
+  const notes = bulletin?.notes || emptyNoteGrid();
+  const monthValues = SUBJECTS.map((subject) => notes?.[subject]?.[selectedMonthKey] || '');
+  const monthAverage = average(monthValues);
+  const filled = monthValues.filter((value) => value !== '').length;
+
+  return (
+    <div>
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase text-[#0066CC]">{selectedMonth?.label}</p>
+            <h3 className="text-xl font-bold text-slate-950">{getStudentName(student)}</h3>
+            <p className="text-sm text-slate-500">{student?.matricule || 'Sans matricule'}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <MiniStat label="Saisies" value={`${filled}/${SUBJECTS.length}`} />
+            <MiniStat label="Moyenne" value={formatScore(monthAverage) || '-'} />
+            <MiniStat label="Rang" value={rank ? `${rank}/${classSize}` : '-'} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[1fr_300px]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-white">
+                <th className="w-[44%] px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">Matiere</th>
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">Note /10</th>
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">Etat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SUBJECTS.map((subject, index) => {
+                const value = notes?.[subject]?.[selectedMonthKey] || '';
+                return (
+                  <tr key={subject} className={cn('border-b border-slate-100', index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
+                    <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{subject}</td>
+                    <td className="px-4 py-2.5">
+                      <Input
+                        value={value}
+                        onChange={(event) => onChangeNote(subject, event.target.value)}
+                        inputMode="decimal"
+                        className="mx-auto h-9 w-24 text-center font-semibold"
+                        placeholder="/10"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={cn('inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold', value ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
+                        {value ? 'Saisie' : 'Vide'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <aside className="border-t border-slate-200 p-4 lg:border-l lg:border-t-0">
+          <div className="rounded-lg bg-slate-950 p-4 text-white">
+            <p className="text-xs text-slate-300">Apercu du mois</p>
+            <p className="mt-1 text-3xl font-bold">{formatScore(monthAverage) || '-'}</p>
+            <p className="text-sm text-slate-300">Moyenne personnelle /10</p>
+            <div className="mt-4 h-2 rounded-full bg-white/20">
+              <div className="h-2 rounded-full bg-amber-300" style={{ width: `${Math.round((filled / SUBJECTS.length) * 100)}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+              <span className="text-slate-500">Moyenne classe</span>
+              <strong>{formatScore(classAverage) || '-'}</strong>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+              <span className="text-slate-500">Note la plus haute</span>
+              <strong>{formatScore(maxFinite(monthValues)) || '-'}</strong>
+            </div>
+          </div>
+
+          <label className="mt-5 block text-sm font-semibold text-slate-900">Observations</label>
+          <textarea
+            value={bulletin?.appreciation || ''}
+            onChange={(event) => onChangeAppreciation(event.target.value)}
+            className="mt-2 min-h-[130px] w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-[#0066CC]"
+            placeholder="Observation generale pour le bulletin imprime..."
+          />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-2">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="font-bold text-slate-950">{value}</p>
+    </div>
   );
 }

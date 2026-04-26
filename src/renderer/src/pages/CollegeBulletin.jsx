@@ -1,1159 +1,966 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
-import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2, Calendar, CheckCircle, AlertCircle, TrendingUp, Save, Keyboard } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  BarChart3,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Printer,
+  Save,
+  School,
+  Search,
+  Sparkles,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-const MONTHS = [
-  { key: 'oct', label: 'OCT.' },
-  { key: 'nov', label: 'NOV.' },
-  { key: 'dec', label: 'DEC.' },
-  { key: 'jan', label: 'JANV.' },
-  { key: 'feb', label: 'FEV.' },
-  { key: 'mar', label: 'MAR.' },
-  { key: 'apr', label: 'AVR.' },
-  { key: 'may', label: 'MAI.' },
-  { key: 'jun', label: 'JUIN' },
+const TERMS = [
+  { key: 't1', label: 'Composition du 1er trimestre', short: '1er trim.' },
+  { key: 't2', label: 'Composition du 2e trimestre', short: '2e trim.' },
+  { key: 't3', label: 'Composition du 3e trimestre', short: '3e trim.' },
 ];
 
-const COLLEGE_SUBJECTS = [
-  'Rédaction',
-  'Dictée et questions',
-  'Mathématiques',
-  'Physique-Chimie',
-  'Anglais',
-  'Bio',
-  'Hist-Géo',
-  'ECM',
-  'EPS',
-  'Musique',
-  'EF',
-  'Dessin',
-  'Lecture',
-  'Récitation',
-  'Conduite',
+const SUBJECTS = [
+  { name: 'Redaction', coeff: 2 },
+  { name: 'Dictee et questions', coeff: 2 },
+  { name: 'Mathematiques', coeff: 3 },
+  { name: 'Physique-Chimie', coeff: 2 },
+  { name: 'Anglais', coeff: 2 },
+  { name: 'Bio', coeff: 2 },
+  { name: 'Hist-Geo', coeff: 2 },
+  { name: 'ECM', coeff: 1 },
+  { name: 'EPS', coeff: 1 },
+  { name: 'Musique', coeff: 1 },
+  { name: 'EF', coeff: 1 },
+  { name: 'Dessin', coeff: 1 },
+  { name: 'Lecture', coeff: 1 },
+  { name: 'Recitation', coeff: 1 },
+  { name: 'Conduite', coeff: 1 },
 ];
 
-function clampNote(value) {
-  if (value === '' || value === null || value === undefined) return '';
-  const n = Number(String(value).replace(',', '.'));
-  if (Number.isNaN(n)) return '';
-  return Math.min(10, Math.max(0, n));
+function makeDefaultAcademicYear() {
+  const month = new Date().getMonth();
+  const year = new Date().getFullYear();
+  const start = month >= 7 ? year : year - 1;
+  return `${start}-${start + 1}`;
 }
 
-function formatNumber(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return '';
-  return Number(n).toFixed(2);
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function extractLevel(cls) {
+  const raw = normalizeText(`${cls?.level || ''} ${cls?.name || ''}`);
+  const match = raw.match(/\b([7-9])\s*(e|eme|annee)?\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function isCollegeClass(cls) {
+  const level = extractLevel(cls);
+  return level >= 7 && level <= 9;
+}
+
+function sortStudents(a, b) {
+  const last = String(a.last_name || '').localeCompare(String(b.last_name || ''), 'fr', { sensitivity: 'base' });
+  if (last !== 0) return last;
+  return String(a.first_name || '').localeCompare(String(b.first_name || ''), 'fr', { sensitivity: 'base' });
+}
+
+function getStudentName(student) {
+  return `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Eleve';
+}
+
+function emptyRows() {
+  return SUBJECTS.reduce((acc, subject) => {
+    acc[subject.name] = {
+      note_classe: '',
+      note_compo: '',
+      coeff: String(subject.coeff),
+      appreciation: '',
+    };
+    return acc;
+  }, {});
+}
+
+function sanitizeNote(value, max = 20) {
+  const cleaned = String(value || '').replace(',', '.').replace(/[^\d.]/g, '');
+  if (cleaned === '') return '';
+  const parts = cleaned.split('.');
+  const numeric = Number(parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
+  if (!Number.isFinite(numeric)) return '';
+  return String(Math.min(max, Math.max(0, numeric)));
+}
+
+function toNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(String(value).replace(',', '.'));
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatScore(value, digits = 2) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '';
+  return Number(value).toFixed(digits);
+}
+
+function getAppreciation(avg) {
+  if (avg === null) return '';
+  if (avg >= 16) return 'Excellent';
+  if (avg >= 14) return 'Tres bien';
+  if (avg >= 12) return 'Bien';
+  if (avg >= 10) return 'Assez bien';
+  if (avg >= 8) return 'Passable';
+  return 'Insuffisant';
+}
+
+function computeSubject(row) {
+  const noteClasse = toNumber(row?.note_classe);
+  const noteCompo = toNumber(row?.note_compo);
+  const coeff = toNumber(row?.coeff) || 1;
+  const compX2 = noteCompo === null ? null : noteCompo * 2;
+  const moyenne = noteClasse === null || compX2 === null ? null : (noteClasse + compX2) / 3;
+  const notesCoeff = moyenne === null ? null : moyenne * coeff;
+  return {
+    noteClasse,
+    noteCompo,
+    compX2,
+    moyenne,
+    coeff,
+    notesCoeff,
+    appreciation: row?.appreciation || getAppreciation(moyenne),
+  };
+}
+
+function computeStudent(data) {
+  const rows = SUBJECTS.map((subject) => ({
+    subject: subject.name,
+    ...computeSubject(data?.notes?.[subject.name] || {}),
+  }));
+  const totalCoeff = rows.reduce((sum, row) => sum + row.coeff, 0);
+  const totalNotesCoeff = rows.reduce((sum, row) => sum + (row.notesCoeff || 0), 0);
+  const moyenne = totalCoeff > 0 ? totalNotesCoeff / totalCoeff : null;
+  const filled = rows.filter((row) => row.noteClasse !== null && row.noteCompo !== null).length;
+  return {
+    rows,
+    filled,
+    total: SUBJECTS.length,
+    percent: Math.round((filled / SUBJECTS.length) * 100),
+    complete: filled === SUBJECTS.length,
+    totalCoeff,
+    totalNotesCoeff,
+    moyenne,
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 export default function CollegeBulletin() {
-  const { students } = useStudents();
-  const { classes } = useClasses();
+  const { students, loading: studentsLoading } = useStudents();
+  const { classes, loading: classesLoading } = useClasses();
   const { toast, ToastComponent } = useToast();
+  const { success: showSuccess, error: showError } = toast;
   const { loading: bulletinLoading, getBulletin, saveBulletin } = useBulletin();
 
-  const defaultAcademicYear = useMemo(() => {
-    const y = new Date().getFullYear();
-    return `${y}-${y + 1}`;
-  }, []);
-
-  const [viewMode, setViewMode] = useState('welcome'); // 'welcome', 'entry', 'generate'
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
-  const [studentSearchTerm, setStudentSearchTerm] = useState('');
-  const [studentFilters, setStudentFilters] = useState({
-    class_id: 'all',
-    academic_year: 'all',
-  });
-
-  const [bulletinData, setBulletinData] = useState({
-    student_id: '',
-    academic_year: '',
-    period: '',
-    sequence: '',
-    appreciation: '',
-    subjects: {},
-  });
-
-  // État pour gérer les données de bulletin de chaque élève
-  const [bulletinDataMap, setBulletinDataMap] = useState({});
-
-  const [editingCell, setEditingCell] = useState(null);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [viewingBulletin, setViewingBulletin] = useState(null);
-  const [noteInputMode, setNoteInputMode] = useState('table'); // 'table' ou 'monthly'
-  const [selectedMonth, setSelectedMonth] = useState(MONTHS[0].key);
-  
-  // États pour la navigation par classe
-  const [selectedClassId, setSelectedClassId] = useState(null);
-  const [selectedMonthForClass, setSelectedMonthForClass] = useState(null);
-  const [navigationStep, setNavigationStep] = useState('class'); // 'class', 'month', 'students', 'bulletin'
+  const [academicYear, setAcademicYear] = useState(makeDefaultAcademicYear);
+  const [step, setStep] = useState('class');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedTermKey, setSelectedTermKey] = useState('');
+  const [query, setQuery] = useState('');
+  const [bulletins, setBulletins] = useState({});
+  const [loadingClassData, setLoadingClassData] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [activeStudentId, setActiveStudentId] = useState('');
 
   const collegeClasses = useMemo(() => {
-    return classes.filter(cls => {
-      const level = String(cls.level || '').trim().toLowerCase();
-      return ['7ème année', '8ème année', '9ème année'].includes(level);
+    return classes.filter(isCollegeClass).sort((a, b) => {
+      const levelDelta = (extractLevel(a) || 0) - (extractLevel(b) || 0);
+      if (levelDelta !== 0) return levelDelta;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
     });
   }, [classes]);
 
-  const collegeStudents = useMemo(() => {
-    return students.filter(student => {
-      const studentClass = collegeClasses.find(cls => cls.id === student.class_id);
-      return studentClass !== undefined;
+  const selectedClass = useMemo(
+    () => collegeClasses.find((cls) => String(cls.id) === String(selectedClassId)),
+    [collegeClasses, selectedClassId]
+  );
+
+  const selectedTerm = useMemo(
+    () => TERMS.find((term) => term.key === selectedTermKey),
+    [selectedTermKey]
+  );
+
+  const classStudents = useMemo(() => {
+    return students
+      .filter((student) => String(student.class_id || '') === String(selectedClassId || ''))
+      .sort(sortStudents);
+  }, [students, selectedClassId]);
+
+  const visibleStudents = useMemo(() => {
+    const needle = normalizeText(query);
+    if (!needle) return classStudents;
+    return classStudents.filter((student) => normalizeText(`${student.first_name} ${student.last_name} ${student.matricule}`).includes(needle));
+  }, [classStudents, query]);
+
+  const classStatsById = useMemo(() => {
+    return collegeClasses.reduce((acc, cls) => {
+      acc[cls.id] = students.filter((student) => String(student.class_id || '') === String(cls.id)).length;
+      return acc;
+    }, {});
+  }, [collegeClasses, students]);
+
+  const computedByStudent = useMemo(() => {
+    return Object.fromEntries(classStudents.map((student) => [student.id, computeStudent(bulletins[student.id])]));
+  }, [bulletins, classStudents]);
+
+  const rankedStudents = useMemo(() => {
+    const rows = classStudents.map((student) => ({
+      student,
+      moyenne: computedByStudent[student.id]?.moyenne,
+    }));
+    const ranked = rows
+      .filter((row) => row.moyenne !== null && row.moyenne !== undefined)
+      .sort((a, b) => b.moyenne - a.moyenne);
+    const rankById = {};
+    ranked.forEach((row, index) => {
+      rankById[row.student.id] = index + 1;
     });
-  }, [students, collegeClasses]);
+    return rows.map((row) => ({ ...row, rank: rankById[row.student.id] || '' }));
+  }, [classStudents, computedByStudent]);
 
-  const filteredStudents = useMemo(() => {
-    return collegeStudents.filter(student => {
-      const q = (studentSearchTerm || '').trim().toLowerCase();
-      const matchSearch = !q || 
-        (student.first_name || '').toLowerCase().includes(q) || 
-        (student.last_name || '').toLowerCase().includes(q) ||
-        (student.matricule || '').toLowerCase().includes(q);
+  const classExtremes = useMemo(() => {
+    const averages = classStudents
+      .map((student) => computedByStudent[student.id]?.moyenne)
+      .filter((value) => value !== null && value !== undefined && Number.isFinite(value));
+    if (!averages.length) return { best: null, last: null };
+    return {
+      best: Math.max(...averages),
+      last: Math.min(...averages),
+    };
+  }, [classStudents, computedByStudent]);
 
-      const matchClass = studentFilters.class_id === 'all' || String(student.class_id || '') === String(studentFilters.class_id);
-      const studentClass = collegeClasses.find(cls => cls.id === student.class_id);
-      const matchYear = studentFilters.academic_year === 'all' || (studentClass?.academic_year || '') === studentFilters.academic_year;
-
-      return matchSearch && matchClass && matchYear;
-    });
-  }, [collegeStudents, studentSearchTerm, studentFilters, collegeClasses]);
-
-  useEffect(() => {
-    if (selectedStudentId && academicYear) {
-      loadBulletinData();
-    }
-  }, [selectedStudentId, academicYear]);
-
-  const loadBulletinData = useCallback(async () => {
-    try {
-      const result = await getBulletin(selectedStudentId, academicYear);
-      if (result.success && result.data) {
-        setBulletinData(result.data);
-      } else {
-        // Initialize empty bulletin data
-        setBulletinData({
-          student_id: selectedStudentId,
-          academic_year: academicYear,
-          period: '',
-          sequence: '',
-          appreciation: '',
-          subjects: {},
-        });
-      }
-    } catch (error) {
-      console.error('Erreur chargement bulletin:', error);
-      toast.error('Erreur lors du chargement du bulletin');
-    }
-  }, [selectedStudentId, academicYear, getBulletin, toast]);
-
-  const handleStudentSelect = (studentId) => {
-    setSelectedStudentId(studentId);
-    setViewMode('entry');
-  };
-
-  const handleSaveBulletin = async () => {
-    try {
-      const result = await saveBulletin(bulletinData);
-      if (result.success) {
-        toast.success('Bulletin enregistré avec succès !');
-      } else {
-        toast.error(result.error || 'Erreur lors de l\'enregistrement');
-      }
-    } catch (error) {
-      console.error('Erreur sauvegarde bulletin:', error);
-      toast.error('Une erreur est survenue');
-    }
-  };
-
-  const handleViewBulletin = () => {
-    if (!selectedStudent || !selectedClass) {
-      return;
-    }
-    
-    // Calculer les moyennes et statistiques
-    const subjectsData = COLLEGE_SUBJECTS.map(subject => {
-      const notes = MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || '').filter(note => note !== '');
-      
-      const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
-      
-      const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
-      const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
-      
-      const result = {
-        name: subject,
-        notes: MONTHS.map(month => bulletinData.subjects[subject]?.[month.key] || ''),
-        average,
-        maxNote,
-        minNote,
-        appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
-      };
-      
-      return result;
-    });
-
-    const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
-    
-    const generalAverage = subjectsWithAverage.length > 0 
-      ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
-      : 0;
-
-    const rank = calculateRank(generalAverage);
-    const classAverage = calculateClassAverage();
-    
-    const bulletinDataForView = {
-      student: selectedStudent,
-      class: selectedClass,
-      academicYear,
-      period: bulletinData.period || '1er trimestre',
-      sequence: bulletinData.sequence || 'Séquence 1',
-      subjects: subjectsData,
-      generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
-      rank,
+  const globalStats = useMemo(() => {
+    const completed = classStudents.filter((student) => computedByStudent[student.id]?.complete).length;
+    const filled = classStudents.reduce((sum, student) => sum + (computedByStudent[student.id]?.filled || 0), 0);
+    const total = classStudents.length * SUBJECTS.length;
+    const averages = classStudents
+      .map((student) => computedByStudent[student.id]?.moyenne)
+      .filter((value) => value !== null && value !== undefined);
+    const classAverage = averages.length ? averages.reduce((sum, value) => sum + value, 0) / averages.length : null;
+    return {
+      completed,
+      filled,
+      total,
+      percent: total ? Math.round((filled / total) * 100) : 0,
       classAverage,
-      appreciation: bulletinData.appreciation || '',
-      generalAppreciation: getGeneralAppreciation(generalAverage)
     };
-    
-    setViewingBulletin(bulletinDataForView);
-    setIsViewDialogOpen(true);
-  };
+  }, [classStudents, computedByStudent]);
 
-  const getSubjectAppreciation = (average) => {
-    if (average >= 16) return 'Excellent';
-    if (average >= 14) return 'Très bien';
-    if (average >= 12) return 'Bien';
-    if (average >= 10) return 'Assez bien';
-    if (average >= 8) return 'Passable';
-    return 'Insuffisant';
-  };
-
-  const getGeneralAppreciation = (average) => {
-    if (average >= 16) return 'Excellent travail, continuez ainsi!';
-    if (average >= 14) return 'Très bon travail, félicitations!';
-    if (average >= 12) return 'Bon travail, continuez vos efforts!';
-    if (average >= 10) return 'Assez bon travail, room for improvement!';
-    if (average >= 8) return 'Travail acceptable, plus d\'efforts nécessaires';
-    return 'Travail insuffisant, beaucoup d\'efforts requis';
-  };
-
-  const calculateRank = (average) => {
-    // Simuler le calcul de rang (à remplacer avec la vraie logique)
-    return `${Math.floor(Math.random() * 20) + 1}/${Math.floor(Math.random() * 10) + 20}`;
-  };
-
-  const calculateClassAverage = () => {
-    // Simuler la moyenne de classe (à remplacer avec la vraie logique)
-    return (Math.random() * 2 + 12).toFixed(2);
-  };
-
-  // Fonctions pour le suivi de progression
-  const getStudentCompletionStatus = (studentId) => {
-    const studentBulletin = bulletinDataMap[studentId] || {};
-    const notesCount = COLLEGE_SUBJECTS.filter(subject => 
-      studentBulletin.subjects?.[subject]?.[selectedMonthForClass] && 
-      studentBulletin.subjects[subject][selectedMonthForClass] !== ''
-    ).length;
-    
-    let status = 'none';
-    if (notesCount === COLLEGE_SUBJECTS.length) {
-      status = 'complete';
-    } else if (notesCount > 0) {
-      status = 'partial';
-    }
-    
-    return { status, notesCount };
-  };
-
-  const getCompletedStudentsCount = () => {
-    const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-    const classStudents = collegeStudents.filter(s => s.class_id === selectedClassId);
-    
-    return classStudents.filter(student => {
-      const status = getStudentCompletionStatus(student.id);
-      return status.status === 'complete';
-    }).length;
-  };
-
-  const isAllStudentsCompleted = () => {
-    const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-    const classStudents = collegeStudents.filter(s => s.class_id === selectedClassId);
-    
-    return classStudents.every(student => {
-      const status = getStudentCompletionStatus(student.id);
-      return status.status === 'complete';
-    });
-  };
-
-  const handlePrintClassBulletins = async () => {
-    if (!isAllStudentsCompleted()) {
-      toast.error('Tous les élèves doivent avoir leurs notes complètes avant d\'imprimer');
-      return;
-    }
-
+  const loadClassBulletins = useCallback(async () => {
+    if (!selectedClassId || !academicYear) return;
+    setLoadingClassData(true);
     try {
-      const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-      const classStudents = collegeStudents
-        .filter(s => s.class_id === selectedClassId)
-        .sort((a, b) => a.last_name.localeCompare(b.last_name));
-
-      // Générer le HTML pour tous les bulletins du mois
-      let allBulletinsHTML = `
-        <html>
-          <head>
-            <title>Bulletins de ${selectedClass?.name} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              .bulletin { page-break-after: always; margin-bottom: 30px; }
-              .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
-              .student-info { margin: 20px 0; }
-              .grades-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-              .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-              .grades-table th { background-color: #f2f2f2; }
-              .footer { margin-top: 30px; text-align: center; }
-            </style>
-          </head>
-          <body>
-      `;
-
-      for (const student of classStudents) {
-        const studentBulletinData = await getBulletin(student.id, academicYear);
-        const bulletinHTML = generateClassBulletinHTML(student, studentBulletinData.data);
-        allBulletinsHTML += bulletinHTML;
-      }
-
-      allBulletinsHTML += `
-          </body>
-        </html>
-      `;
-
-      // Ouvrir une nouvelle fenêtre avec tous les bulletins
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(allBulletinsHTML);
-      printWindow.document.close();
-      
-      // Attendre un peu avant d'imprimer
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 1000);
-
-      toast.success(`Bulletins de ${classStudents.length} élève(s) pour ${MONTHS.find(m => m.key === selectedMonthForClass)?.label} générés avec succès !`);
-    } catch (error) {
-      console.error('Erreur lors de la génération des bulletins:', error);
-      toast.error('Erreur lors de la génération des bulletins');
-    }
-  };
-
-  const generateClassBulletinHTML = (student, bulletinData) => {
-    const selectedClass = collegeClasses.find(c => c.id === selectedClassId);
-    
-    return `
-      <div class="bulletin">
-        <div class="header">
-          <h1>BULLETIN SCOLAIRE</h1>
-          <h2>Établissement LA SAGESSE</h2>
-          <p>Année scolaire ${academicYear}</p>
-          <p>${bulletinData?.period || '1er trimestre'} - ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</p>
-        </div>
-        
-        <div class="student-info">
-          <h3>Informations de l'élève</h3>
-          <p><strong>Nom:</strong> ${student.first_name} ${student.last_name}</p>
-          <p><strong>Matricule:</strong> ${student.matricule}</p>
-          <p><strong>Classe:</strong> ${selectedClass?.name}</p>
-        </div>
-        
-        <table class="grades-table">
-          <thead>
-            <tr>
-              <th style="text-align: left;">Matière</th>
-              <th>Note du ${MONTHS.find(m => m.key === selectedMonthForClass)?.label}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${COLLEGE_SUBJECTS.map(subject => {
-              const note = bulletinData?.subjects?.[subject]?.[selectedMonthForClass] || '-';
-              
-              return `
-                <tr>
-                  <td style="text-align: left;">${subject}</td>
-                  <td><strong>${note}</strong></td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-        
-        <div class="footer">
-          <h3>Appréciation générale</h3>
-          <p>${bulletinData?.appreciation || 'Aucune appréciation renseignée'}</p>
-          <p style="margin-top: 20px;">
-            <em>Fait à ${new Date().toLocaleDateString()}, le ${new Date().toLocaleDateString()}</em>
-          </p>
-        </div>
-      </div>
-    `;
-  };
-
-  const selectedStudent = collegeStudents.find(s => s.id === selectedStudentId);
-  const selectedClass = collegeClasses.find(c => c.id === selectedStudent?.class_id);
-
-  // Support des raccourcis clavier
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key.toLowerCase()) {
-          case 's':
-            e.preventDefault();
-            handleSaveBulletin();
-            break;
-          case 'v':
-            e.preventDefault();
-            handleViewBulletin();
-            break;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveBulletin, handleViewBulletin]);
-
-  if (viewMode === 'welcome') {
-    if (navigationStep === 'class') {
-      // Vue de sélection de classe
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="text-center py-12">
-            <div className="mx-auto w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mb-6">
-              <FileText className="h-12 w-12 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">Bulletins du Second Cycle</h1>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Sélectionnez une classe pour gérer les bulletins des élèves du second cycle (7e à 9e année)
-            </p>
-            
-            <div className="max-w-4xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {collegeClasses.map((cls) => (
-                  <Card 
-                    key={cls.id} 
-                    className="hover:shadow-lg transition-all cursor-pointer hover:scale-105 border-2 hover:border-purple-300"
-                    onClick={() => {
-                      setSelectedClassId(cls.id);
-                      setNavigationStep('month');
-                    }}
-                  >
-                    <CardContent className="p-6 text-center">
-                      <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Users className="h-8 w-8 text-purple-600" />
-                      </div>
-                      <h3 className="font-bold text-lg mb-2">{cls.name}</h3>
-                      <p className="text-muted-foreground mb-2">{cls.level}</p>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p>Année: {cls.academic_year}</p>
-                        <p>Capacité: {cls.max_students} élèves</p>
-                        <p className="font-medium text-purple-600">
-                          {collegeStudents.filter(s => s.class_id === cls.id).length} élèves inscrits
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              
-              {collegeClasses.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Aucune classe de second cycle trouvée</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    } else if (navigationStep === 'month') {
-      // Vue de sélection du mois pour la classe
-      const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-      
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setNavigationStep('class')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux classes
-            </Button>
-            <h1 className="text-3xl font-bold">
-              {selectedClass?.name} - {selectedClass?.level}
-            </h1>
-            <div></div>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-6">
-            <div className="text-center mb-6">
-              <h3 className="font-semibold text-lg mb-2">Sélectionnez le mois du bulletin</h3>
-              <p className="text-muted-foreground">
-                Choisissez le mois pour lequel vous souhaitez saisir les notes des bulletins
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              {MONTHS.map((month) => (
-                <Card 
-                  key={month.key}
-                  className={`cursor-pointer transition-all hover:shadow-md hover:scale-105 ${
-                    selectedMonthForClass === month.key 
-                      ? 'border-purple-500 bg-purple-50' 
-                      : 'hover:border-purple-300'
-                  }`}
-                  onClick={() => {
-                    setSelectedMonthForClass(month.key);
-                    setNavigationStep('students');
-                  }}
-                >
-                  <CardContent className="p-4 text-center">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${
-                      selectedMonthForClass === month.key 
-                        ? 'bg-purple-600 text-white' 
-                        : 'bg-purple-100 text-purple-600'
-                    }`}>
-                      <Calendar className="h-6 w-6" />
-                    </div>
-                    <h4 className="font-semibold">{month.label}</h4>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    } else if (navigationStep === 'students') {
-      // Vue de sélection des élèves dans la classe
-      const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-      const classStudents = collegeStudents
-        .filter(s => s.class_id === selectedClassId)
-        .sort((a, b) => a.last_name.localeCompare(b.last_name)); // Tri alphabétique
-      
-      return (
-        <div className="space-y-6 fade-in">
-          {ToastComponent}
-          
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setNavigationStep('month')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux mois
-            </Button>
-            <div className="text-center">
-              <h1 className="text-3xl font-bold">
-                {selectedClass?.name} - {selectedClass?.level}
-              </h1>
-              <p className="text-muted-foreground">
-                Bulletin du mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
-              </p>
-            </div>
-            <Button 
-              className="bg-purple-600 hover:bg-purple-700"
-              disabled={!isAllStudentsCompleted()}
-              onClick={() => handlePrintClassBulletins()}
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer la classe
-            </Button>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Élèves de la classe</h3>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    Notes complètes
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    Notes partielles
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    Aucune note
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Progression globale</div>
-                <div className="text-lg font-semibold">
-                  {getCompletedStudentsCount()}/{classStudents.length} élèves
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classStudents.map((student) => {
-                const completionStatus = getStudentCompletionStatus(student.id);
-                
-                return (
-                  <Card 
-                    key={student.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      completionStatus === 'complete' 
-                        ? 'border-green-500 bg-green-50' 
-                        : completionStatus === 'partial'
-                        ? 'border-yellow-500 bg-yellow-50'
-                        : 'border-red-500 bg-red-50'
-                    }`}
-                    onClick={() => {
-                      setSelectedStudentId(student.id);
-                      setViewMode('entry');
-                    }}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            completionStatus === 'complete' 
-                              ? 'bg-green-600 text-white' 
-                              : completionStatus === 'partial'
-                              ? 'bg-yellow-600 text-white'
-                              : 'bg-red-600 text-white'
-                          }`}>
-                            {completionStatus === 'complete' ? (
-                              <CheckCircle className="h-5 w-5" />
-                            ) : completionStatus === 'partial' ? (
-                              <AlertCircle className="h-5 w-5" />
-                            ) : (
-                              <X className="h-5 w-5" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium">{student.first_name} {student.last_name}</p>
-                            <p className="text-sm text-muted-foreground">{student.matricule}</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span>Progression:</span>
-                          <span className="font-medium">{completionStatus.notesCount}/{COLLEGE_SUBJECTS.length} notes</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              completionStatus === 'complete' ? 'bg-green-500' : 
-                              completionStatus === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${(completionStatus.notesCount / COLLEGE_SUBJECTS.length) * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-center text-muted-foreground">
-                          {completionStatus === 'complete' ? 'Complet' : 
-                           completionStatus === 'partial' ? 'En cours' : 'Non commencé'}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  // Charger les données du bulletin de l'élève actuel
-  useEffect(() => {
-    if (selectedStudentId && selectedMonthForClass && viewMode === 'entry') {
-      loadStudentBulletinData(selectedStudentId);
-    }
-  }, [selectedStudentId, selectedMonthForClass, viewMode]);
-
-  const loadStudentBulletinData = async (studentId) => {
-    try {
-      const result = await getBulletin(studentId, academicYear);
-      if (result.success && result.data) {
-        setBulletinDataMap(prev => ({
-          ...prev,
-          [studentId]: result.data
-        }));
-      } else {
-        // Initialiser les données si elles n'existent pas
-        setBulletinDataMap(prev => ({
-          ...prev,
-          [studentId]: {
-            student_id: studentId,
-            academic_year: academicYear,
-            period: '',
-            sequence: '',
-            appreciation: '',
-            subjects: {}
+      const entries = await Promise.all(
+        classStudents.map(async (student) => {
+          const data = await getBulletin(student.id, academicYear);
+          let payload = {};
+          try {
+            payload = data?.meta?.data_json ? JSON.parse(data.meta.data_json) : {};
+          } catch {
+            payload = {};
           }
-        }));
-      }
+          const termData = payload?.terms?.[selectedTermKey] || {};
+          return [
+            student.id,
+            {
+              notes: { ...emptyRows(), ...(termData.notes || {}) },
+              decision: termData.decision || payload.decision || data?.meta?.decision || '',
+              observation: termData.observation || data?.meta?.observations_generales || '',
+              moyenne1: termData.moyenne1 || '',
+              moyenneDernier: termData.moyenneDernier || '',
+            },
+          ];
+        })
+      );
+      setBulletins(Object.fromEntries(entries));
+      setActiveStudentId(classStudents[0]?.id || '');
     } catch (error) {
-      console.error('Erreur lors du chargement des données du bulletin:', error);
+      console.error('Erreur chargement bulletins second cycle:', error);
+      showError('Impossible de charger les bulletins de cette classe');
+    } finally {
+      setLoadingClassData(false);
     }
-  };
+  }, [academicYear, classStudents, getBulletin, selectedClassId, selectedTermKey, showError]);
 
-  const handleCellEdit = (subject, month, value) => {
-    setBulletinDataMap(prev => ({
+  useEffect(() => {
+    if (step === 'entry') {
+      loadClassBulletins();
+    }
+  }, [loadClassBulletins, step]);
+
+  const updateRow = (studentId, subject, field, value) => {
+    setBulletins((prev) => ({
       ...prev,
-      [selectedStudentId]: {
-        ...prev[selectedStudentId],
-        subjects: {
-          ...prev[selectedStudentId]?.subjects,
+      [studentId]: {
+        ...prev[studentId],
+        notes: {
+          ...(prev[studentId]?.notes || emptyRows()),
           [subject]: {
-            ...prev[selectedStudentId]?.subjects?.[subject],
-            [month]: value
-          }
-        }
-      }
+            ...((prev[studentId]?.notes || emptyRows())[subject] || {}),
+            [field]: field === 'appreciation' ? value : sanitizeNote(value, field === 'coeff' ? 20 : 20),
+          },
+        },
+      },
     }));
   };
 
-  const handleSaveStudentBulletin = async () => {
+  const updateMeta = (studentId, field, value) => {
+    setBulletins((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveOneStudent = async (student) => {
+    const current = bulletins[student.id] || { notes: emptyRows() };
+    const rank = rankedStudents.find((row) => row.student.id === student.id)?.rank || '';
+    const previous = await getBulletin(student.id, academicYear);
+    let previousPayload = {};
     try {
-      const studentData = bulletinDataMap[selectedStudentId];
-      if (studentData) {
-        await saveBulletin(studentData);
-        toast.success(`Bulletin de ${currentStudent?.first_name} ${currentStudent?.last_name} enregistré`);
+      previousPayload = previous?.meta?.data_json ? JSON.parse(previous.meta.data_json) : {};
+    } catch {
+      previousPayload = {};
+    }
+    const nextPayload = {
+      ...previousPayload,
+      terms: {
+        ...(previousPayload.terms || {}),
+        [selectedTermKey]: {
+          label: selectedTerm?.label || '',
+          notes: current.notes || emptyRows(),
+          decision: current.decision || '',
+          observation: current.observation || '',
+          moyenne1: current.moyenne1 || '',
+          moyenneDernier: current.moyenneDernier || '',
+        },
+      },
+    };
+    const result = await saveBulletin(student.id, academicYear, {
+      notes: [],
+      meta: {
+        bulletin_type: 'college',
+        rang: rank ? `${rank}/${classStudents.length}` : '',
+        decision: current.decision || '',
+        observations_generales: current.observation || '',
+        data_json: JSON.stringify(nextPayload),
+      },
+    });
+    if (!result?.success) throw new Error(result?.error || 'Erreur sauvegarde bulletin');
+  };
+
+  const handleSaveAll = async () => {
+    if (!classStudents.length) return false;
+    setSaving(true);
+    try {
+      for (const student of classStudents) {
+        await saveOneStudent(student);
       }
+      showSuccess('Bulletins du second cycle enregistres');
+      return true;
     } catch (error) {
-      toast.error('Erreur lors de l\'enregistrement du bulletin');
+      console.error('Erreur sauvegarde bulletins second cycle:', error);
+      showError(error?.message || 'Erreur lors de la sauvegarde');
+      return false;
+    } finally {
+      setSaving(false);
     }
   };
 
-  const clampNote = (value) => {
-    const num = parseFloat(value);
-    if (isNaN(num)) return '';
-    return Math.min(Math.max(num, 0), 10).toString();
+  const makePrintHtml = () => {
+    const className = `${selectedClass?.name || ''} ${selectedClass?.level || ''}`.trim();
+    const rankById = Object.fromEntries(rankedStudents.map((row) => [row.student.id, row.rank]));
+    const termLabel = selectedTerm?.label || 'Composition';
+
+    const printStudents = [...classStudents].sort((a, b) => {
+      const rankA = rankById[a.id] || Number.MAX_SAFE_INTEGER;
+      const rankB = rankById[b.id] || Number.MAX_SAFE_INTEGER;
+      if (rankA !== rankB) return rankA - rankB;
+      return sortStudents(a, b);
+    });
+
+    const pages = printStudents.map((student) => {
+      const current = bulletins[student.id] || { notes: emptyRows() };
+      const computed = computeStudent(current);
+      const rank = rankById[student.id] ? `${rankById[student.id]}/${classStudents.length}` : '';
+
+      return `
+        <section class="page">
+          <header class="header">
+            <div>Academie de Kalaban coro</div>
+            <div>CAP DE KALABANCORO</div>
+            <div>Ecole privee LA SAGESSE</div>
+          </header>
+          <h1>${escapeHtml(termLabel.toUpperCase())}</h1>
+          <div class="meta">
+            <span>Bulletin de l'eleve: <b>${escapeHtml(getStudentName(student))}</b></span>
+            <span>Annee scolaire: <b>${escapeHtml(academicYear)}</b></span>
+            <span>Classe: <b>${escapeHtml(className)}</b></span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th class="subject">Matieres</th>
+                <th>Notes classe</th>
+                <th>Note compo</th>
+                <th>Comp x 2</th>
+                <th>Moy. gene</th>
+                <th>Coeff</th>
+                <th>Notes coeff</th>
+                <th class="app">Appreciations</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${computed.rows.map((row) => `
+                <tr>
+                  <td class="subject">${escapeHtml(row.subject)}</td>
+                  <td>${formatScore(row.noteClasse, 1)}</td>
+                  <td>${formatScore(row.noteCompo, 1)}</td>
+                  <td>${formatScore(row.compX2, 1)}</td>
+                  <td>${formatScore(row.moyenne, 2)}</td>
+                  <td>${formatScore(row.coeff, 0)}</td>
+                  <td>${formatScore(row.notesCoeff, 2)}</td>
+                  <td class="app">${escapeHtml(row.appreciation)}</td>
+                </tr>
+              `).join('')}
+              <tr class="total">
+                <td colspan="5">Total coeff</td>
+                <td>${formatScore(computed.totalCoeff, 0)}</td>
+                <td>${formatScore(computed.totalNotesCoeff, 2)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="bottom">
+            <div class="decision">
+              <b>Decision / Observations</b>
+              <p>${escapeHtml(current.decision || current.observation || '')}</p>
+            </div>
+            <div class="summary">
+              <div><span>Total:</span><b>${formatScore(computed.totalNotesCoeff, 2)}</b></div>
+              <div><span>Moyenne:</span><b>${formatScore(computed.moyenne, 2)}</b></div>
+              <div><span>Rang:</span><b>${escapeHtml(rank)}</b></div>
+              <div><span>Moyenne du 1er:</span><b>${formatScore(classExtremes.best) || ''}</b></div>
+              <div><span>Moyenne du dernier:</span><b>${formatScore(classExtremes.last) || ''}</b></div>
+            </div>
+          </div>
+          <footer>
+            <strong>Le directeur</strong>
+            <strong>Les parents</strong>
+            <span>Kourale le ${new Date().toLocaleDateString('fr-FR')}</span>
+          </footer>
+        </section>
+      `;
+    }).join('');
+
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Bulletins ${escapeHtml(className)} - ${escapeHtml(termLabel)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 9mm; }
+            * { box-sizing: border-box; }
+            body { margin: 0; color: #111827; font-family: Arial, sans-serif; background: white; }
+            .page { min-height: 277mm; page-break-after: always; padding: 6mm; border: 1.5px solid #111827; display: flex; flex-direction: column; }
+            .page:last-child { page-break-after: auto; }
+            .header { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; font-size: 12px; font-weight: 800; border-bottom: 2px solid #111827; padding-bottom: 8px; }
+            h1 { margin: 10px 0; text-align: center; font-size: 18px; letter-spacing: 0; }
+            .meta { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            th, td { border: 1px solid #111827; padding: 5px 4px; font-size: 11px; height: 28px; text-align: center; }
+            th { background: #eef2f7; font-weight: 800; }
+            .subject { width: 24%; text-align: left; font-weight: 700; }
+            .app { width: 20%; text-align: left; }
+            .total td { background: #f8fafc; font-weight: 800; }
+            .bottom { display: grid; grid-template-columns: 1fr 230px; gap: 12px; margin-top: 16px; }
+            .decision, .summary { border: 1px solid #111827; min-height: 118px; padding: 10px; }
+            .decision p { min-height: 78px; margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+            .summary div { display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 6px 0; font-size: 12px; }
+            .summary div:last-child { border-bottom: 0; }
+            footer { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: start; gap: 12px; margin-top: 24px; padding-top: 18px; padding-bottom: 18mm; font-size: 12px; text-transform: uppercase; }
+            footer span { text-align: right; text-transform: none; }
+          </style>
+        </head>
+        <body>${pages}</body>
+      </html>
+    `;
   };
 
-  if (viewMode === 'entry') {
-    const selectedClass = collegeClasses.find(cls => cls.id === selectedClassId);
-    const currentStudent = collegeStudents.find(s => s.id === selectedStudentId);
-    
+  const handlePrint = async () => {
+    const saved = await handleSaveAll();
+    if (!saved) return;
+
+    const previousFrame = document.getElementById('college-bulletin-print-frame');
+    if (previousFrame) previousFrame.remove();
+
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'college-bulletin-print-frame';
+    printFrame.title = 'Impression des bulletins second cycle';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.opacity = '0';
+    document.body.appendChild(printFrame);
+
+    const frameWindow = printFrame.contentWindow;
+    const frameDocument = frameWindow?.document;
+    if (!frameWindow || !frameDocument) {
+      printFrame.remove();
+      showError('Impossible de preparer l impression');
+      return;
+    }
+
+    frameDocument.open();
+    frameDocument.write(makePrintHtml());
+    frameDocument.close();
+    setTimeout(() => {
+      frameWindow.focus();
+      frameWindow.print();
+      setTimeout(() => printFrame.remove(), 1000);
+    }, 350);
+  };
+
+  const loading = studentsLoading || classesLoading;
+
+  if (loading) {
     return (
-      <div className="space-y-6 fade-in">
-        {ToastComponent}
-        
-        <div className="flex items-center justify-between">
-          <div>
-            <Button variant="ghost" onClick={() => setViewMode('welcome')} className="mb-2">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
-              Retour aux élèves
-            </Button>
-            <h1 className="text-3xl font-bold">
-              Bulletin - {currentStudent?.first_name} {currentStudent?.last_name}
-            </h1>
-            <p className="text-muted-foreground">
-              {selectedClass?.name} - {selectedClass?.level} - {academicYear}
-            </p>
-            <p className="text-sm text-purple-600 font-medium">
-              Mois : {MONTHS.find(m => m.key === selectedMonthForClass)?.label}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => {
-              // Calculer et afficher le bulletin de l'élève
-              const studentData = bulletinDataMap[selectedStudentId];
-              if (studentData) {
-                // Préparer les données pour la visualisation
-                const subjectsData = COLLEGE_SUBJECTS.map(subject => {
-                  const notes = MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || '').filter(note => note !== '');
-                  const average = notes.length > 0 ? (notes.reduce((sum, note) => sum + parseFloat(note), 0) / notes.length).toFixed(2) : '';
-                  const maxNote = notes.length > 0 ? Math.max(...notes.map(note => parseFloat(note))) : '';
-                  const minNote = notes.length > 0 ? Math.min(...notes.map(note => parseFloat(note))) : '';
-                  
-                  return {
-                    name: subject,
-                    notes: MONTHS.map(month => studentData.subjects?.[subject]?.[month.key] || ''),
-                    average,
-                    maxNote,
-                    minNote,
-                    appreciation: average ? getSubjectAppreciation(parseFloat(average)) : ''
-                  };
-                });
-
-                const subjectsWithAverage = subjectsData.filter(s => s.average !== '');
-                const generalAverage = subjectsWithAverage.length > 0 
-                  ? subjectsWithAverage.reduce((sum, s) => sum + parseFloat(s.average), 0) / subjectsWithAverage.length 
-                  : 0;
-
-                const rank = calculateRank(generalAverage);
-                const classAverage = calculateClassAverage();
-
-                setViewingBulletin({
-                  student: currentStudent,
-                  class: selectedClass,
-                  academicYear,
-                  period: studentData.period || '1er trimestre',
-                  sequence: studentData.sequence || 'Séquence 1',
-                  subjects: subjectsData,
-                  generalAverage: generalAverage ? generalAverage.toFixed(2) : '',
-                  rank,
-                  classAverage,
-                  appreciation: studentData.appreciation || '',
-                  generalAppreciation: getGeneralAppreciation(generalAverage)
-                });
-                
-                setIsViewDialogOpen(true);
-              }
-            }}>
-              <Eye className="mr-2 h-4 w-4" />
-              Visualiser
-            </Button>
-            <Button onClick={handleSaveStudentBulletin}>
-              <Save className="mr-2 h-4 w-4" />
-              Enregistrer
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => {
-                // Passer à l'élève suivant
-                const classStudents = collegeStudents
-                  .filter(s => s.class_id === selectedClassId)
-                  .sort((a, b) => a.last_name.localeCompare(b.last_name));
-                const currentIndex = classStudents.findIndex(s => s.id === selectedStudentId);
-                if (currentIndex < classStudents.length - 1) {
-                  setSelectedStudentId(classStudents[currentIndex + 1].id);
-                } else {
-                  // Retourner à la liste des élèves
-                  setViewMode('welcome');
-                }
-              }}
-            >
-              Élève suivant
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notes - {MONTHS.find(m => m.key === selectedMonthForClass)?.label}</CardTitle>
-                <CardDescription>
-                  Saisissez les notes pour le mois sélectionné
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {COLLEGE_SUBJECTS.map((subject) => (
-                    <div key={subject} className="flex items-center gap-4 p-3 border rounded-lg hover:bg-gray-50">
-                      <div className="flex-1">
-                        <label className="font-medium text-sm">{subject}</label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Input
-                            type="text"
-                            value={bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] || ''}
-                            onChange={(e) => handleCellEdit(subject, selectedMonthForClass, clampNote(e.target.value))}
-                            className="w-24 text-center"
-                            placeholder="/10"
-                            maxLength={4}
-                          />
-                          <span className="text-sm text-muted-foreground">/10</span>
-                        </div>
-                      </div>
-                      
-                      {/* Indicateur de statut */}
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-muted-foreground">
-                          {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] ? 'Saisie' : 'En attente'}
-                        </div>
-                        {bulletinDataMap[selectedStudentId]?.subjects?.[subject]?.[selectedMonthForClass] && (
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Statistiques du mois pour cet élève */}
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-semibold mb-2">Statistiques du mois</h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Notes saisies:</span>
-                      <span className="ml-2 font-medium">
-                        {COLLEGE_SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{COLLEGE_SUBJECTS.length}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Moyenne du mois:</span>
-                      <span className="ml-2 font-medium">
-                        {(() => {
-                          const notes = COLLEGE_SUBJECTS
-                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
-                            .filter(n => n !== '' && n !== undefined);
-                          if (notes.length === 0) return '-';
-                          const avg = notes.reduce((sum, n) => sum + parseFloat(n), 0) / notes.length;
-                          return avg.toFixed(2);
-                        })()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Meilleure note:</span>
-                      <span className="ml-2 font-medium">
-                        {(() => {
-                          const notes = COLLEGE_SUBJECTS
-                            .map(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass])
-                            .filter(n => n !== '' && n !== undefined)
-                            .map(n => parseFloat(n));
-                          if (notes.length === 0) return '-';
-                          return Math.max(...notes).toFixed(2);
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            {/* Informations de l'élève */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Informations de l'élève</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Nom complet</label>
-                  <p className="text-sm">{currentStudent?.first_name} {currentStudent?.last_name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Matricule</label>
-                  <p className="text-sm">{currentStudent?.matricule}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Classe</label>
-                  <p className="text-sm">{selectedClass?.name}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Progression */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Progression du mois</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Notes saisies:</span>
-                    <span className="font-medium">
-                      {COLLEGE_SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length}/{COLLEGE_SUBJECTS.length}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-purple-500 h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${(COLLEGE_SUBJECTS.filter(s => bulletinDataMap[selectedStudentId]?.subjects?.[s]?.[selectedMonthForClass]).length / COLLEGE_SUBJECTS.length) * 100}%` 
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Informations du bulletin */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Informations du bulletin</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Période</label>
-                  <Input
-                    type="text"
-                    value={bulletinDataMap[selectedStudentId]?.period || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        period: e.target.value
-                      }
-                    }))}
-                    placeholder="Ex: 1er trimestre"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Séquence</label>
-                  <Input
-                    type="text"
-                    value={bulletinDataMap[selectedStudentId]?.sequence || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        sequence: e.target.value
-                      }
-                    }))}
-                    placeholder="Ex: Séquence 1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Appréciation générale</label>
-                  <textarea
-                    value={bulletinDataMap[selectedStudentId]?.appreciation || ''}
-                    onChange={(e) => setBulletinDataMap(prev => ({
-                      ...prev,
-                      [selectedStudentId]: {
-                        ...prev[selectedStudentId],
-                        appreciation: e.target.value
-                      }
-                    }))}
-                    className="w-full min-h-[100px] p-3 border rounded-md resize-none text-sm"
-                    placeholder="Appréciation générale de l'élève..."
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+      <div className="flex min-h-[55vh] items-center justify-center">
+        <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#0066CC]" />
+        <span className="text-sm text-slate-600">Chargement des donnees...</span>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Dialog de visualisation du bulletin */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Visualisation du Bulletin</DialogTitle>
-          </DialogHeader>
+    <div className="space-y-5 fade-in">
+      {ToastComponent}
 
-          {viewingBulletin && (
-            <div className="py-2 space-y-6">
-              {/* En-tête du bulletin */}
-              <div className="text-center border-b pb-4">
-                <h1 className="text-2xl font-bold">BULLETIN SCOLAIRE</h1>
-                <p className="text-lg font-semibold">Établissement LA SAGESSE</p>
-                <p className="text-sm text-muted-foreground">Année scolaire {viewingBulletin.academicYear}</p>
-                <p className="text-sm text-muted-foreground">{viewingBulletin.period} - {viewingBulletin.sequence}</p>
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                Second cycle - 7e a 9e
+              </div>
+              <h1 className="text-2xl font-bold tracking-normal">Bulletins trimestriels</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-300">
+                Choisissez une classe, une composition, renseignez les notes de classe et de composition, puis imprimez toute la classe par ordre alphabetique.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-white/10 p-2 text-center">
+              <MetricMini label="Classes" value={collegeClasses.length} />
+              <MetricMini label="Eleves" value={students.filter((student) => collegeClasses.some((cls) => String(cls.id) === String(student.class_id))).length} />
+              <MetricMini label="Matieres" value={SUBJECTS.length} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid border-b border-slate-200 bg-slate-50 md:grid-cols-3">
+          {[
+            { id: 'class', label: 'Classe', icon: School, done: Boolean(selectedClassId) },
+            { id: 'term', label: 'Composition', icon: CalendarDays, done: Boolean(selectedTermKey) },
+            { id: 'entry', label: 'Saisie et impression', icon: FileText, done: globalStats.percent === 100 && classStudents.length > 0 },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            const active = step === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (item.id === 'class') setStep('class');
+                  if (item.id === 'term' && selectedClassId) setStep('term');
+                  if (item.id === 'entry' && selectedClassId && selectedTermKey) setStep('entry');
+                }}
+                className={cn(
+                  'flex items-center justify-between border-b border-slate-200 px-5 py-4 text-left transition-colors md:border-b-0 md:border-r',
+                  active ? 'bg-white' : 'hover:bg-white/80',
+                  index === 2 && 'md:border-r-0'
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <span className={cn('flex h-9 w-9 items-center justify-center rounded-md', active ? 'bg-[#0066CC] text-white' : item.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600')}>
+                    {item.done && !active ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-950">{item.label}</span>
+                    <span className="text-xs text-slate-500">Etape {index + 1}</span>
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-5">
+          {step === 'class' && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Choisir la classe</h2>
+                  <p className="text-sm text-slate-500">Classes de 7e, 8e et 9e annee.</p>
+                </div>
+                <div className="w-full md:w-56">
+                  <label className="text-xs font-medium text-slate-600">Annee scolaire</label>
+                  <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="mt-1 h-10" />
+                </div>
               </div>
 
-              {/* Informations de l'élève */}
-              <div className="grid grid-cols-2 gap-4 border-b pb-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Informations de l'élève</h3>
-                  <p><strong>Nom:</strong> {viewingBulletin.student.first_name} {viewingBulletin.student.last_name}</p>
-                  <p><strong>Matricule:</strong> {viewingBulletin.student.matricule}</p>
-                  <p><strong>Classe:</strong> {viewingBulletin.class.name}</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Résultats</h3>
-                  <p><strong>Moyenne générale:</strong> <span className="text-lg font-bold text-purple-600">{viewingBulletin.generalAverage}/20</span></p>
-                  <p><strong>Rang:</strong> {viewingBulletin.rank}</p>
-                  <p><strong>Moyenne classe:</strong> {viewingBulletin.classAverage}/20</p>
-                </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {collegeClasses.map((cls) => (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedClassId(cls.id);
+                      setSelectedTermKey('');
+                      setBulletins({});
+                      setStep('term');
+                    }}
+                    className="group rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#0066CC] hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase text-[#0066CC]">Niveau {extractLevel(cls) || '-'}</p>
+                        <h3 className="mt-1 text-lg font-bold text-slate-950">{cls.name}</h3>
+                        <p className="text-sm text-slate-500">{cls.level || 'Second cycle'} - {cls.academic_year || academicYear}</p>
+                      </div>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-600 group-hover:bg-[#0066CC] group-hover:text-white">
+                        <Users className="h-5 w-5" />
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <span className="text-sm text-slate-500">Effectif</span>
+                      <strong className="text-slate-950">{classStatsById[cls.id] || 0} eleve(s)</strong>
+                    </div>
+                  </button>
+                ))}
               </div>
 
-              {/* Tableau des notes */}
+              {collegeClasses.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                  Aucune classe de second cycle n'a ete trouvee.
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 'term' && (
+            <div className="space-y-4">
+              <Button variant="ghost" onClick={() => setStep('class')} className="px-0 text-slate-600">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Retour aux classes
+              </Button>
               <div>
-                <h3 className="font-semibold mb-4">Notes par matière</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="border border-gray-300 px-4 py-2 text-left">Matière</th>
-                        {MONTHS.map(month => (
-                          <th key={month.key} className="border border-gray-300 px-2 py-2 text-center text-sm">{month.label}</th>
-                        ))}
-                        <th className="border border-gray-300 px-2 py-2 text-center">Moyenne</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Max</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Min</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center">Appréciation</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewingBulletin.subjects.map((subject, index) => (
-                        <tr key={subject.name} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="border border-gray-300 px-4 py-2 font-medium">{subject.name}</td>
-                          {subject.notes.map((note, noteIndex) => (
-                            <td key={noteIndex} className="border border-gray-300 px-2 py-2 text-center">
-                              {note || '-'}
-                            </td>
-                          ))}
-                          <td className="border border-gray-300 px-2 py-2 text-center font-semibold">
-                            {subject.average || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            {subject.maxNote || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            {subject.minNote || '-'}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              subject.appreciation === 'Excellent' ? 'bg-green-100 text-green-800' :
-                              subject.appreciation === 'Très bien' ? 'bg-blue-100 text-blue-800' :
-                              subject.appreciation === 'Bien' ? 'bg-cyan-100 text-cyan-800' :
-                              subject.appreciation === 'Assez bien' ? 'bg-yellow-100 text-yellow-800' :
-                              subject.appreciation === 'Passable' ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {subject.appreciation || '-'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <h2 className="text-lg font-semibold text-slate-950">{selectedClass?.name}</h2>
+                <p className="text-sm text-slate-500">Choisissez la composition a saisir.</p>
               </div>
-
-              {/* Appréciations */}
-              <div className="space-y-4">
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">Appréciation générale du professeur</h3>
-                  <p className="text-sm italic">{viewingBulletin.appreciation || 'Aucune appréciation renseignée'}</p>
-                </div>
-                
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">Appréciation générale</h3>
-                  <p className="text-sm font-medium text-purple-600">{viewingBulletin.generalAppreciation}</p>
-                </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {TERMS.map((term) => (
+                  <button
+                    key={term.key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTermKey(term.key);
+                      setStep('entry');
+                    }}
+                    className={cn(
+                      'rounded-lg border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
+                      selectedTermKey === term.key ? 'border-[#0066CC] bg-blue-50' : 'border-slate-200 bg-white hover:border-[#0066CC]'
+                    )}
+                  >
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-950 text-white">
+                      <CalendarDays className="h-5 w-5" />
+                    </span>
+                    <h3 className="mt-4 font-bold text-slate-950">{term.label}</h3>
+                    <p className="text-sm text-slate-500">{term.short}</p>
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Fermer
-            </Button>
-            <Button onClick={() => {
-              // Logique d'impression du bulletin
-              window.print();
-            }}>
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          {step === 'entry' && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <Button variant="ghost" onClick={() => setStep('term')} className="mb-2 px-0 text-slate-600">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Retour aux compositions
+                  </Button>
+                  <h2 className="text-xl font-bold text-slate-950">{selectedClass?.name} - {selectedTerm?.label}</h2>
+                  <p className="text-sm text-slate-500">{classStudents.length} eleve(s), impression par ordre alphabetique.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={loadClassBulletins} disabled={loadingClassData || bulletinLoading}>
+                    {loadingClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    Recharger
+                  </Button>
+                  <Button variant="outline" onClick={handleSaveAll} disabled={saving || loadingClassData}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Enregistrer tout
+                  </Button>
+                  <Button onClick={handlePrint} disabled={saving || loadingClassData || classStudents.length === 0} className="bg-[#0066CC] hover:bg-[#005bb8]">
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimer la classe
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric icon={Users} label="Eleves" value={classStudents.length} />
+                <Metric icon={CheckCircle2} label="Bulletins complets" value={`${globalStats.completed}/${classStudents.length}`} tone="emerald" />
+                <Metric icon={BarChart3} label="Progression" value={`${globalStats.percent}%`} tone="blue" />
+                <Metric icon={AlertCircle} label="Moyenne classe" value={formatScore(globalStats.classAverage) || '-'} tone="amber" />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+                <aside className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="relative mb-3">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un eleve..." className="pl-9" />
+                  </div>
+                  <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
+                    {visibleStudents.map((student) => {
+                      const computed = computedByStudent[student.id] || computeStudent();
+                      const active = String(activeStudentId) === String(student.id);
+                      return (
+                        <button
+                          key={student.id}
+                          type="button"
+                          onClick={() => setActiveStudentId(student.id)}
+                          className={cn('w-full rounded-md border p-3 text-left transition', active ? 'border-[#0066CC] bg-blue-50' : 'border-slate-200 hover:bg-slate-50')}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-950">{getStudentName(student)}</p>
+                              <p className="text-xs text-slate-500">{student.matricule || 'Sans matricule'}</p>
+                            </div>
+                            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', computed.complete ? 'bg-emerald-100 text-emerald-700' : computed.filled ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500')}>
+                              {computed.filled}/{computed.total}
+                            </span>
+                          </div>
+                          <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                            <div className="h-1.5 rounded-full bg-[#0066CC]" style={{ width: `${computed.percent}%` }} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+
+                <main className="rounded-lg border border-slate-200 bg-white">
+                  {loadingClassData ? (
+                    <div className="flex min-h-[420px] items-center justify-center">
+                      <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#0066CC]" />
+                      <span className="text-sm text-slate-600">Chargement des notes...</span>
+                    </div>
+                  ) : activeStudentId ? (
+                    <StudentEntry
+                      student={classStudents.find((student) => String(student.id) === String(activeStudentId))}
+                      bulletin={bulletins[activeStudentId]}
+                      selectedTerm={selectedTerm}
+                      computed={computedByStudent[activeStudentId] || computeStudent()}
+                      rank={rankedStudents.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
+                      classSize={classStudents.length}
+                      classAverage={globalStats.classAverage}
+                      bestAverage={classExtremes.best}
+                      lastAverage={classExtremes.last}
+                      onChangeRow={(subject, field, value) => updateRow(activeStudentId, subject, field, value)}
+                      onChangeMeta={(field, value) => updateMeta(activeStudentId, field, value)}
+                    />
+                  ) : (
+                    <div className="p-8 text-center text-sm text-slate-500">Selectionnez un eleve pour commencer.</div>
+                  )}
+                </main>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricMini({ label, value }) {
+  return (
+    <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value, tone = 'slate' }) {
+  const tones = {
+    slate: 'bg-slate-100 text-slate-700',
+    blue: 'bg-blue-100 text-blue-700',
+    emerald: 'bg-emerald-100 text-emerald-700',
+    amber: 'bg-amber-100 text-amber-700',
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-500">{label}</span>
+        <span className={cn('flex h-9 w-9 items-center justify-center rounded-md', tones[tone])}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function StudentEntry({ student, bulletin, selectedTerm, computed, rank, classSize, classAverage, bestAverage, lastAverage, onChangeRow, onChangeMeta }) {
+  const notes = bulletin?.notes || emptyRows();
+
+  return (
+    <div>
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase text-[#0066CC]">{selectedTerm?.short}</p>
+            <h3 className="text-xl font-bold text-slate-950">{getStudentName(student)}</h3>
+            <p className="text-sm text-slate-500">{student?.matricule || 'Sans matricule'}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <MiniStat label="Saisies" value={`${computed.filled}/${SUBJECTS.length}`} />
+            <MiniStat label="Moyenne" value={formatScore(computed.moyenne) || '-'} />
+            <MiniStat label="Rang" value={rank ? `${rank}/${classSize}` : '-'} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-0 xl:grid-cols-[1fr_300px]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-white">
+                <th className="w-[22%] px-3 py-3 text-left text-xs font-bold uppercase text-slate-500">Matiere</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">Classe</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">Compo</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">x2</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">Moy.</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">Coeff</th>
+                <th className="px-3 py-3 text-center text-xs font-bold uppercase text-slate-500">N. coeff</th>
+                <th className="px-3 py-3 text-left text-xs font-bold uppercase text-slate-500">Appreciation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SUBJECTS.map((subject, index) => {
+                const row = notes[subject.name] || {};
+                const computedRow = computeSubject(row);
+                return (
+                  <tr key={subject.name} className={cn('border-b border-slate-100', index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
+                    <td className="px-3 py-2.5 text-sm font-medium text-slate-900">{subject.name}</td>
+                    <td className="px-3 py-2.5">
+                      <Input value={row.note_classe || ''} onChange={(event) => onChangeRow(subject.name, 'note_classe', event.target.value)} inputMode="decimal" className="mx-auto h-9 w-20 text-center font-semibold" placeholder="/20" />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Input value={row.note_compo || ''} onChange={(event) => onChangeRow(subject.name, 'note_compo', event.target.value)} inputMode="decimal" className="mx-auto h-9 w-20 text-center font-semibold" placeholder="/20" />
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-600">{formatScore(computedRow.compX2, 1) || '-'}</td>
+                    <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-950">{formatScore(computedRow.moyenne) || '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <Input value={row.coeff || subject.coeff} onChange={(event) => onChangeRow(subject.name, 'coeff', event.target.value)} inputMode="decimal" className="mx-auto h-9 w-16 text-center font-semibold" />
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-950">{formatScore(computedRow.notesCoeff) || '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <Input value={row.appreciation || computedRow.appreciation || ''} onChange={(event) => onChangeRow(subject.name, 'appreciation', event.target.value)} className="h-9 min-w-[160px]" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <aside className="border-t border-slate-200 p-4 xl:border-l xl:border-t-0">
+          <div className="rounded-lg bg-slate-950 p-4 text-white">
+            <p className="text-xs text-slate-300">Resultat composition</p>
+            <p className="mt-1 text-3xl font-bold">{formatScore(computed.moyenne) || '-'}</p>
+            <p className="text-sm text-slate-300">Moyenne generale /20</p>
+            <div className="mt-4 h-2 rounded-full bg-white/20">
+              <div className="h-2 rounded-full bg-amber-300" style={{ width: `${computed.percent}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3 text-sm">
+            <InfoRow label="Total coeff" value={formatScore(computed.totalCoeff, 0)} />
+            <InfoRow label="Total notes coeff" value={formatScore(computed.totalNotesCoeff)} />
+            <InfoRow label="Moyenne classe" value={formatScore(classAverage) || '-'} />
+          </div>
+
+          <label className="mt-5 block text-sm font-semibold text-slate-900">Decision / observation</label>
+          <textarea
+            value={bulletin?.decision || ''}
+            onChange={(event) => onChangeMeta('decision', event.target.value)}
+            className="mt-2 min-h-[96px] w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-[#0066CC]"
+            placeholder="Decision ou observation..."
+          />
+
+          <div className="mt-4 grid gap-3">
+            <InfoRow label="Moyenne du 1er" value={formatScore(bestAverage) || '-'} />
+            <InfoRow label="Moyenne du dernier" value={formatScore(lastAverage) || '-'} />
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-2">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+      <span className="text-slate-500">{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
