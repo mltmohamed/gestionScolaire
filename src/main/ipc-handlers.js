@@ -377,8 +377,8 @@ function setupIPCHandlers(ipcMain) {
 
     for (const s of students) {
       statements.push({
-        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, class_id, enrollment_date, status, photo, is_deleted, deleted_at, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, enrollment_date, status, photo, is_deleted, deleted_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           s.id,
           s.first_name,
@@ -389,6 +389,12 @@ function setupIPCHandlers(ipcMain) {
           s.email,
           s.phone,
           s.address,
+          s.father_first_name,
+          s.father_last_name,
+          s.mother_first_name,
+          s.mother_last_name,
+          s.father_name,
+          s.mother_name,
           s.class_id,
           s.enrollment_date,
           s.status,
@@ -679,8 +685,8 @@ function setupIPCHandlers(ipcMain) {
     }
 
     const sql = `
-      INSERT INTO students (first_name, last_name, date_of_birth, gender, matricule, phone, address, class_id, status, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO students (first_name, last_name, date_of_birth, gender, matricule, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, status, photo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     run(sql, [
       data.first_name,
@@ -690,6 +696,12 @@ function setupIPCHandlers(ipcMain) {
       data.matricule,
       data.phone || null,
       data.address || null,
+      data.father_first_name || null,
+      data.father_last_name || null,
+      data.mother_first_name || null,
+      data.mother_last_name || null,
+      data.father_name || null,
+      data.mother_name || null,
       data.class_id || null,
       data.status || 'active',
       data.photo || null
@@ -741,7 +753,7 @@ function setupIPCHandlers(ipcMain) {
     const sql = `
       UPDATE students 
       SET first_name = ?, last_name = ?, date_of_birth = ?, gender = ?, 
-          matricule = ?, phone = ?, address = ?, class_id = ?, status = ?, photo = ?,
+          matricule = ?, phone = ?, address = ?, father_first_name = ?, father_last_name = ?, mother_first_name = ?, mother_last_name = ?, father_name = ?, mother_name = ?, class_id = ?, status = ?, photo = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -753,6 +765,12 @@ function setupIPCHandlers(ipcMain) {
       data.matricule,
       data.phone || null,
       data.address || null,
+      data.father_first_name || null,
+      data.father_last_name || null,
+      data.mother_first_name || null,
+      data.mother_last_name || null,
+      data.father_name || null,
+      data.mother_name || null,
       data.class_id || null,
       data.status || 'active',
       data.photo || null,
@@ -1061,7 +1079,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO classes (name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee, uniform_class_fee, uniform_sport_fee)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    run(sql, [
       data.name,
       data.level,
       data.academic_year,
@@ -1072,7 +1090,7 @@ function setupIPCHandlers(ipcMain) {
       data.uniform_class_fee || data.uniform_fee || 0,
       data.uniform_sport_fee || 0
     ]);
-    const classId = result.lastInsertRowid;
+    const classId = query('SELECT last_insert_rowid() as id')[0]?.id;
 
     // Handle multiple teachers
     if (data.teacher_ids && Array.isArray(data.teacher_ids)) {
@@ -1324,13 +1342,14 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO subjects (name, code, description, coefficient)
       VALUES (?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    run(sql, [
       data.name,
       data.code,
       data.description || null,
       data.coefficient || 1
     ]);
-    return { success: true, data: { id: result.lastInsertRowid } };
+    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
+    return { success: true, data: { id } };
   });
 
   // ==================== GRADES ====================
@@ -1362,7 +1381,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO grades (student_id, subject_id, value, max_value, comment, date, term)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    run(sql, [
       data.student_id,
       data.subject_id,
       data.value,
@@ -1371,7 +1390,8 @@ function setupIPCHandlers(ipcMain) {
       data.date || new Date().toISOString().split('T')[0],
       data.term || null
     ]);
-    return { success: true, data: { id: result.lastInsertRowid } };
+    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
+    return { success: true, data: { id } };
   });
 
   // ==================== PAYMENTS ====================
@@ -1403,7 +1423,7 @@ function setupIPCHandlers(ipcMain) {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    run(sql, [
       data.student_id,
       data.type,
       data.amount,
@@ -1415,7 +1435,8 @@ function setupIPCHandlers(ipcMain) {
       data.period_month ?? null,
       data.period_year ?? null,
     ]);
-    return { success: true, data: { id: result.lastInsertRowid } };
+    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
+    return { success: true, data: { id } };
   });
 
   handle('payments:updateStudentPayment', { auth: true }, (event, id, data) => {
@@ -1463,7 +1484,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO teacher_payments (teacher_id, amount, payment_date, payment_method, period_month, period_year, description)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = query(sql, [
+    run(sql, [
       data.teacher_id,
       data.amount,
       data.payment_date || new Date().toISOString().split('T')[0],
@@ -1472,7 +1493,8 @@ function setupIPCHandlers(ipcMain) {
       data.period_year,
       data.description || null
     ]);
-    return { success: true, data: { id: result.lastInsertRowid } };
+    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
+    return { success: true, data: { id } };
   });
 
   handle('payments:updateTeacherPayment', { auth: true }, (event, id, data) => {

@@ -11,7 +11,6 @@ import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
 import Teachers from './pages/Teachers';
 import Classes from './pages/Classes';
-import Payments from './pages/Payments';
 import TuitionPayments from './pages/TuitionPayments';
 import UniformPayments from './pages/UniformPayments';
 import TeacherPayments from './pages/TeacherPayments';
@@ -60,7 +59,7 @@ function App() {
                 <Route path="students" element={<Students />} />
                 <Route path="teachers" element={<Teachers />} />
                 <Route path="classes" element={<Classes />} />
-                <Route path="payments" element={<Payments />} />
+                <Route path="payments" element={<Navigate to="/payments/tuition" replace />} />
                 <Route path="payments/tuition" element={<TuitionPayments />} />
                 <Route path="payments/uniform" element={<UniformPayments />} />
                 <Route path="payments/teachers" element={<TeacherPayments />} />

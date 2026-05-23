@@ -490,26 +490,27 @@ export default function CollegeBulletin() {
           <meta charset="utf-8" />
           <title>Bulletins ${escapeHtml(className)} - ${escapeHtml(termLabel)}</title>
           <style>
-            @page { size: A4 portrait; margin: 9mm; }
+            @page { size: A4 portrait; margin: 8mm; }
             * { box-sizing: border-box; }
             body { margin: 0; color: #111827; font-family: Arial, sans-serif; background: white; }
-            .page { min-height: 277mm; page-break-after: always; padding: 6mm; border: 1.5px solid #111827; display: flex; flex-direction: column; }
+            .page { height: 138mm; break-inside: avoid; page-break-inside: avoid; page-break-after: auto; margin-bottom: 5mm; padding: 3mm; overflow: hidden; border: 1.2px solid #111827; display: flex; flex-direction: column; }
+            .page:nth-of-type(2n) { page-break-after: always; margin-bottom: 0; }
             .page:last-child { page-break-after: auto; }
-            .header { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; font-size: 12px; font-weight: 800; border-bottom: 2px solid #111827; padding-bottom: 8px; }
-            h1 { margin: 10px 0; text-align: center; font-size: 18px; letter-spacing: 0; }
-            .meta { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+            .header { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; font-size: 7.5px; font-weight: 800; border-bottom: 1.5px solid #111827; padding-bottom: 3px; }
+            h1 { margin: 3px 0; text-align: center; font-size: 11px; letter-spacing: 0; }
+            .meta { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr; gap: 5px; margin-bottom: 3px; font-size: 7.5px; }
             table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #111827; padding: 5px 4px; font-size: 11px; height: 28px; text-align: center; }
+            th, td { border: 1px solid #111827; padding: 1px 2px; font-size: 6.8px; height: 13px; line-height: 1.05; text-align: center; }
             th { background: #eef2f7; font-weight: 800; }
             .subject { width: 24%; text-align: left; font-weight: 700; }
             .app { width: 20%; text-align: left; }
             .total td { background: #f8fafc; font-weight: 800; }
-            .bottom { display: grid; grid-template-columns: 1fr 230px; gap: 12px; margin-top: 16px; }
-            .decision, .summary { border: 1px solid #111827; min-height: 118px; padding: 10px; }
-            .decision p { min-height: 78px; margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
-            .summary div { display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 6px 0; font-size: 12px; }
+            .bottom { display: grid; grid-template-columns: 1fr 46mm; gap: 5px; margin-top: 4px; }
+            .decision, .summary { border: 1px solid #111827; min-height: 25mm; padding: 3px; font-size: 7px; }
+            .decision p { min-height: 17mm; margin: 2px 0 0; font-size: 7px; line-height: 1.15; }
+            .summary div { display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 1.5px 0; font-size: 7px; }
             .summary div:last-child { border-bottom: 0; }
-            footer { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: start; gap: 12px; margin-top: 24px; padding-top: 18px; padding-bottom: 18mm; font-size: 12px; text-transform: uppercase; }
+            footer { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: start; gap: 6px; margin-top: 5px; padding-top: 3px; font-size: 7px; text-transform: uppercase; }
             footer span { text-align: right; text-transform: none; }
           </style>
         </head>

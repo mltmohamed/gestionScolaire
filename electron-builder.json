@@ -1,6 +1,6 @@
 {
   "appId": "com.schoolmanage.app",
-  "productName": "SchoolManage",
+  "productName": "la sagesse",
   "directories": {
     "output": "release"
   },
@@ -14,9 +14,30 @@
   ],
   "win": {
     "target": ["nsis", "portable"],
+    "icon": "src/resources/icons/icon.ico",
+    "publisherName": "la sagesse",
+    "executableName": "la sagesse",
+    "requestedExecutionLevel": "asInvoker",
     "sign": null,
     "signDlls": false,
     "signAndEditExecutable": false
+  },
+  "nsis": {
+    "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "la sagesse",
+    "installerIcon": "src/resources/icons/icon.ico",
+    "uninstallerIcon": "src/resources/icons/icon.ico",
+    "installerHeaderIcon": "src/resources/icons/icon.ico",
+    "uninstallDisplayName": "la sagesse",
+    "deleteAppDataOnUninstall": false
+  },
+  "portable": {
+    "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
   },
   "mac": {
     "target": ["dmg"],

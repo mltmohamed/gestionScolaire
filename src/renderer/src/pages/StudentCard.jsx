@@ -30,6 +30,27 @@ const formatDate = (date) => {
 
 const getFullName = (student) => `${student.first_name || ''} ${student.last_name || ''}`.trim();
 
+const getGuardianName = (student) => `${student.guardian_first_name || ''} ${student.guardian_last_name || ''}`.trim();
+
+const getParentFullName = (firstName, lastName, fallback = '') => (
+  `${firstName || ''} ${lastName || ''}`.trim() || fallback || ''
+);
+
+function getParentNames(student) {
+  const relationship = String(student.guardian_relationship || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const guardianName = getGuardianName(student);
+
+  return {
+    father: getParentFullName(student.father_first_name, student.father_last_name, student.father_name)
+      || (relationship.includes('pere') ? guardianName : ''),
+    mother: getParentFullName(student.mother_first_name, student.mother_last_name, student.mother_name)
+      || (relationship.includes('mere') ? guardianName : ''),
+  };
+}
+
 function getAcademicYear() {
   const year = new Date().getFullYear();
   return `${year}-${year + 1}`;
@@ -140,6 +161,7 @@ function CardChip({ icon: Icon, label, value }) {
 
 function SchoolCardMarkup({ student, academicYear }) {
   const genderLabel = student.gender === 'M' ? 'Masculin' : student.gender === 'F' ? 'Feminin' : 'N/A';
+  const parents = getParentNames(student);
 
   return (
     <div className="mx-auto overflow-hidden rounded-[18px] bg-white text-slate-950 shadow-2xl" style={{ width: '540px', height: '340px' }}>
@@ -187,11 +209,13 @@ function SchoolCardMarkup({ student, academicYear }) {
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#0066CC]">Eleve</p>
               <h3 className="mt-1 text-2xl font-black leading-[1.05] text-slate-950">{getFullName(student) || 'Eleve'}</h3>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 <CardChip label="Classe" value={student.class_name || 'Non assigne'} icon={School} />
                 <CardChip label="Naissance" value={formatDate(student.date_of_birth)} icon={Calendar} />
                 <CardChip label="Genre" value={genderLabel} icon={User} />
                 <CardChip label="Contact" value={student.guardian_phone || student.phone || 'N/A'} icon={Phone} />
+                <CardChip label="Pere" value={parents.father || 'N/A'} icon={User} />
+                <CardChip label="Mere" value={parents.mother || 'N/A'} icon={User} />
               </div>
             </section>
           </main>
@@ -222,6 +246,7 @@ function PrintableStudentCard({ student, academicYear }) {
 
 function cardHtml(student, academicYear) {
   const genderLabel = student.gender === 'M' ? 'Masculin' : student.gender === 'F' ? 'Feminin' : 'N/A';
+  const parents = getParentNames(student);
   const firstLetter = (getFullName(student)[0] || 'E').toUpperCase();
   const photoHtml = student.photo
     ? `<img src="${student.photo}" alt="" class="photo" />`
@@ -254,6 +279,8 @@ function cardHtml(student, academicYear) {
               <div><span>Naissance</span><b>${escapeHtml(formatDate(student.date_of_birth))}</b></div>
               <div><span>Genre</span><b>${escapeHtml(genderLabel)}</b></div>
               <div><span>Contact</span><b>${escapeHtml(student.guardian_phone || student.phone || 'N/A')}</b></div>
+              <div><span>Pere</span><b>${escapeHtml(parents.father || 'N/A')}</b></div>
+              <div><span>Mere</span><b>${escapeHtml(parents.mother || 'N/A')}</b></div>
             </div>
           </section>
         </main>
@@ -298,8 +325,8 @@ function makeCardsPrintHtml(students, academicYear, title) {
           .matricule span, .chips span, footer span, .eyebrow { color: #64748b; letter-spacing: .12em; }
           .matricule b { display: block; margin-top: 1mm; color: #0066CC; font-size: 14px; }
           .info { display: flex; flex-direction: column; justify-content: end; padding-bottom: 3mm; }
-          .info h1 { margin: 1mm 0 4mm; font-size: 27px; line-height: 1.05; }
-          .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; }
+          .info h1 { margin: 1mm 0 3mm; font-size: 27px; line-height: 1.05; }
+          .chips { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; }
           .chips div { background: #f8fafc; border-radius: 3mm; padding: 2.2mm; min-width: 0; }
           .chips b { display: block; margin-top: 1mm; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           footer { display: flex; justify-content: space-between; align-items: end; border-top: 1px solid #e2e8f0; padding-top: 3mm; }
@@ -408,6 +435,13 @@ export default function StudentCard() {
         student.matricule,
         student.class_name,
         student.guardian_phone,
+        student.father_name,
+        student.mother_name,
+        student.father_first_name,
+        student.father_last_name,
+        student.mother_first_name,
+        student.mother_last_name,
+        getGuardianName(student),
       ].filter(Boolean).join(' ').toLowerCase();
 
       const matchSearch = !q || searchable.includes(q);
@@ -581,6 +615,8 @@ export default function StudentCard() {
                     <InfoLine icon={School} label="Classe" value={selectedStudent.class_name || 'Non assigne'} />
                     <InfoLine icon={Calendar} label="Naissance" value={formatDate(selectedStudent.date_of_birth)} />
                     <InfoLine icon={Phone} label="Contact" value={selectedStudent.guardian_phone || selectedStudent.phone} />
+                    <InfoLine icon={User} label="Pere" value={getParentNames(selectedStudent).father} />
+                    <InfoLine icon={User} label="Mere" value={getParentNames(selectedStudent).mother} />
                     <div className="sm:col-span-2 xl:col-span-4">
                       <InfoLine icon={MapPin} label="Adresse" value={selectedStudent.address} />
                     </div>

@@ -312,16 +312,19 @@ export default function UniformPayments() {
         <head>
           <title>Reçu tenue scolaire</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 28px; color: #111827; }
-            .receipt { border: 2px solid #111827; padding: 24px; max-width: 760px; margin: 0 auto; }
-            .header { text-align: center; border-bottom: 2px solid #111827; padding-bottom: 16px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin: 18px 0; }
-            .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+            @page { size: A4 portrait; margin: 8mm; }
+            body { font-family: Arial, sans-serif; margin: 0; color: #111827; }
+            .receipt { border: 1.5px solid #111827; padding: 8px; width: 128mm; margin: 0 auto; }
+            .header { text-align: center; border-bottom: 1.5px solid #111827; padding-bottom: 6px; }
+            .header h1 { font-size: 15px; margin: 0 0 3px; }
+            .header p { margin: 2px 0; font-size: 10px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin: 7px 0; }
+            .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 5px; font-size: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 7px; }
+            th, td { border: 1px solid #cbd5e1; padding: 5px; text-align: left; font-size: 10px; }
             th { background: #eff6ff; }
-            .amount { font-size: 24px; font-weight: 800; color: #0066CC; }
-            .footer { margin-top: 36px; display: flex; justify-content: space-between; font-size: 12px; }
+            .amount { font-size: 13px; font-weight: 800; color: #0066CC; }
+            .footer { margin-top: 16px; display: flex; justify-content: space-between; font-size: 10px; }
           </style>
         </head>
         <body>

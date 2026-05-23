@@ -114,6 +114,12 @@ class DatabaseManager {
       ensureColumn('students', 'gender', 'TEXT');
       ensureColumn('teachers', 'gender', 'TEXT');
       ensureColumn('students', 'matricule', 'TEXT');
+      ensureColumn('students', 'father_first_name', 'TEXT');
+      ensureColumn('students', 'father_last_name', 'TEXT');
+      ensureColumn('students', 'mother_first_name', 'TEXT');
+      ensureColumn('students', 'mother_last_name', 'TEXT');
+      ensureColumn('students', 'father_name', 'TEXT');
+      ensureColumn('students', 'mother_name', 'TEXT');
 
       ensureColumn('students', 'is_deleted', 'INTEGER DEFAULT 0');
       ensureColumn('students', 'deleted_at', 'DATETIME');

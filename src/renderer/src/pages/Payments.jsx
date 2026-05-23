@@ -57,6 +57,33 @@ export default function Payments() {
   });
 
   // Statistiques calculées basées sur les données filtrées
+  const classById = React.useMemo(() => {
+    const map = new Map();
+    for (const c of classes) {
+      if (c && c.id != null) map.set(String(c.id), c);
+    }
+    return map;
+  }, [classes]);
+
+  const getStudentBalance = React.useCallback((studentId, paymentType) => {
+    if (!studentId) return { totalFee: 0, paidAmount: 0, remaining: 0 };
+
+    const student = students.find(s => String(s.id) === String(studentId));
+    if (!student) return { totalFee: 0, paidAmount: 0, remaining: 0 };
+
+    const studentClass = student.class_id ? classById.get(String(student.class_id)) : null;
+    const totalFee = paymentType === 'tuition'
+      ? (studentClass?.tuition_fee || 0)
+      : (studentClass?.uniform_fee || 0);
+
+    const paidAmount = studentPayments
+      .filter(p => String(p.student_id) === String(studentId) && p.type === paymentType)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const remaining = Math.max(0, totalFee - paidAmount);
+    return { totalFee, paidAmount, remaining, studentClass };
+  }, [students, studentPayments, classById]);
+
   const stats = React.useMemo(() => {
     if (activeTab === 'teachers') {
       const filtered = teacherPayments.filter((p) => {
@@ -200,14 +227,6 @@ export default function Payments() {
     { value: 12, label: 'Décembre' },
   ];
 
-  const classById = React.useMemo(() => {
-    const map = new Map();
-    for (const c of classes) {
-      if (c && c.id != null) map.set(String(c.id), c);
-    }
-    return map;
-  }, [classes]);
-
   const classAcademicYearOptions = React.useMemo(() => {
     const values = new Set();
     for (const c of classes) {
@@ -216,27 +235,6 @@ export default function Payments() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b, 'fr'));
   }, [classes]);
-
-  // Fonction pour calculer le solde restant d'un élève
-  const getStudentBalance = React.useCallback((studentId, paymentType) => {
-    if (!studentId) return { totalFee: 0, paidAmount: 0, remaining: 0 };
-    
-    const student = students.find(s => String(s.id) === String(studentId));
-    if (!student) return { totalFee: 0, paidAmount: 0, remaining: 0 };
-    
-    const studentClass = student.class_id ? classById.get(String(student.class_id)) : null;
-    const totalFee = paymentType === 'tuition' 
-      ? (studentClass?.tuition_fee || 0) 
-      : (studentClass?.uniform_fee || 0);
-    
-    // Calculer le total déjà payé par cet élève pour ce type
-    const paidAmount = studentPayments
-      .filter(p => String(p.student_id) === String(studentId) && p.type === paymentType)
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    
-    const remaining = Math.max(0, totalFee - paidAmount);
-    return { totalFee, paidAmount, remaining, studentClass };
-  }, [students, studentPayments, classById]);
 
   // Fonction pour calculer les informations de paiement mensuel scolarité
   const getMonthlyTuitionInfo = React.useCallback((studentId, month, year, monthTotalOverride) => {
@@ -707,17 +705,18 @@ export default function Payments() {
             <title>Reçu Scolarité (Sélection)</title>
             <style>
               @media print {
-                body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .no-print { display: none !important; }
-              }
-              body { font-family: 'Times New Roman', Georgia, serif; margin: 20px; background: #f5f5f5; }
-              .receipt { border: 4px double #000; padding: 28px; max-width: 780px; margin: 0 auto; background: white; }
-              .header { text-align: center; margin-bottom: 18px; }
-              .header h1 { font-size: 22px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; }
-              .info { display:flex; justify-content: space-between; gap: 10px; font-size: 13px; border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 14px; }
+              @page { size: A4 portrait; margin: 8mm; }
+              body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .no-print { display: none !important; }
+            }
+              body { font-family: 'Times New Roman', Georgia, serif; margin: 0; background: #f5f5f5; }
+              .receipt { border: 3px double #000; padding: 10px; width: 130mm; margin: 0 auto; background: white; }
+              .header { text-align: center; margin-bottom: 8px; }
+              .header h1 { font-size: 15px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; }
+              .info { display:flex; justify-content: space-between; gap: 8px; font-size: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 8px; }
               .print-btn { position: fixed; top: 20px; right: 20px; padding: 10px 18px; background: #0066CC; color: #fff; border: none; border-radius: 5px; cursor:pointer; font-weight:bold; }
               .close-btn { position: fixed; top: 20px; right: 130px; padding: 10px 18px; background: #666; color: #fff; border: none; border-radius: 5px; cursor:pointer; font-weight:bold; }
-              .summary { font-size: 14px; margin: 10px 0 0 0; }
+              .summary { font-size: 11px; margin: 6px 0 0 0; }
             </style>
           </head>
           <body>
@@ -830,8 +829,8 @@ export default function Payments() {
           doc.close();
 
           iframe.contentWindow.document.body.innerHTML = `
-            <div style="font-family: 'Times New Roman', Georgia, serif; padding: 20px;">
-              <h2 style="text-align:center; text-decoration: underline;">Reçu de Paiement</h2>
+            <div style="font-family: 'Times New Roman', Georgia, serif; width: 128mm; border: 3px double #000; padding: 10px; font-size: 11px;">
+              <h2 style="text-align:center; text-decoration: underline; margin: 0 0 8px; font-size: 16px;">Reçu de Paiement</h2>
               <p><strong>N° Reçu:</strong> ${String(p.id).padStart(6, '0')}</p>
               <p><strong>Date:</strong> ${new Date(p.payment_date).toLocaleDateString('fr-FR')}</p>
               <p><strong>Reçu de:</strong> ${p.first_name} ${p.last_name}</p>
@@ -869,41 +868,43 @@ export default function Payments() {
           <title>Reçu de Paiement #${String(p.id).padStart(6, '0')}</title>
           <style>
             @media print {
+              @page { size: A4 portrait; margin: 8mm; }
               body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .no-print { display: none !important; }
-              .receipt { border: 4px double #000 !important; }
+              .receipt { border: 3px double #000 !important; box-shadow: none !important; }
             }
             body { 
               font-family: 'Times New Roman', Georgia, serif; 
-              margin: 20px; 
+              margin: 0; 
               background: #f5f5f5;
             }
             .receipt { 
-              border: 4px double #000; 
-              padding: 40px; 
-              max-width: 700px; 
+              border: 3px double #000; 
+              padding: 10px; 
+              width: 128mm; 
               margin: 0 auto; 
               background: white;
               box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
-            .header { text-align: center; margin-bottom: 30px; }
-            .header h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; color: #000; }
-            .header p { margin: 8px 0; font-size: 14px; }
-            .info { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; border-bottom: 1px solid #ccc; padding-bottom: 15px; }
-            .details { margin: 25px 0; font-size: 16px; line-height: 2.2; }
-            .details p { margin: 12px 0; }
+            .header { text-align: center; margin-bottom: 8px; }
+            .header h1 { font-size: 16px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; color: #000; }
+            .header p { margin: 3px 0; font-size: 10px; }
+            .info { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
+            .info p { margin: 3px 0; }
+            .details { margin: 8px 0; font-size: 11px; line-height: 1.45; }
+            .details p { margin: 5px 0; }
             .amount { 
               font-weight: bold; 
               border: 2px solid #000; 
               background: #f0f0f0; 
-              padding: 8px 15px; 
+              padding: 3px 7px; 
               display: inline-block;
-              font-size: 18px;
+              font-size: 12px;
             }
-            .signature { display: flex; justify-content: space-between; margin-top: 70px; }
+            .signature { display: flex; justify-content: space-between; margin-top: 18px; font-size: 10px; }
             .signature div { text-align: center; width: 45%; }
-            .signature .line { border-bottom: 1px solid #000; width: 100%; margin: 50px auto 15px; }
-            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; border-top: 1px solid #ccc; padding-top: 15px; }
+            .signature .line { border-bottom: 1px solid #000; width: 100%; margin: 18px auto 6px; }
+            .footer { margin-top: 10px; text-align: center; font-size: 8.5px; color: #666; border-top: 1px solid #ccc; padding-top: 6px; }
             .print-btn {
               position: fixed;
               top: 20px;
@@ -2118,16 +2119,17 @@ export default function Payments() {
       {/* Style pour l'impression */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
+          @page { size: A4 portrait; margin: 8mm; }
           body * { visibility: hidden; }
           #receipt-print, #receipt-print * { visibility: visible; }
           #receipt-print {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 128mm;
             background: white !important;
             color: black !important;
-            padding: 20px;
+            padding: 0;
           }
           .no-print { display: none !important; }
         }
@@ -2135,15 +2137,15 @@ export default function Payments() {
 
       {/* Composant de Reçu Invisible (visible uniquement à l'impression) */}
       {viewingPayment && (
-        <div id="receipt-print" className="hidden print:block font-serif">
-          <div className="border-4 border-double border-black p-8 max-w-2xl mx-auto">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold uppercase underline">Reçu de Paiement</h1>
-              <p className="text-sm mt-1">Ecole Privée LA SAGESSE - Kalabancoro</p>
+        <div id="receipt-print" className="hidden print:block font-serif text-[11px]">
+          <div className="mx-auto w-[128mm] border-[3px] border-double border-black p-3">
+            <div className="mb-2 text-center">
+              <h1 className="text-base font-bold uppercase underline">Reçu de Paiement</h1>
+              <p className="mt-0.5 text-[10px]">Ecole Privée LA SAGESSE - Kalabancoro</p>
               <p className="text-xs italic">"L'éducation est la clé du futur"</p>
             </div>
 
-            <div className="flex justify-between mb-8 text-sm">
+            <div className="mb-3 flex justify-between border-b border-slate-300 pb-2 text-[10px]">
               <div>
                 <p><strong>N° Reçu:</strong> {String(viewingPayment.id).padStart(6, '0')}</p>
                 <p><strong>Date:</strong> {new Date(viewingPayment.payment_date).toLocaleDateString('fr-FR')}</p>
@@ -2153,10 +2155,10 @@ export default function Payments() {
               </div>
             </div>
 
-            <div className="space-y-4 text-lg">
+            <div className="space-y-1.5 text-[11px]">
               <p>Reçu de : <span className="font-bold border-b border-dotted border-black px-2">{viewingPayment.first_name} {viewingPayment.last_name}</span></p>
               
-              <p>La somme de (en chiffres) : <span className="font-bold border border-black bg-gray-100 px-4 py-1">{Number(viewingPayment.amount).toLocaleString()} FCFA</span></p>
+              <p>La somme de (en chiffres) : <span className="font-bold border border-black bg-gray-100 px-2 py-0.5">{Number(viewingPayment.amount).toLocaleString()} FCFA</span></p>
               
               <p>Motif du paiement : <span className="font-bold italic">
                 {viewingPayment._kind === 'teacher' 
@@ -2167,23 +2169,23 @@ export default function Payments() {
               <p>Méthode : <span className="font-medium">{viewingPayment.payment_method || 'Espèces'}</span></p>
               
               {viewingPayment.description && (
-                <p className="text-sm italic">Observation : {viewingPayment.description}</p>
+                <p className="text-[10px] italic">Observation : {viewingPayment.description}</p>
               )}
             </div>
 
-            <div className="mt-12 flex justify-between">
+            <div className="mt-5 flex justify-between text-[10px]">
               <div className="text-center">
                 <p className="underline font-bold">Le Parent / Bénéficiaire</p>
-                <div className="h-20"></div>
+                <div className="h-8"></div>
               </div>
               <div className="text-center">
                 <p className="underline font-bold">Le Comptable / Direction</p>
-                <div className="h-20"></div>
+                <div className="h-8"></div>
                 <p className="text-xs italic">(Cachet et Signature)</p>
               </div>
             </div>
 
-            <div className="mt-8 text-[10px] text-center text-gray-500 border-t pt-2">
+            <div className="mt-3 border-t pt-1 text-center text-[8.5px] text-gray-500">
               Imprimé le {new Date().toLocaleString('fr-FR')} via SchoolManage
             </div>
           </div>
@@ -2192,3 +2194,4 @@ export default function Payments() {
     </div>
   );
 }
+

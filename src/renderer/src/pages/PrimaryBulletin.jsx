@@ -520,30 +520,33 @@ export default function PrimaryBulletin() {
           <meta charset="utf-8" />
           <title>Bulletins ${escapeHtml(className)} - ${escapeHtml(monthLabel)}</title>
           <style>
-            @page { size: A4 portrait; margin: 9mm; }
+            @page { size: A4 portrait; margin: 8mm; }
             * { box-sizing: border-box; }
             body { margin: 0; color: #111827; font-family: Arial, sans-serif; background: white; }
-            .bulletin { min-height: 277mm; page-break-after: always; padding: 6mm; border: 1.5px solid #111827; }
+            .bulletin { height: 138mm; break-inside: avoid; page-break-inside: avoid; page-break-after: auto; margin-bottom: 5mm; padding: 3mm; overflow: hidden; border: 1.2px solid #111827; }
+            .bulletin:nth-of-type(2n) { page-break-after: always; margin-bottom: 0; }
             .bulletin:last-child { page-break-after: auto; }
-            .topline { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 12px; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; }
+            .topline { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 6px; align-items: center; border-bottom: 1.5px solid #111827; padding-bottom: 3px; }
             .title { text-align: center; }
-            h1 { margin: 2px 0 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0; }
-            .tiny { margin: 0; font-size: 10px; text-transform: uppercase; color: #4b5563; }
-            .identity { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin: 8px 0; font-size: 12px; }
+            h1 { margin: 1px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }
+            .tiny { margin: 0; font-size: 6.5px; text-transform: uppercase; color: #4b5563; }
+            .topline strong { font-size: 8px; }
+            .identity { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 5px; margin: 3px 0; font-size: 7.5px; }
             table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #111827; padding: 3px 4px; font-size: 10.5px; height: 20px; text-align: center; }
+            th, td { border: 1px solid #111827; padding: 1px 2px; font-size: 6.6px; height: 10px; line-height: 1.05; text-align: center; }
             th { background: #eef2f7; font-weight: 800; }
             .subject { width: 25%; text-align: left; font-weight: 700; }
             .marks td.active { background: #fef3c7; font-weight: 800; }
             .meta-row td { font-weight: 800; background: #f8fafc; }
-            .visas { margin-top: 10px; }
+            .visas { margin-top: 3px; }
             .visas th:first-child, .visas td:first-child { width: 21%; text-align: left; font-weight: 800; }
-            .summary { display: grid; grid-template-columns: 1fr 0.7fr 1fr; gap: 8px; border: 1px solid #111827; margin-top: 12px; padding: 8px; font-size: 12px; }
-            .decision { border: 1px solid #111827; margin-top: 12px; min-height: 58px; text-align: center; padding: 6px; }
-            .decision p { min-height: 20px; margin: 5px 0; font-size: 11px; }
-            .checks { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; text-align: left; font-size: 11px; }
-            .checks i { display: inline-block; width: 34px; height: 16px; border: 1px solid #111827; vertical-align: middle; margin-left: 6px; }
-            .signatures { display: flex; justify-content: space-between; margin-top: 22px; padding: 0 22px; text-transform: uppercase; font-size: 12px; }
+            .summary { display: grid; grid-template-columns: 1fr 0.7fr 1fr; gap: 4px; border: 1px solid #111827; margin-top: 3px; padding: 2px; font-size: 7px; }
+            .decision { border: 1px solid #111827; margin-top: 3px; min-height: 20px; text-align: center; padding: 2px; }
+            .decision b { font-size: 7px; }
+            .decision p { min-height: 8px; margin: 1px 0; font-size: 6.8px; line-height: 1.1; }
+            .checks { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 4px; text-align: left; font-size: 6.8px; }
+            .checks i { display: inline-block; width: 18px; height: 7px; border: 1px solid #111827; vertical-align: middle; margin-left: 3px; }
+            .signatures { display: flex; justify-content: space-between; margin-top: 4px; padding: 0 14px; text-transform: uppercase; font-size: 7px; }
           </style>
         </head>
         <body>${bulletinsHtml}</body>

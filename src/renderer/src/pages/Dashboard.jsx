@@ -312,7 +312,7 @@ export default function Dashboard() {
               <CardTitle className="text-lg">Activité financière</CardTitle>
               <p className="mt-1 text-sm text-slate-500">Paiements élèves et enseignants les plus récents.</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/payments')} className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/payments/tuition')} className="gap-2">
               Ouvrir
               <ArrowRight className="h-4 w-4" />
             </Button>

@@ -46,6 +46,12 @@ const emptyForm = {
   matricule: '',
   phone: '',
   address: '',
+  father_first_name: '',
+  father_last_name: '',
+  mother_first_name: '',
+  mother_last_name: '',
+  father_name: '',
+  mother_name: '',
   class_id: '',
   photo: null,
   guardian: {
@@ -77,6 +83,16 @@ const getAge = (date) => {
 };
 
 const getStudentName = (student) => `${student.first_name || ''} ${student.last_name || ''}`.trim();
+
+const getParentFullName = (firstName, lastName, fallback = '') => (
+  `${firstName || ''} ${lastName || ''}`.trim() || fallback || ''
+);
+
+function splitLegacyName(value) {
+  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] || '', lastName: '' };
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] || '' };
+}
 
 function LoadingState() {
   return (
@@ -196,6 +212,12 @@ export default function Students() {
         student.phone,
         student.guardian_phone,
         student.class_name,
+        student.father_first_name,
+        student.father_last_name,
+        student.mother_first_name,
+        student.mother_last_name,
+        student.father_name,
+        student.mother_name,
       ].filter(Boolean).join(' ').toLowerCase();
 
       const matchSearch = !q || searchable.includes(q);
@@ -248,6 +270,8 @@ export default function Students() {
       }
 
       setEditingStudent(student);
+      const legacyFather = splitLegacyName(fullStudent.father_name);
+      const legacyMother = splitLegacyName(fullStudent.mother_name);
       setFormData({
         first_name: fullStudent.first_name || '',
         last_name: fullStudent.last_name || '',
@@ -256,6 +280,12 @@ export default function Students() {
         matricule: fullStudent.matricule || '',
         phone: fullStudent.phone || '',
         address: fullStudent.address || '',
+        father_first_name: fullStudent.father_first_name || legacyFather.firstName,
+        father_last_name: fullStudent.father_last_name || legacyFather.lastName,
+        mother_first_name: fullStudent.mother_first_name || legacyMother.firstName,
+        mother_last_name: fullStudent.mother_last_name || legacyMother.lastName,
+        father_name: fullStudent.father_name || '',
+        mother_name: fullStudent.mother_name || '',
         class_id: fullStudent.class_id || '',
         photo: fullStudent.photo || null,
         guardian: {
@@ -288,16 +318,21 @@ export default function Students() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      father_name: getParentFullName(formData.father_first_name, formData.father_last_name, formData.father_name),
+      mother_name: getParentFullName(formData.mother_first_name, formData.mother_last_name, formData.mother_name),
+    };
     try {
       if (editingStudent) {
-        const result = await updateStudent(editingStudent.id, formData);
+        const result = await updateStudent(editingStudent.id, payload);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la modification');
           return;
         }
         toast.success('Élève modifié avec succès');
       } else {
-        const result = await createStudent(formData);
+        const result = await createStudent(payload);
         if (!result.success) {
           toast.error(result.error || 'Erreur lors de la création');
           return;
@@ -610,6 +645,31 @@ export default function Students() {
 
                 <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
                   <div className="mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-[#0066CC]" />
+                    <h3 className="font-semibold text-slate-950 dark:text-white">Parents</h3>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Prenom du pere</label>
+                      <Input value={formData.father_first_name} onChange={(e) => setFormData({ ...formData, father_first_name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Nom du pere</label>
+                      <Input value={formData.father_last_name} onChange={(e) => setFormData({ ...formData, father_last_name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Prenom de la mere</label>
+                      <Input value={formData.mother_first_name} onChange={(e) => setFormData({ ...formData, mother_first_name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Nom de la mere</label>
+                      <Input value={formData.mother_last_name} onChange={(e) => setFormData({ ...formData, mother_last_name: e.target.value })} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                  <div className="mb-3 flex items-center gap-2">
                     <Shield className="h-4 w-4 text-[#FF6600]" />
                     <h3 className="font-semibold text-slate-950 dark:text-white">Tuteur obligatoire</h3>
                   </div>
@@ -694,6 +754,8 @@ export default function Students() {
                   <InfoItem icon={School} label="Classe" value={viewingStudent.class_name || 'Non assigné'} />
                   <InfoItem icon={Phone} label="Téléphone" value={viewingStudent.phone} />
                   <InfoItem icon={MapPin} label="Adresse" value={viewingStudent.address} />
+                  <InfoItem icon={UserCircle} label="Pere" value={getParentFullName(viewingStudent.father_first_name, viewingStudent.father_last_name, viewingStudent.father_name)} />
+                  <InfoItem icon={UserCircle} label="Mere" value={getParentFullName(viewingStudent.mother_first_name, viewingStudent.mother_last_name, viewingStudent.mother_name)} />
                 </div>
               </section>
 
