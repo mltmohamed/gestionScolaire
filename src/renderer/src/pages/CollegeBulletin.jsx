@@ -117,12 +117,16 @@ function formatScore(value, digits = 2) {
 
 function getAppreciation(avg) {
   if (avg === null) return '';
-  if (avg >= 16) return 'Excellent';
-  if (avg >= 14) return 'Tres bien';
-  if (avg >= 12) return 'Bien';
-  if (avg >= 10) return 'Assez bien';
-  if (avg >= 8) return 'Passable';
-  return 'Insuffisant';
+  if (avg >= 18) return 'Excellent';
+  if (avg >= 16) return 'Tres bien';
+  if (avg >= 14) return 'Bien';
+  if (avg >= 12) return 'Assez bien';
+  if (avg >= 10) return 'Passable';
+  if (avg >= 8) return 'Insuffisant';
+  if (avg >= 6) return 'Faible';
+  if (avg >= 4) return 'Mauvais';
+  if (avg >= 2) return 'Mal';
+  return 'Nul';
 }
 
 function computeSubject(row) {
