@@ -14,6 +14,7 @@ const PAGE_META = [
   { match: (path) => path.startsWith('/payments/tuition'), title: 'Paiements scolarite', subtitle: 'Encaissements, restes et recus' },
   { match: (path) => path.startsWith('/payments/uniform'), title: 'Paiements tenues', subtitle: 'Tenues de classe et sportives' },
   { match: (path) => path.startsWith('/payments/teachers'), title: 'Paiements enseignants', subtitle: 'Salaires et recus mensuels' },
+  { match: (path) => path.startsWith('/bulletin/early'), title: 'Bulletins jardin-2e', subtitle: 'Notes mensuelles, absences, retards et appreciations' },
   { match: (path) => path.startsWith('/bulletin/primary'), title: 'Bulletins primaire', subtitle: 'Compositions mensuelles 3e a 6e' },
   { match: (path) => path.startsWith('/bulletin/college'), title: 'Bulletins second cycle', subtitle: 'Compositions trimestrielles 7e a 9e' },
   { match: (path) => path.startsWith('/settings'), title: 'Parametres', subtitle: 'Profil, apparence, securite et donnees' },

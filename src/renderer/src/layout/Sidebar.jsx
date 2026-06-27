@@ -35,6 +35,7 @@ const PAYMENT_NAV = [
 ];
 
 const BULLETIN_NAV = [
+  { name: 'Jardin-2e', href: '/bulletin/early', icon: School },
   { name: 'Primaire 3e-6e', href: '/bulletin/primary', icon: GraduationCap },
   { name: 'Second cycle 7e-9e', href: '/bulletin/college', icon: Users },
 ];

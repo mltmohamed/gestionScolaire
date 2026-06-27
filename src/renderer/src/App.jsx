@@ -17,6 +17,7 @@ import TeacherPayments from './pages/TeacherPayments';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Bulletin from './pages/Bulletin';
+import EarlyBulletin from './pages/EarlyBulletin';
 import PrimaryBulletin from './pages/PrimaryBulletin';
 import CollegeBulletin from './pages/CollegeBulletin';
 import StudentCard from './pages/StudentCard';
@@ -64,6 +65,7 @@ function App() {
                 <Route path="payments/uniform" element={<UniformPayments />} />
                 <Route path="payments/teachers" element={<TeacherPayments />} />
                 <Route path="bulletin" element={<Bulletin />} />
+                <Route path="bulletin/early" element={<EarlyBulletin />} />
                 <Route path="bulletin/primary" element={<PrimaryBulletin />} />
                 <Route path="bulletin/college" element={<CollegeBulletin />} />
                 <Route path="student-card" element={<StudentCard />} />

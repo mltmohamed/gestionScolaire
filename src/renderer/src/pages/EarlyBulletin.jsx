@@ -37,27 +37,17 @@ const MONTHS = [
 ];
 
 const SUBJECTS = [
+  'Dictee',
+  'Mathematiques',
   'Lecture',
-  'Ecriture',
-  'Vocabulaire',
-  'Dessin',
+  'Copie / Ecriture',
+  'Langage',
   'Chant',
   'Recitation',
-  'Grammaire',
-  'Conjugaison',
-  'Mathematiques',
-  'Exp. E./Rec.',
-  'Dictee',
-  'Quest. Dictee',
-  'Quest. de Cours',
-  'Economie Familiale',
+  'Dessin',
   'Morale',
-  'Anglais',
-  'Informatique',
   'Conduite',
 ];
-
-const META_SUBJECTS = ['TOTAL', 'Moy. de Classe', 'Moy. de Compo', 'Moy. Generale', 'Classement'];
 
 function makeDefaultAcademicYear() {
   const month = new Date().getMonth();
@@ -73,15 +63,16 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
-function extractLevel(cls) {
+function extractEarlyLevel(cls) {
   const raw = normalizeText(`${cls?.level || ''} ${cls?.name || ''}`);
-  const match = raw.match(/\b([3-6])\s*(e|eme|ere|annee)?\b/);
+  if (/\b(jardin|maternelle|petite|moyenne|grande)\b/.test(raw)) return 0;
+  const match = raw.match(/\b([1-2])\s*(e|ere|eme|annee)?\b/);
   return match ? Number(match[1]) : null;
 }
 
-function isPrimaryClass(cls) {
-  const level = extractLevel(cls);
-  return level >= 3 && level <= 6;
+function isEarlyClass(cls) {
+  const level = extractEarlyLevel(cls);
+  return level !== null && level >= 0 && level <= 2;
 }
 
 function sortStudents(a, b) {
@@ -90,7 +81,11 @@ function sortStudents(a, b) {
   return String(a.first_name || '').localeCompare(String(b.first_name || ''), 'fr', { sensitivity: 'base' });
 }
 
-function emptyNoteGrid() {
+function getStudentName(student) {
+  return `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Eleve';
+}
+
+function emptyNotes() {
   return SUBJECTS.reduce((acc, subject) => {
     acc[subject] = MONTHS.reduce((months, month) => {
       months[month.key] = '';
@@ -100,8 +95,25 @@ function emptyNoteGrid() {
   }, {});
 }
 
+function emptyAppreciations() {
+  return SUBJECTS.reduce((acc, subject) => {
+    acc[subject] = MONTHS.reduce((months, month) => {
+      months[month.key] = '';
+      return months;
+    }, {});
+    return acc;
+  }, {});
+}
+
+function emptyMonthlyMeta() {
+  return MONTHS.reduce((acc, month) => {
+    acc[month.key] = { absences: '', retards: '' };
+    return acc;
+  }, {});
+}
+
 function notesArrayToGrid(notes = []) {
-  const grid = emptyNoteGrid();
+  const grid = emptyNotes();
   for (const row of Array.isArray(notes) ? notes : []) {
     const subject = SUBJECTS.find((s) => s === row.subject);
     const month = MONTHS.find((m) => m.key === row.month_key);
@@ -135,7 +147,7 @@ function sanitizeNote(value) {
   return String(Math.min(10, Math.max(0, numeric)));
 }
 
-function getPrimaryAppreciation(note) {
+function getEarlyAppreciation(note) {
   if (note === '' || note === null || note === undefined) return '';
   const value = Number(String(note).replace(',', '.'));
   if (!Number.isFinite(value)) return '';
@@ -151,31 +163,22 @@ function getPrimaryAppreciation(note) {
   return 'Nul';
 }
 
+function sanitizeCount(value) {
+  const cleaned = String(value || '').replace(/[^\d]/g, '');
+  if (cleaned === '') return '';
+  return String(Math.max(0, Number(cleaned)));
+}
+
 function average(values) {
   const numbers = values.map((v) => Number(String(v).replace(',', '.'))).filter((n) => Number.isFinite(n));
-  if (!numbers.length) return null;
-  return numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
+  return numbers.length ? numbers.reduce((sum, n) => sum + n, 0) / numbers.length : null;
 }
 
-function maxFinite(values) {
-  const numbers = values.map((v) => Number(String(v).replace(',', '.'))).filter((n) => Number.isFinite(n));
-  return numbers.length ? Math.max(...numbers) : null;
-}
-
-function isFilledNote(value) {
-  return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(String(value).replace(',', '.')));
-}
-
-function completeMonthAverage(grid, monthKey) {
-  const values = SUBJECTS.map((subject) => grid?.[subject]?.[monthKey]);
-  if (!values.every(isFilledNote)) return null;
-  return average(values);
-}
-
-function completeAnnualAverage(grid) {
-  const monthlyAverages = MONTHS.map((month) => completeMonthAverage(grid, month.key));
-  if (!monthlyAverages.every((value) => value !== null)) return null;
-  return average(monthlyAverages);
+function sum(values) {
+  return values.reduce((total, value) => {
+    const number = Number(String(value).replace(',', '.'));
+    return Number.isFinite(number) ? total + number : total;
+  }, 0);
 }
 
 function formatScore(value, digits = 2) {
@@ -192,11 +195,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
-function getStudentName(student) {
-  return `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Eleve';
-}
-
-export default function PrimaryBulletin() {
+export default function EarlyBulletin() {
   const { students, loading: studentsLoading } = useStudents();
   const { classes, loading: classesLoading } = useClasses();
   const { toast, ToastComponent } = useToast();
@@ -209,21 +208,21 @@ export default function PrimaryBulletin() {
   const [selectedMonthKey, setSelectedMonthKey] = useState('');
   const [query, setQuery] = useState('');
   const [bulletins, setBulletins] = useState({});
+  const [activeStudentId, setActiveStudentId] = useState('');
   const [loadingClassData, setLoadingClassData] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeStudentId, setActiveStudentId] = useState('');
 
-  const primaryClasses = useMemo(() => {
-    return classes.filter(isPrimaryClass).sort((a, b) => {
-      const levelDelta = (extractLevel(a) || 0) - (extractLevel(b) || 0);
+  const earlyClasses = useMemo(() => {
+    return classes.filter(isEarlyClass).sort((a, b) => {
+      const levelDelta = (extractEarlyLevel(a) || 0) - (extractEarlyLevel(b) || 0);
       if (levelDelta !== 0) return levelDelta;
       return String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
     });
   }, [classes]);
 
   const selectedClass = useMemo(
-    () => primaryClasses.find((cls) => String(cls.id) === String(selectedClassId)),
-    [primaryClasses, selectedClassId]
+    () => earlyClasses.find((cls) => String(cls.id) === String(selectedClassId)),
+    [earlyClasses, selectedClassId]
   );
 
   const selectedMonth = useMemo(
@@ -240,17 +239,15 @@ export default function PrimaryBulletin() {
   const visibleStudents = useMemo(() => {
     const needle = normalizeText(query);
     if (!needle) return classStudents;
-    return classStudents.filter((student) => {
-      return normalizeText(`${student.first_name} ${student.last_name} ${student.matricule}`).includes(needle);
-    });
+    return classStudents.filter((student) => normalizeText(`${student.first_name} ${student.last_name} ${student.matricule}`).includes(needle));
   }, [classStudents, query]);
 
   const classStatsById = useMemo(() => {
-    return primaryClasses.reduce((acc, cls) => {
+    return earlyClasses.reduce((acc, cls) => {
       acc[cls.id] = students.filter((student) => String(student.class_id || '') === String(cls.id)).length;
       return acc;
     }, {});
-  }, [primaryClasses, students]);
+  }, [earlyClasses, students]);
 
   const selectedMonthValues = useCallback(
     (studentId) => SUBJECTS.map((subject) => bulletins[studentId]?.notes?.[subject]?.[selectedMonthKey] || ''),
@@ -270,23 +267,7 @@ export default function PrimaryBulletin() {
     [selectedMonthValues]
   );
 
-  const globalStats = useMemo(() => {
-    const completed = classStudents.filter((student) => getCompletion(student.id).complete).length;
-    const filledCells = classStudents.reduce((sum, student) => sum + getCompletion(student.id).filled, 0);
-    const totalCells = classStudents.length * SUBJECTS.length;
-    const monthAverages = classStudents
-      .map((student) => average(selectedMonthValues(student.id)))
-      .filter((value) => value !== null);
-    return {
-      completed,
-      filledCells,
-      totalCells,
-      percent: totalCells ? Math.round((filledCells / totalCells) * 100) : 0,
-      classAverage: average(monthAverages),
-    };
-  }, [classStudents, getCompletion, selectedMonthValues]);
-
-  const studentsWithRanks = useMemo(() => {
+  const studentsWithStats = useMemo(() => {
     const rows = classStudents.map((student) => ({
       student,
       monthAverage: average(selectedMonthValues(student.id)),
@@ -301,8 +282,24 @@ export default function PrimaryBulletin() {
     return rows.map((row) => ({ ...row, rank: rankById[row.student.id] || '' }));
   }, [classStudents, selectedMonthValues]);
 
+  const globalStats = useMemo(() => {
+    const completed = classStudents.filter((student) => getCompletion(student.id).complete).length;
+    const filledCells = classStudents.reduce((total, student) => total + getCompletion(student.id).filled, 0);
+    const totalCells = classStudents.length * SUBJECTS.length;
+    const averages = studentsWithStats.map((row) => row.monthAverage).filter((value) => value !== null);
+    return {
+      completed,
+      filledCells,
+      totalCells,
+      percent: totalCells ? Math.round((filledCells / totalCells) * 100) : 0,
+      classAverage: average(averages),
+      bestAverage: averages.length ? Math.max(...averages) : null,
+      lowestAverage: averages.length ? Math.min(...averages) : null,
+    };
+  }, [classStudents, getCompletion, studentsWithStats]);
+
   const loadClassBulletins = useCallback(async () => {
-    if (!selectedClassId || !academicYear) return;
+    if (!selectedClassId || !academicYear || !selectedMonthKey) return;
     setLoadingClassData(true);
     try {
       const entries = await Promise.all(
@@ -314,13 +311,13 @@ export default function PrimaryBulletin() {
           } catch {
             metaData = {};
           }
+          const early = metaData?.early || {};
           return [
             student.id,
             {
               notes: notesArrayToGrid(data?.notes),
-              appreciation: metaData.appreciation || data?.meta?.observations_generales || '',
-              decision: data?.meta?.decision || '',
-              rang: data?.meta?.rang || '',
+              appreciations: { ...emptyAppreciations(), ...(early.appreciations || {}) },
+              monthly: { ...emptyMonthlyMeta(), ...(early.monthly || {}) },
             },
           ];
         })
@@ -328,12 +325,12 @@ export default function PrimaryBulletin() {
       setBulletins(Object.fromEntries(entries));
       setActiveStudentId(classStudents[0]?.id || '');
     } catch (error) {
-      console.error('Erreur chargement bulletins primaire:', error);
+      console.error('Erreur chargement bulletins jardin-2e:', error);
       showError('Impossible de charger les bulletins de cette classe');
     } finally {
       setLoadingClassData(false);
     }
-  }, [academicYear, classStudents, getBulletin, selectedClassId, showError]);
+  }, [academicYear, classStudents, getBulletin, selectedClassId, selectedMonthKey, showError]);
 
   useEffect(() => {
     if (step === 'entry') {
@@ -343,46 +340,81 @@ export default function PrimaryBulletin() {
 
   const updateNote = (studentId, subject, value) => {
     const note = sanitizeNote(value);
-    setBulletins((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        notes: {
-          ...(prev[studentId]?.notes || emptyNoteGrid()),
-          [subject]: {
-            ...((prev[studentId]?.notes || emptyNoteGrid())[subject] || {}),
-            [selectedMonthKey]: note,
+    setBulletins((prev) => {
+      const current = prev[studentId] || {};
+      const currentNotes = current.notes || emptyNotes();
+      return {
+        ...prev,
+        [studentId]: {
+          ...current,
+          appreciations: current.appreciations || emptyAppreciations(),
+          monthly: current.monthly || emptyMonthlyMeta(),
+          notes: {
+            ...currentNotes,
+            [subject]: {
+              ...(currentNotes[subject] || {}),
+              [selectedMonthKey]: note,
+            },
           },
         },
-      },
-    }));
+      };
+    });
   };
 
-  const updateAppreciation = (studentId, value) => {
-    setBulletins((prev) => ({
-      ...prev,
-      [studentId]: {
-        notes: emptyNoteGrid(),
-        ...prev[studentId],
-        appreciation: value,
-      },
-    }));
+  const updateMonthly = (studentId, field, value) => {
+    setBulletins((prev) => {
+      const current = prev[studentId] || {};
+      const currentMonthly = current.monthly || emptyMonthlyMeta();
+      return {
+        ...prev,
+        [studentId]: {
+          ...current,
+          notes: current.notes || emptyNotes(),
+          appreciations: current.appreciations || emptyAppreciations(),
+          monthly: {
+            ...currentMonthly,
+            [selectedMonthKey]: {
+              ...(currentMonthly[selectedMonthKey] || {}),
+              [field]: sanitizeCount(value),
+            },
+          },
+        },
+      };
+    });
   };
 
   const saveOneStudent = async (student) => {
-    const row = bulletins[student.id] || { notes: emptyNoteGrid() };
-    const rank = studentsWithRanks.find((item) => item.student.id === student.id)?.rank || '';
+    const current = bulletins[student.id] || {
+      notes: emptyNotes(),
+      appreciations: emptyAppreciations(),
+      monthly: emptyMonthlyMeta(),
+    };
+    const rank = studentsWithStats.find((row) => row.student.id === student.id)?.rank || '';
+    const previous = await getBulletin(student.id, academicYear);
+    let previousPayload = {};
+    try {
+      previousPayload = previous?.meta?.data_json ? JSON.parse(previous.meta.data_json) : {};
+    } catch {
+      previousPayload = {};
+    }
+    const nextPayload = {
+      ...previousPayload,
+      early: {
+        ...(previousPayload.early || {}),
+        selected_month: selectedMonthKey,
+        appreciations: current.appreciations || emptyAppreciations(),
+        monthly: current.monthly || emptyMonthlyMeta(),
+      },
+    };
+
     const result = await saveBulletin(student.id, academicYear, {
-      notes: gridToNotesArray(row.notes),
+      notes: gridToNotesArray(current.notes),
       meta: {
-        bulletin_type: 'primary',
-        rang: rank ? `${rank}/${classStudents.length}` : row.rang || '',
-        decision: row.decision || '',
-        observations_generales: row.appreciation || '',
-        data_json: JSON.stringify({
-          appreciation: row.appreciation || '',
-          selected_month: selectedMonthKey,
-        }),
+        bulletin_type: 'early',
+        rang: rank ? `${rank}/${classStudents.length}` : '',
+        decision: '',
+        observations_generales: '',
+        data_json: JSON.stringify(nextPayload),
       },
     });
     if (!result?.success) throw new Error(result?.error || 'Erreur sauvegarde bulletin');
@@ -395,10 +427,10 @@ export default function PrimaryBulletin() {
       for (const student of classStudents) {
         await saveOneStudent(student);
       }
-      showSuccess('Bulletins de la classe enregistres');
+      showSuccess('Bulletins jardin a 2e enregistres');
       return true;
     } catch (error) {
-      console.error('Erreur sauvegarde bulletins:', error);
+      console.error('Erreur sauvegarde bulletins jardin-2e:', error);
       showError(error?.message || 'Erreur lors de la sauvegarde');
       return false;
     } finally {
@@ -409,120 +441,70 @@ export default function PrimaryBulletin() {
   const makePrintHtml = () => {
     const monthLabel = selectedMonth?.label || '';
     const className = selectedClass?.name || '';
-    const rankedRows = studentsWithRanks;
-    const monthRankById = Object.fromEntries(rankedRows.map((row) => [row.student.id, row.rank]));
-    const annualAverages = classStudents.map((student) => {
-      const grid = bulletins[student.id]?.notes || emptyNoteGrid();
-      return {
-        id: student.id,
-        avg: completeAnnualAverage(grid),
-      };
-    });
-    const classYearComplete = classStudents.length > 0 && annualAverages.every((row) => row.avg !== null);
-    const annualRankById = {};
-    if (classYearComplete) {
-      [...annualAverages]
-        .sort((a, b) => b.avg - a.avg)
-        .forEach((row, index) => {
-          annualRankById[row.id] = index + 1;
-        });
-    }
-    const firstAnnualAverage = classYearComplete ? maxFinite(annualAverages.map((row) => row.avg)) : null;
+    const rankById = Object.fromEntries(studentsWithStats.map((row) => [row.student.id, row.rank]));
 
     const bulletinsHtml = classStudents
       .map((student) => {
-        const row = bulletins[student.id] || { notes: emptyNoteGrid() };
-        const monthAverage = average(selectedMonthValues(student.id));
-        const annualAverage = annualAverages.find((item) => item.id === student.id)?.avg;
-        const monthRank = monthRankById[student.id] ? `${monthRankById[student.id]}/${classStudents.length}` : '';
-        const annualRank = annualRankById[student.id] ? `${annualRankById[student.id]}/${classStudents.length}` : '';
+        const row = bulletins[student.id] || {
+          notes: emptyNotes(),
+          appreciations: emptyAppreciations(),
+          monthly: emptyMonthlyMeta(),
+        };
+        const values = selectedMonthValues(student.id);
+        const total = sum(values);
+        const studentAverage = average(values);
+        const monthly = row.monthly?.[selectedMonthKey] || {};
+        const rank = rankById[student.id] ? `${rankById[student.id]}/${classStudents.length}` : '';
 
         return `
           <section class="bulletin">
-            <div class="topline">
-              <div>
-                <p class="tiny">Annee scolaire</p>
-                <strong>${escapeHtml(academicYear)}</strong>
-              </div>
-              <div class="title">
-                <p class="tiny">Bulletin primaire 3e a 6e</p>
-                <h1>Compositions mensuelles</h1>
-              </div>
-              <div>
-                <p class="tiny">Classe</p>
-                <strong>${escapeHtml(className)}</strong>
-              </div>
+            <h1>${escapeHtml(monthLabel.toUpperCase())}</h1>
+            <div class="attendance">
+              <div><b>ASSIDUITE</b><span>Nombre d'absences : ${escapeHtml(monthly.absences || '........')}</span></div>
+              <div><b>PONCTUALITE</b><span>Nombre de retards : ${escapeHtml(monthly.retards || '........')}</span></div>
             </div>
             <div class="identity">
               <span><b>Eleve:</b> ${escapeHtml(getStudentName(student))}</span>
-              <span><b>Matricule:</b> ${escapeHtml(student.matricule || '-')}</span>
-              <span><b>Mois saisi:</b> ${escapeHtml(monthLabel)}</span>
+              <span><b>Classe:</b> ${escapeHtml(className || '-')}</span>
+              <span><b>Annee:</b> ${escapeHtml(academicYear)}</span>
             </div>
-            <table class="marks">
+            <table>
               <thead>
                 <tr>
-                  <th class="subject">Matieres / Mois</th>
-                  ${MONTHS.map((month) => `<th>${escapeHtml(month.short)}</th>`).join('')}
+                  <th class="subject">MATIERES</th>
+                  <th class="note">NOTES</th>
+                  <th>APPRECIATIONS DU MATIERE</th>
                 </tr>
               </thead>
               <tbody>
-                ${SUBJECTS.map((subject) => `
-                  <tr>
-                    <td class="subject">${escapeHtml(subject)}</td>
-                    ${MONTHS.map((month) => {
-                      const value = row.notes?.[subject]?.[month.key] || '';
-                      const active = month.key === selectedMonthKey ? ' active' : '';
-                      return `<td class="${active}">${escapeHtml(value)}</td>`;
-                    }).join('')}
-                  </tr>
-                `).join('')}
-                ${META_SUBJECTS.map((label) => {
-                  const selectedValue =
-                    label === 'TOTAL' ? formatScore(selectedMonthValues(student.id).reduce((sum, value) => sum + (Number(value) || 0), 0), 1) :
-                    label === 'Moy. de Classe' ? formatScore(monthAverage) :
-                    label === 'Moy. de Compo' ? formatScore(monthAverage) :
-                    label === 'Moy. Generale' ? formatScore(monthAverage) :
-                    monthRank;
+                ${SUBJECTS.map((subject) => {
+                  const note = row.notes?.[subject]?.[selectedMonthKey] || '';
+                  const appreciation = getEarlyAppreciation(note);
                   return `
-                    <tr class="meta-row">
-                      <td class="subject">${escapeHtml(label)}</td>
-                      ${MONTHS.map((month) => `<td class="${month.key === selectedMonthKey ? 'active' : ''}">${month.key === selectedMonthKey ? escapeHtml(selectedValue) : ''}</td>`).join('')}
+                    <tr>
+                      <td class="subject">${escapeHtml(subject)}</td>
+                      <td class="note">${escapeHtml(note)}</td>
+                      <td class="app">${escapeHtml(appreciation)}</td>
                     </tr>
                   `;
                 }).join('')}
-              </tbody>
-            </table>
-            <table class="visas">
-              <thead>
-                <tr><th>Mois</th><th>Maitre</th><th>Directeur</th><th>Les parents</th><th>Observations</th></tr>
-              </thead>
-              <tbody>
-                ${MONTHS.map((month) => `
-                  <tr>
-                    <td>${escapeHtml(month.label.toUpperCase())}</td>
-                    <td></td><td></td><td></td>
-                    <td>${month.key === selectedMonthKey ? escapeHtml(row.appreciation || '') : ''}</td>
-                  </tr>
-                `).join('')}
+                <tr class="total">
+                  <td class="subject">TOTAL</td>
+                  <td class="note">${formatScore(total, 1)}</td>
+                  <td></td>
+                </tr>
               </tbody>
             </table>
             <div class="summary">
-              <span><b>Moyenne annuelle:</b> ${classYearComplete ? formatScore(annualAverage) : '____'} /10</span>
-              <span><b>Rang annuel:</b> ${escapeHtml(classYearComplete ? annualRank : '____')}</span>
-              <span><b>Moyenne du 1er:</b> ${classYearComplete ? formatScore(firstAnnualAverage) : '____'} /10</span>
-            </div>
-            <div class="decision">
-              <b>Observations Generales</b>
-              <p>${escapeHtml(row.appreciation || '')}</p>
-              <div class="checks">
-                <span>Passe en classe superieure <i></i></span>
-                <span>Redouble <i></i></span>
-                <span>Exclu(e) <i></i></span>
+              <div>
+                <p>Moyenne de l'eleve : <b>${formatScore(studentAverage) || '..........'}</b></p>
+                <p>Moyenne la plus elevee : <b>${formatScore(globalStats.bestAverage) || '..........'}</b></p>
+                <p>Moyenne la plus faible : <b>${formatScore(globalStats.lowestAverage) || '..........'}</b></p>
               </div>
-            </div>
-            <div class="signatures">
-              <strong>Le maitre</strong>
-              <strong>Le directeur</strong>
+              <div>
+                <p>Rang : <b>${escapeHtml(rank || '..........')}</b></p>
+                <p>Nombre d'eleves : <b>${classStudents.length || '..........'}</b></p>
+              </div>
             </div>
           </section>
         `;
@@ -539,30 +521,23 @@ export default function PrimaryBulletin() {
             @page { size: A4 portrait; margin: 8mm; }
             * { box-sizing: border-box; }
             body { margin: 0; color: #111827; font-family: Arial, sans-serif; background: white; }
-            .bulletin { height: 136mm; break-inside: avoid; page-break-inside: avoid; page-break-after: auto; margin-bottom: 4mm; padding: 2.8mm; overflow: hidden; border: 1.2px solid #111827; }
+            .bulletin { width: 184mm; height: 138mm; margin: 0 auto 5mm; padding: 4mm; overflow: hidden; border: 1.4px solid #111827; border-radius: 7mm; page-break-after: auto; break-inside: avoid; page-break-inside: avoid; }
             .bulletin:nth-of-type(2n) { page-break-after: always; margin-bottom: 0; }
             .bulletin:last-child { page-break-after: auto; }
-            .topline { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 6px; align-items: center; border-bottom: 1.5px solid #111827; padding-bottom: 3px; }
-            .title { text-align: center; }
-            h1 { margin: 1px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }
-            .tiny { margin: 0; font-size: 6.5px; text-transform: uppercase; color: #4b5563; }
-            .topline strong { font-size: 8px; }
-            .identity { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 5px; margin: 3px 0; font-size: 7.5px; }
+            h1 { margin: 0 0 2mm; text-align: center; font-size: 10px; letter-spacing: 0; }
+            .attendance { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 1mm; font-size: 7.5px; }
+            .attendance b { display: block; font-size: 7.5px; text-decoration: underline; }
+            .attendance span { display: block; margin-top: .5mm; }
+            .identity { display: grid; grid-template-columns: 1.3fr 0.8fr 0.8fr; gap: 2mm; margin-bottom: 1.5mm; font-size: 7.5px; }
             table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #111827; padding: 1px 2px; font-size: 6.6px; height: 10px; line-height: 1.05; text-align: center; }
-            th { background: #eef2f7; font-weight: 800; }
-            .subject { width: 25%; text-align: left; font-weight: 700; }
-            .marks td.active { background: #fef3c7; font-weight: 800; }
-            .meta-row td { font-weight: 800; background: #f8fafc; }
-            .visas { margin-top: 3px; }
-            .visas th:first-child, .visas td:first-child { width: 21%; text-align: left; font-weight: 800; }
-            .summary { display: grid; grid-template-columns: 1fr 0.7fr 1fr; gap: 4px; border: 1px solid #111827; margin-top: 3px; padding: 2px; font-size: 7px; }
-            .decision { border: 1px solid #111827; margin-top: 3px; min-height: 20px; text-align: center; padding: 2px; }
-            .decision b { font-size: 7px; }
-            .decision p { min-height: 8px; margin: 1px 0; font-size: 6.8px; line-height: 1.1; }
-            .checks { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 4px; text-align: left; font-size: 6.8px; }
-            .checks i { display: inline-block; width: 18px; height: 7px; border: 1px solid #111827; vertical-align: middle; margin-left: 3px; }
-            .signatures { display: flex; justify-content: space-between; margin-top: 4px; padding: 0 14px; text-transform: uppercase; font-size: 7px; }
+            th, td { border: 1px solid #111827; padding: .8mm 1.2mm; height: 7mm; font-size: 8px; vertical-align: middle; }
+            th { height: 6mm; text-align: center; font-weight: 800; }
+            .subject { width: 42%; text-align: left; }
+            .note { width: 15%; text-align: center; }
+            .app { text-align: left; }
+            .total td { font-weight: 800; }
+            .summary { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10mm; margin-top: 4mm; font-size: 8.5px; }
+            .summary p { margin: 0 0 2.2mm; }
           </style>
         </head>
         <body>${bulletinsHtml}</body>
@@ -574,12 +549,12 @@ export default function PrimaryBulletin() {
     const saved = await handleSaveAll();
     if (!saved) return;
 
-    const previousFrame = document.getElementById('primary-bulletin-print-frame');
+    const previousFrame = document.getElementById('early-bulletin-print-frame');
     if (previousFrame) previousFrame.remove();
 
     const printFrame = document.createElement('iframe');
-    printFrame.id = 'primary-bulletin-print-frame';
-    printFrame.title = 'Impression des bulletins';
+    printFrame.id = 'early-bulletin-print-frame';
+    printFrame.title = 'Impression des bulletins jardin a 2e';
     printFrame.style.position = 'fixed';
     printFrame.style.right = '0';
     printFrame.style.bottom = '0';
@@ -600,7 +575,6 @@ export default function PrimaryBulletin() {
     frameDocument.open();
     frameDocument.write(makePrintHtml());
     frameDocument.close();
-
     setTimeout(() => {
       frameWindow.focus();
       frameWindow.print();
@@ -608,7 +582,6 @@ export default function PrimaryBulletin() {
     }, 350);
   };
 
-  const canPrint = classStudents.length > 0 && globalStats.completed === classStudents.length;
   const loading = studentsLoading || classesLoading;
 
   if (loading) {
@@ -630,26 +603,17 @@ export default function PrimaryBulletin() {
             <div>
               <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
                 <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                Premier cycle - 3e a 6e
+                Jardin a 2e annee
               </div>
               <h1 className="text-2xl font-bold tracking-normal">Bulletins mensuels</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-300">
-                Selectionnez une classe, choisissez le mois, renseignez toute la classe sur une seule grille, puis imprimez les bulletins par ordre alphabetique.
+                Selectionnez une classe, choisissez le mois, renseignez les notes, les appreciations, les absences et les retards.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-lg bg-white/10 p-2 text-center">
-              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
-                <p className="text-xs text-slate-500">Classes</p>
-                <p className="text-xl font-bold">{primaryClasses.length}</p>
-              </div>
-              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
-                <p className="text-xs text-slate-500">Eleves</p>
-                <p className="text-xl font-bold">{students.filter((student) => primaryClasses.some((cls) => String(cls.id) === String(student.class_id))).length}</p>
-              </div>
-              <div className="rounded-md bg-white px-4 py-3 text-slate-950">
-                <p className="text-xs text-slate-500">Mois</p>
-                <p className="text-xl font-bold">{MONTHS.length}</p>
-              </div>
+              <MetricMini label="Classes" value={earlyClasses.length} />
+              <MetricMini label="Eleves" value={students.filter((student) => earlyClasses.some((cls) => String(cls.id) === String(student.class_id))).length} />
+              <MetricMini label="Matieres" value={SUBJECTS.length} />
             </div>
           </div>
         </div>
@@ -698,7 +662,7 @@ export default function PrimaryBulletin() {
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-950">Choisir la classe</h2>
-                  <p className="text-sm text-slate-500">Seules les classes de 3e, 4e, 5e et 6e sont affichees ici.</p>
+                  <p className="text-sm text-slate-500">Les classes Jardin, 1ere annee et 2e annee sont affichees ici.</p>
                 </div>
                 <div className="w-full md:w-56">
                   <label className="text-xs font-medium text-slate-600">Annee scolaire</label>
@@ -707,7 +671,7 @@ export default function PrimaryBulletin() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {primaryClasses.map((cls) => (
+                {earlyClasses.map((cls) => (
                   <button
                     key={cls.id}
                     type="button"
@@ -721,9 +685,9 @@ export default function PrimaryBulletin() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium uppercase text-[#0066CC]">Niveau {extractLevel(cls) || '-'}</p>
+                        <p className="text-xs font-medium uppercase text-[#0066CC]">{extractEarlyLevel(cls) === 0 ? 'Jardin' : `Niveau ${extractEarlyLevel(cls) || '-'}`}</p>
                         <h3 className="mt-1 text-lg font-bold text-slate-950">{cls.name}</h3>
-                        <p className="text-sm text-slate-500">{cls.level || 'Premier cycle'} - {cls.academic_year || academicYear}</p>
+                        <p className="text-sm text-slate-500">{cls.level || 'Jardin a 2e'} - {cls.academic_year || academicYear}</p>
                       </div>
                       <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-600 group-hover:bg-[#0066CC] group-hover:text-white">
                         <Users className="h-5 w-5" />
@@ -737,9 +701,9 @@ export default function PrimaryBulletin() {
                 ))}
               </div>
 
-              {primaryClasses.length === 0 && (
+              {earlyClasses.length === 0 && (
                 <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                  Aucune classe de 3e a 6e n'a ete trouvee.
+                  Aucune classe Jardin, 1ere annee ou 2e annee n'a ete trouvee.
                 </div>
               )}
             </div>
@@ -773,7 +737,7 @@ export default function PrimaryBulletin() {
                       <CalendarDays className="h-5 w-5" />
                     </span>
                     <h3 className="mt-4 font-bold text-slate-950">{month.label}</h3>
-                    <p className="text-sm text-slate-500">Composition mensuelle</p>
+                    <p className="text-sm text-slate-500">Bulletin mensuel</p>
                   </button>
                 ))}
               </div>
@@ -789,7 +753,7 @@ export default function PrimaryBulletin() {
                     Retour aux mois
                   </Button>
                   <h2 className="text-xl font-bold text-slate-950">{selectedClass?.name} - {selectedMonth?.label}</h2>
-                  <p className="text-sm text-slate-500">{classStudents.length} eleve(s), ordre alphabetique pour la saisie et l'impression.</p>
+                  <p className="text-sm text-slate-500">{classStudents.length} eleve(s), impression par ordre alphabetique.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={loadClassBulletins} disabled={loadingClassData || bulletinLoading}>
@@ -813,12 +777,6 @@ export default function PrimaryBulletin() {
                 <Metric icon={BarChart3} label="Progression" value={`${globalStats.percent}%`} tone="blue" />
                 <Metric icon={AlertCircle} label="Moyenne classe" value={formatScore(globalStats.classAverage) || '-'} tone="amber" />
               </div>
-
-              {!canPrint && classStudents.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  Suggestion appliquee : l'impression reste disponible, mais la progression vous montre exactement ce qui manque avant une impression finale propre.
-                </div>
-              )}
 
               <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
                 <aside className="rounded-lg border border-slate-200 bg-white p-3">
@@ -870,11 +828,13 @@ export default function PrimaryBulletin() {
                       bulletin={bulletins[activeStudentId]}
                       selectedMonthKey={selectedMonthKey}
                       selectedMonth={selectedMonth}
-                      rank={studentsWithRanks.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
+                      rank={studentsWithStats.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
                       classSize={classStudents.length}
                       classAverage={globalStats.classAverage}
+                      bestAverage={globalStats.bestAverage}
+                      lowestAverage={globalStats.lowestAverage}
                       onChangeNote={(subject, value) => updateNote(activeStudentId, subject, value)}
-                      onChangeAppreciation={(value) => updateAppreciation(activeStudentId, value)}
+                      onChangeMonthly={(field, value) => updateMonthly(activeStudentId, field, value)}
                     />
                   ) : (
                     <div className="p-8 text-center text-sm text-slate-500">Selectionnez un eleve pour commencer.</div>
@@ -885,6 +845,15 @@ export default function PrimaryBulletin() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function MetricMini({ label, value }) {
+  return (
+    <div className="rounded-md bg-white px-4 py-3 text-slate-950">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xl font-bold">{value}</p>
     </div>
   );
 }
@@ -918,11 +887,15 @@ function StudentEntry({
   rank,
   classSize,
   classAverage,
+  bestAverage,
+  lowestAverage,
   onChangeNote,
-  onChangeAppreciation,
+  onChangeMonthly,
 }) {
-  const notes = bulletin?.notes || emptyNoteGrid();
+  const notes = bulletin?.notes || emptyNotes();
+  const monthly = bulletin?.monthly?.[selectedMonthKey] || {};
   const monthValues = SUBJECTS.map((subject) => notes?.[subject]?.[selectedMonthKey] || '');
+  const total = sum(monthValues);
   const monthAverage = average(monthValues);
   const filled = monthValues.filter((value) => value !== '').length;
 
@@ -936,7 +909,7 @@ function StudentEntry({
             <p className="text-sm text-slate-500">{student?.matricule || 'Sans matricule'}</p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <MiniStat label="Saisies" value={`${filled}/${SUBJECTS.length}`} />
+            <MiniStat label="Total" value={formatScore(total, 1) || '-'} />
             <MiniStat label="Moyenne" value={formatScore(monthAverage) || '-'} />
             <MiniStat label="Rang" value={rank ? `${rank}/${classSize}` : '-'} />
           </div>
@@ -948,15 +921,15 @@ function StudentEntry({
           <table className="w-full min-w-[760px] border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-white">
-                <th className="w-[40%] px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">Matiere</th>
-                <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">Note /10</th>
-                <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">Appreciation automatique</th>
+                <th className="w-[34%] px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">Matiere</th>
+                <th className="w-[120px] px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">Note /10</th>
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">Appreciation du matiere</th>
               </tr>
             </thead>
             <tbody>
               {SUBJECTS.map((subject, index) => {
                 const value = notes?.[subject]?.[selectedMonthKey] || '';
-                const appreciation = getPrimaryAppreciation(value);
+                const appreciation = getEarlyAppreciation(value);
                 return (
                   <tr key={subject} className={cn('border-b border-slate-100', index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
                     <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{subject}</td>
@@ -965,14 +938,17 @@ function StudentEntry({
                         value={value}
                         onChange={(event) => onChangeNote(subject, event.target.value)}
                         inputMode="decimal"
-                        className="mx-auto h-9 w-24 text-center font-semibold"
+                        className="mx-auto h-9 w-20 text-center font-semibold"
                         placeholder="/10"
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={cn('inline-flex min-w-[96px] justify-center rounded-full px-2 py-1 text-xs font-semibold', appreciation ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
-                        {appreciation || '-'}
-                      </span>
+                    <td className="px-4 py-2.5">
+                      <Input
+                        value={appreciation}
+                        readOnly
+                        className="h-9 min-w-[220px] bg-slate-50 font-semibold text-slate-700"
+                        placeholder="Automatique"
+                      />
                     </td>
                   </tr>
                 );
@@ -991,24 +967,22 @@ function StudentEntry({
             </div>
           </div>
 
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
-              <span className="text-slate-500">Moyenne classe</span>
-              <strong>{formatScore(classAverage) || '-'}</strong>
-            </div>
-            <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
-              <span className="text-slate-500">Note la plus haute</span>
-              <strong>{formatScore(maxFinite(monthValues)) || '-'}</strong>
-            </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <label className="block text-sm font-semibold text-slate-900">
+              Absences
+              <Input value={monthly.absences || ''} onChange={(event) => onChangeMonthly('absences', event.target.value)} inputMode="numeric" className="mt-2 h-10" />
+            </label>
+            <label className="block text-sm font-semibold text-slate-900">
+              Retards
+              <Input value={monthly.retards || ''} onChange={(event) => onChangeMonthly('retards', event.target.value)} inputMode="numeric" className="mt-2 h-10" />
+            </label>
           </div>
 
-          <label className="mt-5 block text-sm font-semibold text-slate-900">Observations</label>
-          <textarea
-            value={bulletin?.appreciation || ''}
-            onChange={(event) => onChangeAppreciation(event.target.value)}
-            className="mt-2 min-h-[130px] w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-[#0066CC]"
-            placeholder="Observation generale pour le bulletin imprime..."
-          />
+          <div className="mt-4 space-y-3 text-sm">
+            <InfoStat label="Moyenne classe" value={formatScore(classAverage) || '-'} />
+            <InfoStat label="Moyenne la plus elevee" value={formatScore(bestAverage) || '-'} />
+            <InfoStat label="Moyenne la plus faible" value={formatScore(lowestAverage) || '-'} />
+          </div>
         </aside>
       </div>
     </div>
@@ -1020,6 +994,15 @@ function MiniStat({ label, value }) {
     <div className="rounded-md border border-slate-200 bg-white px-4 py-2">
       <p className="text-xs text-slate-500">{label}</p>
       <p className="font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function InfoStat({ label, value }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+      <span className="text-slate-500">{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

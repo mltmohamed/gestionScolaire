@@ -323,8 +323,8 @@ function setupIPCHandlers(ipcMain) {
     statements.push({ sql: 'DELETE FROM guardians' });
     statements.push({ sql: 'DELETE FROM students' });
     statements.push({ sql: 'DELETE FROM subjects' });
-    statements.push({ sql: 'DELETE FROM teachers' });
     statements.push({ sql: 'DELETE FROM classes' });
+    statements.push({ sql: 'DELETE FROM teachers' });
 
     // Important: insérer dans un ordre compatible avec les FKs
     for (const t of teachers) {
