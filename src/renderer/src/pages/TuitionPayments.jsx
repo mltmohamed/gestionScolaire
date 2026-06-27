@@ -394,19 +394,20 @@ export default function TuitionPayments() {
         <head>
           <title>Reçu scolarité</title>
           <style>
-            @page { size: A4 portrait; margin: 8mm; }
-            body { font-family: Arial, sans-serif; margin: 0; color: #111827; }
-            .receipt { border: 1.5px solid #111827; padding: 8px; width: 128mm; margin: 0 auto; }
-            .header { text-align: center; border-bottom: 1.5px solid #111827; padding-bottom: 6px; }
-            .header h1 { font-size: 15px; margin: 0 0 3px; }
-            .header p { margin: 2px 0; font-size: 10px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin: 7px 0; }
-            .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 5px; font-size: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 7px; }
-            th, td { border: 1px solid #cbd5e1; padding: 5px; text-align: left; font-size: 10px; }
+            @page { size: 80mm 10cm; margin: 0; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; margin: 0; color: #111827; background: white; }
+            .receipt { border: 1.5px solid #111827; padding: 4mm; width: 80mm; height: 10cm; margin: 0 auto; overflow: hidden; }
+            .header { text-align: center; border-bottom: 1.5px solid #111827; padding-bottom: 3mm; }
+            .header h1 { font-size: 12px; margin: 0 0 2px; }
+            .header p { margin: 1px 0; font-size: 8px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; margin: 3mm 0; }
+            .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 2mm; font-size: 8px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 3mm; }
+            th, td { border: 1px solid #cbd5e1; padding: 1.4mm; text-align: left; font-size: 7px; }
             th { background: #eff6ff; }
-            .amount { font-size: 13px; font-weight: 800; color: #0066CC; }
-            .footer { margin-top: 16px; display: flex; justify-content: space-between; font-size: 10px; }
+            .amount { font-size: 9px; font-weight: 800; color: #0066CC; }
+            .footer { margin-top: 4mm; display: flex; justify-content: space-between; gap: 4mm; font-size: 8px; }
           </style>
         </head>
         <body>

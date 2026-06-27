@@ -168,6 +168,19 @@ function computeStudent(data) {
   };
 }
 
+function computeAnnualAverage(bulletin, selectedTermKey) {
+  const averages = TERMS.map((term) => {
+    const rawNotes = term.key === selectedTermKey ? bulletin?.notes : bulletin?.terms?.[term.key]?.notes;
+    if (!rawNotes) return null;
+
+    const computed = computeStudent({ notes: { ...emptyRows(), ...rawNotes } });
+    return computed.filled > 0 ? computed.moyenne : null;
+  });
+
+  if (!averages.every((value) => value !== null && Number.isFinite(value))) return null;
+  return averages.reduce((sum, value) => sum + value, 0) / averages.length;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -295,6 +308,7 @@ export default function CollegeBulletin() {
           return [
             student.id,
             {
+              terms: payload?.terms || {},
               notes: { ...emptyRows(), ...(termData.notes || {}) },
               decision: termData.decision || payload.decision || data?.meta?.decision || '',
               observation: termData.observation || data?.meta?.observations_generales || '',
@@ -416,6 +430,7 @@ export default function CollegeBulletin() {
     const pages = printStudents.map((student) => {
       const current = bulletins[student.id] || { notes: emptyRows() };
       const computed = computeStudent(current);
+      const annualAverage = selectedTermKey === 't3' ? computeAnnualAverage(current, selectedTermKey) : null;
       const rank = rankById[student.id] ? `${rankById[student.id]}/${classStudents.length}` : '';
 
       return `
@@ -474,6 +489,7 @@ export default function CollegeBulletin() {
               <div><span>Total:</span><b>${formatScore(computed.totalNotesCoeff, 2)}</b></div>
               <div><span>Moyenne:</span><b>${formatScore(computed.moyenne, 2)}</b></div>
               <div><span>Rang:</span><b>${escapeHtml(rank)}</b></div>
+              ${selectedTermKey === 't3' ? `<div><span>Moyenne generale annuelle:</span><b>${formatScore(annualAverage, 2) || ''}</b></div>` : ''}
               <div><span>Moyenne du 1er:</span><b>${formatScore(classExtremes.best) || ''}</b></div>
               <div><span>Moyenne du dernier:</span><b>${formatScore(classExtremes.last) || ''}</b></div>
             </div>
@@ -803,6 +819,7 @@ export default function CollegeBulletin() {
                       bulletin={bulletins[activeStudentId]}
                       selectedTerm={selectedTerm}
                       computed={computedByStudent[activeStudentId] || computeStudent()}
+                      annualAverage={selectedTermKey === 't3' ? computeAnnualAverage(bulletins[activeStudentId], selectedTermKey) : null}
                       rank={rankedStudents.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
                       classSize={classStudents.length}
                       classAverage={globalStats.classAverage}
@@ -854,7 +871,7 @@ function Metric({ icon: Icon, label, value, tone = 'slate' }) {
   );
 }
 
-function StudentEntry({ student, bulletin, selectedTerm, computed, rank, classSize, classAverage, bestAverage, lastAverage, onChangeRow, onChangeMeta }) {
+function StudentEntry({ student, bulletin, selectedTerm, computed, annualAverage, rank, classSize, classAverage, bestAverage, lastAverage, onChangeRow, onChangeMeta }) {
   const notes = bulletin?.notes || emptyRows();
 
   return (
@@ -932,6 +949,7 @@ function StudentEntry({ student, bulletin, selectedTerm, computed, rank, classSi
             <InfoRow label="Total coeff" value={formatScore(computed.totalCoeff, 0)} />
             <InfoRow label="Total notes coeff" value={formatScore(computed.totalNotesCoeff)} />
             <InfoRow label="Moyenne classe" value={formatScore(classAverage) || '-'} />
+            {selectedTerm?.key === 't3' && <InfoRow label="Moyenne generale annuelle" value={formatScore(annualAverage) || '-'} />}
           </div>
 
           <label className="mt-5 block text-sm font-semibold text-slate-900">Decision / observation</label>

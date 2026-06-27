@@ -705,12 +705,13 @@ export default function Payments() {
             <title>Reçu Scolarité (Sélection)</title>
             <style>
               @media print {
-              @page { size: A4 portrait; margin: 8mm; }
+              @page { size: 80mm 10cm; margin: 0; }
               body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .no-print { display: none !important; }
             }
+              * { box-sizing: border-box; }
               body { font-family: 'Times New Roman', Georgia, serif; margin: 0; background: #f5f5f5; }
-              .receipt { border: 3px double #000; padding: 10px; width: 130mm; margin: 0 auto; background: white; }
+              .receipt { border: 3px double #000; padding: 4mm; width: 80mm; height: 10cm; margin: 0 auto; background: white; overflow: hidden; }
               .header { text-align: center; margin-bottom: 8px; }
               .header h1 { font-size: 15px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; }
               .info { display:flex; justify-content: space-between; gap: 8px; font-size: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 8px; }
@@ -825,11 +826,11 @@ export default function Payments() {
           if (!doc) throw new Error('Impossible de préparer l\'impression');
 
           doc.open();
-          doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reçu</title></head><body></body></html>`);
+          doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reçu</title><style>@page { size: 80mm 10cm; margin: 0; } body { margin: 0; }</style></head><body></body></html>`);
           doc.close();
 
           iframe.contentWindow.document.body.innerHTML = `
-            <div style="font-family: 'Times New Roman', Georgia, serif; width: 128mm; border: 3px double #000; padding: 10px; font-size: 11px;">
+            <div style="box-sizing: border-box; font-family: 'Times New Roman', Georgia, serif; width: 80mm; height: 10cm; overflow: hidden; border: 3px double #000; padding: 4mm; font-size: 9px;">
               <h2 style="text-align:center; text-decoration: underline; margin: 0 0 8px; font-size: 16px;">Reçu de Paiement</h2>
               <p><strong>N° Reçu:</strong> ${String(p.id).padStart(6, '0')}</p>
               <p><strong>Date:</strong> ${new Date(p.payment_date).toLocaleDateString('fr-FR')}</p>
@@ -868,7 +869,7 @@ export default function Payments() {
           <title>Reçu de Paiement #${String(p.id).padStart(6, '0')}</title>
           <style>
             @media print {
-              @page { size: A4 portrait; margin: 8mm; }
+              @page { size: 80mm 10cm; margin: 0; }
               body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .no-print { display: none !important; }
               .receipt { border: 3px double #000 !important; box-shadow: none !important; }
@@ -880,31 +881,34 @@ export default function Payments() {
             }
             .receipt { 
               border: 3px double #000; 
-              padding: 10px; 
-              width: 128mm; 
+              padding: 4mm; 
+              width: 80mm; 
+              height: 10cm;
               margin: 0 auto; 
               background: white;
+              overflow: hidden;
+              box-sizing: border-box;
               box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
             .header { text-align: center; margin-bottom: 8px; }
-            .header h1 { font-size: 16px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; color: #000; }
-            .header p { margin: 3px 0; font-size: 10px; }
-            .info { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
-            .info p { margin: 3px 0; }
-            .details { margin: 8px 0; font-size: 11px; line-height: 1.45; }
-            .details p { margin: 5px 0; }
+            .header h1 { font-size: 12px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 0; color: #000; }
+            .header p { margin: 2px 0; font-size: 8px; }
+            .info { display: flex; justify-content: space-between; margin-bottom: 3mm; font-size: 8px; border-bottom: 1px solid #ccc; padding-bottom: 2mm; }
+            .info p { margin: 2px 0; }
+            .details { margin: 3mm 0; font-size: 9px; line-height: 1.25; }
+            .details p { margin: 2mm 0; }
             .amount { 
               font-weight: bold; 
               border: 2px solid #000; 
               background: #f0f0f0; 
-              padding: 3px 7px; 
+              padding: 1mm 2mm; 
               display: inline-block;
-              font-size: 12px;
+              font-size: 10px;
             }
-            .signature { display: flex; justify-content: space-between; margin-top: 18px; font-size: 10px; }
+            .signature { display: flex; justify-content: space-between; margin-top: 4mm; font-size: 8px; }
             .signature div { text-align: center; width: 45%; }
-            .signature .line { border-bottom: 1px solid #000; width: 100%; margin: 18px auto 6px; }
-            .footer { margin-top: 10px; text-align: center; font-size: 8.5px; color: #666; border-top: 1px solid #ccc; padding-top: 6px; }
+            .signature .line { border-bottom: 1px solid #000; width: 100%; margin: 5mm auto 2mm; }
+            .footer { margin-top: 3mm; text-align: center; font-size: 7px; color: #666; border-top: 1px solid #ccc; padding-top: 2mm; }
             .print-btn {
               position: fixed;
               top: 20px;
@@ -2119,14 +2123,16 @@ export default function Payments() {
       {/* Style pour l'impression */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page { size: A4 portrait; margin: 8mm; }
+          @page { size: 80mm 10cm; margin: 0; }
           body * { visibility: hidden; }
           #receipt-print, #receipt-print * { visibility: visible; }
           #receipt-print {
             position: absolute;
             left: 0;
             top: 0;
-            width: 128mm;
+            width: 80mm;
+            height: 10cm;
+            overflow: hidden;
             background: white !important;
             color: black !important;
             padding: 0;
@@ -2138,7 +2144,7 @@ export default function Payments() {
       {/* Composant de Reçu Invisible (visible uniquement à l'impression) */}
       {viewingPayment && (
         <div id="receipt-print" className="hidden print:block font-serif text-[11px]">
-          <div className="mx-auto w-[128mm] border-[3px] border-double border-black p-3">
+          <div className="mx-auto h-[10cm] w-[80mm] overflow-hidden border-[3px] border-double border-black p-[4mm]">
             <div className="mb-2 text-center">
               <h1 className="text-base font-bold uppercase underline">Reçu de Paiement</h1>
               <p className="mt-0.5 text-[10px]">Ecole Privée LA SAGESSE - Kalabancoro</p>
