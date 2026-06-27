@@ -254,37 +254,39 @@ function cardHtml(student, academicYear) {
 
   return `
     <article class="school-card">
-      <div class="top-bg"></div>
-      <div class="circle-one"></div>
-      <div class="circle-two"></div>
-      <div class="blue-line"></div>
-      <div class="inner">
-        <header>
-          <div class="brand">
-            <div class="logo"><img src="${APP_LOGO_PNG}" alt="LA SAGESSE" /></div>
-            <div><p>Carte scolaire</p><h2>La Sagesse</h2></div>
-          </div>
-          <div class="year"><span>Annee</span><b>${escapeHtml(academicYear)}</b></div>
-        </header>
-        <main>
-          <section class="photo-block">
-            <div class="photo-wrap">${photoHtml}</div>
-            <div class="matricule"><span>Matricule</span><b>${escapeHtml(student.matricule || 'N/A')}</b></div>
-          </section>
-          <section class="info">
-            <p class="eyebrow">Eleve</p>
-            <h1>${escapeHtml(getFullName(student) || 'Eleve')}</h1>
-            <div class="chips">
-              <div><span>Classe</span><b>${escapeHtml(student.class_name || 'Non assigne')}</b></div>
-              <div><span>Naissance</span><b>${escapeHtml(formatDate(student.date_of_birth))}</b></div>
-              <div><span>Genre</span><b>${escapeHtml(genderLabel)}</b></div>
-              <div><span>Contact</span><b>${escapeHtml(student.guardian_phone || student.phone || 'N/A')}</b></div>
-              <div><span>Pere</span><b>${escapeHtml(parents.father || 'N/A')}</b></div>
-              <div><span>Mere</span><b>${escapeHtml(parents.mother || 'N/A')}</b></div>
+      <div class="card-design">
+        <div class="top-bg"></div>
+        <div class="circle-one"></div>
+        <div class="circle-two"></div>
+        <div class="blue-line"></div>
+        <div class="inner">
+          <header>
+            <div class="brand">
+              <div class="logo"><img src="${APP_LOGO_PNG}" alt="LA SAGESSE" /></div>
+              <div><p>Carte scolaire</p><h2>La Sagesse</h2></div>
             </div>
-          </section>
-        </main>
-        <footer><div><span>Etablissement</span><b>Ecole privee La Sagesse</b></div><div><span>Signature</span><i></i></div></footer>
+            <div class="year"><span>Annee</span><b>${escapeHtml(academicYear)}</b></div>
+          </header>
+          <main>
+            <section class="photo-block">
+              <div class="photo-wrap">${photoHtml}</div>
+              <div class="matricule"><span>Matricule</span><b>${escapeHtml(student.matricule || 'N/A')}</b></div>
+            </section>
+            <section class="info">
+              <p class="eyebrow">Eleve</p>
+              <h1>${escapeHtml(getFullName(student) || 'Eleve')}</h1>
+              <div class="chips">
+                <div><span>Classe</span><b>${escapeHtml(student.class_name || 'Non assigne')}</b></div>
+                <div><span>Naissance</span><b>${escapeHtml(formatDate(student.date_of_birth))}</b></div>
+                <div><span>Genre</span><b>${escapeHtml(genderLabel)}</b></div>
+                <div><span>Contact</span><b>${escapeHtml(student.guardian_phone || student.phone || 'N/A')}</b></div>
+                <div><span>Pere</span><b>${escapeHtml(parents.father || 'N/A')}</b></div>
+                <div><span>Mere</span><b>${escapeHtml(parents.mother || 'N/A')}</b></div>
+              </div>
+            </section>
+          </main>
+          <footer><div><span>Etablissement</span><b>Ecole privee La Sagesse</b></div><div><span>Signature</span><i></i></div></footer>
+        </div>
       </div>
     </article>
   `;
@@ -301,8 +303,9 @@ function makeCardsPrintHtml(students, academicYear, title) {
           @page { size: A4 portrait; margin: 8mm; }
           * { box-sizing: border-box; }
           body { margin: 0; background: #fff; color: #0f172a; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sheet { display: grid; grid-template-columns: 1fr; gap: 7mm; }
-          .school-card { position: relative; width: 180mm; height: 113mm; margin: 0 auto; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 5mm; background: #fff; page-break-inside: avoid; }
+          .sheet { display: grid; grid-template-columns: repeat(2, 85.6mm); justify-content: center; align-content: start; gap: 2.5mm 6mm; }
+          .school-card { position: relative; width: 85.6mm; height: 53.98mm; margin: 0; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 2.4mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+          .card-design { position: relative; width: 180mm; height: 113mm; transform: scale(0.47556, 0.47770); transform-origin: top left; overflow: hidden; }
           .top-bg { position: absolute; inset: 0 0 auto 0; height: 35mm; background: #020617; }
           .circle-one { position: absolute; right: -18mm; top: -26mm; width: 56mm; height: 56mm; border-radius: 999px; background: #0066CC; }
           .circle-two { position: absolute; right: 12mm; top: 8mm; width: 30mm; height: 30mm; border-radius: 999px; background: #FF6600; opacity: .9; }
@@ -629,7 +632,7 @@ export default function StudentCard() {
               </div>
 
               <p className="text-center text-sm text-slate-500">
-                Format moderne paysage, pret pour impression individuelle ou par classe.
+                Format carte bancaire 85,60 mm x 53,98 mm, pret pour impression individuelle ou par classe.
               </p>
             </>
           ) : (
