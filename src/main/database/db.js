@@ -82,7 +82,12 @@ class DatabaseManager {
         this.db = new SQL.Database();
         console.log('Nouvelle base de données créée en mémoire');
       }
-      
+      this.db.run('PRAGMA foreign_keys = ON');
+      const foreignKeysEnabled = this.query('PRAGMA foreign_keys')[0]?.foreign_keys;
+      if (Number(foreignKeysEnabled) !== 1) {
+        throw new Error('Impossible d activer les contraintes de cles etrangeres SQLite');
+      }
+
       // Lire et exécuter le schéma
       const schemaPath = path.join(__dirname, 'schema.sql');
       console.log('Chemin du schéma:', schemaPath);
@@ -112,6 +117,7 @@ class DatabaseManager {
       ensureColumn('students', 'photo', 'TEXT');
       ensureColumn('teachers', 'photo', 'TEXT');
       ensureColumn('students', 'gender', 'TEXT');
+      ensureColumn('students', 'place_of_birth', 'TEXT');
       ensureColumn('teachers', 'gender', 'TEXT');
       ensureColumn('students', 'matricule', 'TEXT');
       ensureColumn('students', 'father_first_name', 'TEXT');

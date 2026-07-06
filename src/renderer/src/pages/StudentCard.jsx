@@ -147,20 +147,21 @@ function InfoLine({ icon: Icon, label, value }) {
   );
 }
 
-function CardChip({ icon: Icon, label, value }) {
+function CardChip({ icon: Icon, label, value, className = '', valueClassName = '' }) {
+  const textClassName = valueClassName || 'truncate';
+
   return (
-    <div className="min-w-0 rounded-lg bg-slate-50 px-2.5 py-2">
+    <div className={`min-w-0 rounded-lg bg-slate-50 px-2.5 py-2 ${className}`}>
       <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase text-slate-500">
         <Icon className="h-3 w-3 text-[#0066CC]" />
         {label}
       </div>
-      <p className="mt-1 truncate text-[12px] font-bold text-slate-900">{value || '-'}</p>
+      <p className={`mt-1 text-[12px] font-bold text-slate-900 ${textClassName}`}>{value || '-'}</p>
     </div>
   );
 }
 
 function SchoolCardMarkup({ student, academicYear }) {
-  const genderLabel = student.gender === 'M' ? 'Masculin' : student.gender === 'F' ? 'Feminin' : 'N/A';
   const parents = getParentNames(student);
 
   return (
@@ -211,8 +212,13 @@ function SchoolCardMarkup({ student, academicYear }) {
 
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <CardChip label="Classe" value={student.class_name || 'Non assigne'} icon={School} />
-                <CardChip label="Naissance" value={formatDate(student.date_of_birth)} icon={Calendar} />
-                <CardChip label="Genre" value={genderLabel} icon={User} />
+                <CardChip
+                  label="Naissance"
+                  value={`${formatDate(student.date_of_birth)}${student.place_of_birth ? ` - ${student.place_of_birth}` : ''}`}
+                  icon={Calendar}
+                  className="col-span-2"
+                  valueClassName="whitespace-normal leading-tight"
+                />
                 <CardChip label="Contact" value={student.guardian_phone || student.phone || 'N/A'} icon={Phone} />
                 <CardChip label="Pere" value={parents.father || 'N/A'} icon={User} />
                 <CardChip label="Mere" value={parents.mother || 'N/A'} icon={User} />
@@ -245,7 +251,6 @@ function PrintableStudentCard({ student, academicYear }) {
 }
 
 function cardHtml(student, academicYear) {
-  const genderLabel = student.gender === 'M' ? 'Masculin' : student.gender === 'F' ? 'Feminin' : 'N/A';
   const parents = getParentNames(student);
   const firstLetter = (getFullName(student)[0] || 'E').toUpperCase();
   const photoHtml = student.photo
@@ -277,8 +282,7 @@ function cardHtml(student, academicYear) {
               <h1>${escapeHtml(getFullName(student) || 'Eleve')}</h1>
               <div class="chips">
                 <div><span>Classe</span><b>${escapeHtml(student.class_name || 'Non assigne')}</b></div>
-                <div><span>Naissance</span><b>${escapeHtml(formatDate(student.date_of_birth))}</b></div>
-                <div><span>Genre</span><b>${escapeHtml(genderLabel)}</b></div>
+                <div class="wide"><span>Naissance</span><b>${escapeHtml(`${formatDate(student.date_of_birth)}${student.place_of_birth ? ` - ${student.place_of_birth}` : ''}`)}</b></div>
                 <div><span>Contact</span><b>${escapeHtml(student.guardian_phone || student.phone || 'N/A')}</b></div>
                 <div><span>Pere</span><b>${escapeHtml(parents.father || 'N/A')}</b></div>
                 <div><span>Mere</span><b>${escapeHtml(parents.mother || 'N/A')}</b></div>
@@ -330,8 +334,10 @@ function makeCardsPrintHtml(students, academicYear, title) {
           .info { display: flex; flex-direction: column; justify-content: end; padding-bottom: 3mm; }
           .info h1 { margin: 1mm 0 3mm; font-size: 27px; line-height: 1.05; }
           .chips { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; }
+          .chips .wide { grid-column: span 2; }
           .chips div { background: #f8fafc; border-radius: 3mm; padding: 2.2mm; min-width: 0; }
           .chips b { display: block; margin-top: 1mm; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .chips .wide b { white-space: normal; line-height: 1.15; }
           footer { display: flex; justify-content: space-between; align-items: end; border-top: 1px solid #e2e8f0; padding-top: 3mm; }
           footer b { display: block; margin-top: 1mm; font-size: 11px; text-transform: uppercase; }
           footer i { display: block; width: 36mm; height: 1px; background: #94a3b8; margin-top: 6mm; }
@@ -617,6 +623,7 @@ export default function StudentCard() {
                     <InfoLine icon={Hash} label="Matricule" value={selectedStudent.matricule} />
                     <InfoLine icon={School} label="Classe" value={selectedStudent.class_name || 'Non assigne'} />
                     <InfoLine icon={Calendar} label="Naissance" value={formatDate(selectedStudent.date_of_birth)} />
+                    <InfoLine icon={MapPin} label="Lieu de naissance" value={selectedStudent.place_of_birth || 'N/A'} />
                     <InfoLine icon={Phone} label="Contact" value={selectedStudent.guardian_phone || selectedStudent.phone} />
                     <InfoLine icon={User} label="Pere" value={getParentNames(selectedStudent).father} />
                     <InfoLine icon={User} label="Mere" value={getParentNames(selectedStudent).mother} />

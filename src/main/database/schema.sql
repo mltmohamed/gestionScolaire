@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS students (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   date_of_birth DATE NOT NULL,
+  place_of_birth TEXT,
   gender TEXT,
   matricule TEXT,
   email TEXT,

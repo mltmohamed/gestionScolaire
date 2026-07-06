@@ -127,6 +127,24 @@ function setupIPCHandlers(ipcMain) {
     }
   }
 
+  function countTeacherAssignedClasses(teacherId) {
+    const row = query(
+      `SELECT COUNT(*) as count
+       FROM (
+         SELECT id
+         FROM classes
+         WHERE teacher_id = ? AND COALESCE(is_deleted, 0) = 0
+         UNION
+         SELECT c.id
+         FROM class_teachers ct
+         JOIN classes c ON c.id = ct.class_id
+         WHERE ct.teacher_id = ? AND COALESCE(c.is_deleted, 0) = 0
+       )`,
+      [teacherId, teacherId]
+    )[0];
+    return Number(row?.count || 0);
+  }
+
   // ==================== AUTH ====================
   handle('auth:getSession', { auth: false }, (event) => {
     const senderId = getSenderId(event);
@@ -377,13 +395,14 @@ function setupIPCHandlers(ipcMain) {
 
     for (const s of students) {
       statements.push({
-        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, gender, matricule, email, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, enrollment_date, status, photo, is_deleted, deleted_at, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        sql: `INSERT INTO students (id, first_name, last_name, date_of_birth, place_of_birth, gender, matricule, email, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, enrollment_date, status, photo, is_deleted, deleted_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
         params: [
           s.id,
           s.first_name,
           s.last_name,
           s.date_of_birth,
+          s.place_of_birth,
           s.gender,
           s.matricule,
           s.email,
@@ -685,13 +704,14 @@ function setupIPCHandlers(ipcMain) {
     }
 
     const sql = `
-      INSERT INTO students (first_name, last_name, date_of_birth, gender, matricule, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, status, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO students (first_name, last_name, date_of_birth, place_of_birth, gender, matricule, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, status, photo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     run(sql, [
       data.first_name,
       data.last_name,
       data.date_of_birth,
+      data.place_of_birth || null,
       data.gender || null,
       data.matricule,
       data.phone || null,
@@ -752,7 +772,7 @@ function setupIPCHandlers(ipcMain) {
 
     const sql = `
       UPDATE students 
-      SET first_name = ?, last_name = ?, date_of_birth = ?, gender = ?, 
+      SET first_name = ?, last_name = ?, date_of_birth = ?, place_of_birth = ?, gender = ?, 
           matricule = ?, phone = ?, address = ?, father_first_name = ?, father_last_name = ?, mother_first_name = ?, mother_last_name = ?, father_name = ?, mother_name = ?, class_id = ?, status = ?, photo = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -761,6 +781,7 @@ function setupIPCHandlers(ipcMain) {
       data.first_name,
       data.last_name,
       data.date_of_birth,
+      data.place_of_birth || null,
       data.gender || null,
       data.matricule,
       data.phone || null,
@@ -855,7 +876,7 @@ function setupIPCHandlers(ipcMain) {
 
   handle('teachers:update', { auth: true }, (event, id, data) => {
     if (data && data.status && data.status !== 'active') {
-      const assigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0]?.count || 0;
+      const assigned = countTeacherAssignedClasses(id);
       if (assigned > 0) {
         return { success: false, error: 'Impossible de mettre ce professeur inactif: il est assigné à une classe' };
       }
@@ -932,7 +953,7 @@ function setupIPCHandlers(ipcMain) {
       }
 
       // Vérifier s'il est assigné à une classe
-      const assignedClasses = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0].count;
+      const assignedClasses = countTeacherAssignedClasses(id);
       if (assignedClasses > 0) {
         return { success: false, error: `Impossible de supprimer : ce professeur est assigné à ${assignedClasses} classe(s). Veuillez d'abord les réassigner.` };
       }
@@ -980,7 +1001,7 @@ function setupIPCHandlers(ipcMain) {
       }
 
       // Vérifier s'il est assigné à une classe
-      const assignedClasses = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [id])[0]?.count || 0;
+      const assignedClasses = countTeacherAssignedClasses(id);
       if (assignedClasses > 0) {
         return { success: false, error: 'Impossible de désactiver ce professeur: il est assigné à une classe' };
       }
@@ -1155,9 +1176,7 @@ function setupIPCHandlers(ipcMain) {
     
     for (const tId of potentialInactive) {
       if (!allAssignedTeachers.has(String(tId))) {
-        const stillAssigned1 = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [tId])[0]?.count || 0;
-        const stillAssigned2 = query('SELECT COUNT(*) as count FROM class_teachers WHERE teacher_id = ?', [tId])[0]?.count || 0;
-        if (stillAssigned1 === 0 && stillAssigned2 === 0) {
+        if (countTeacherAssignedClasses(tId) === 0) {
           run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
         }
       }
@@ -1171,6 +1190,10 @@ function setupIPCHandlers(ipcMain) {
       // Récupérer l'enseignant assigné avant la suppression
       const classData = query('SELECT teacher_id FROM classes WHERE id = ?', [id])[0];
       const teacherId = classData?.teacher_id || null;
+      const classTeacherIds = query('SELECT teacher_id FROM class_teachers WHERE class_id = ?', [id])
+        .map((row) => row.teacher_id)
+        .filter(Boolean);
+      const affectedTeacherIds = [...new Set([teacherId, ...classTeacherIds].filter(Boolean).map(String))];
 
       // Récupérer tous les élèves de cette classe
       const students = query('SELECT id FROM students WHERE class_id = ?', [id]);
@@ -1194,14 +1217,15 @@ function setupIPCHandlers(ipcMain) {
         run('DELETE FROM students WHERE id = ?', [studentId]);
       }
 
+      run('DELETE FROM class_teachers WHERE class_id = ?', [id]);
+
       // Supprimer la classe définitivement
       run('DELETE FROM classes WHERE id = ?', [id]);
 
-      // Si un enseignant était assigné, vérifier s'il a d'autres classes et mettre à jour son statut
-      if (teacherId) {
-        const stillAssigned = query('SELECT COUNT(*) as count FROM classes WHERE teacher_id = ?', [teacherId])[0]?.count || 0;
-        if (stillAssigned === 0) {
-          run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [teacherId]);
+      // Si des enseignants étaient assignés, vérifier s'ils ont d'autres classes et mettre à jour leur statut
+      for (const tId of affectedTeacherIds) {
+        if (countTeacherAssignedClasses(tId) === 0) {
+          run("UPDATE teachers SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
         }
       }
 

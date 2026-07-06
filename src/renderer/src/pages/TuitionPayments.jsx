@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/useToast.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { escapeHtml } from '@/utils/escapeHtml';
 import {
   Dialog,
   DialogContent,
@@ -394,10 +395,10 @@ export default function TuitionPayments() {
         <head>
           <title>Reçu scolarité</title>
           <style>
-            @page { size: 80mm 10cm; margin: 0; }
+            @page { size: 15cm 80mm; margin: 0; }
             * { box-sizing: border-box; }
             body { font-family: Arial, sans-serif; margin: 0; color: #111827; background: white; }
-            .receipt { border: 1.5px solid #111827; padding: 4mm; width: 80mm; height: 10cm; margin: 0 auto; overflow: hidden; }
+            .receipt { border: 1.5px solid #111827; padding: 4mm; width: 15cm; height: 80mm; margin: 0 auto; overflow: hidden; }
             .header { text-align: center; border-bottom: 1.5px solid #111827; padding-bottom: 3mm; }
             .header h1 { font-size: 12px; margin: 0 0 2px; }
             .header p { margin: 1px 0; font-size: 8px; }
@@ -415,27 +416,27 @@ export default function TuitionPayments() {
             <div class="header">
               <h1>REÇU DE PAIEMENT</h1>
               <p>Frais de scolarité - Établissement LA SAGESSE</p>
-              <p>Reçu N° ${String(payment.id || '').padStart(6, '0')}</p>
+              <p>Reçu N° ${escapeHtml(String(payment.id || '').padStart(6, '0'))}</p>
             </div>
             <div class="grid">
-              <div class="box"><strong>Élève</strong><br>${getStudentName(student)}</div>
-              <div class="box"><strong>Matricule</strong><br>${student?.matricule || '-'}</div>
-              <div class="box"><strong>Classe</strong><br>${cls?.name || 'Non assigné'}</div>
-              <div class="box"><strong>Année scolaire</strong><br>${payment.academic_year}</div>
-              <div class="box"><strong>Échéance</strong><br>${periodLabel(payment.period_month)}</div>
-              <div class="box"><strong>Date</strong><br>${formatDate(payment.payment_date)}</div>
+              <div class="box"><strong>Élève</strong><br>${escapeHtml(getStudentName(student))}</div>
+              <div class="box"><strong>Matricule</strong><br>${escapeHtml(student?.matricule || '-')}</div>
+              <div class="box"><strong>Classe</strong><br>${escapeHtml(cls?.name || 'Non assigné')}</div>
+              <div class="box"><strong>Année scolaire</strong><br>${escapeHtml(payment.academic_year)}</div>
+              <div class="box"><strong>Échéance</strong><br>${escapeHtml(periodLabel(payment.period_month))}</div>
+              <div class="box"><strong>Date</strong><br>${escapeHtml(formatDate(payment.payment_date))}</div>
             </div>
             <table>
               <tr><th>Description</th><th>Montant attendu</th><th>Montant payé</th><th>Reste échéance</th></tr>
               <tr>
-                <td>${payment.description || 'Paiement scolarité'}</td>
+                <td>${escapeHtml(payment.description || 'Paiement scolarité')}</td>
                 <td>${formatCurrency(expected)}</td>
                 <td class="amount">${formatCurrency(payment.amount)}</td>
                 <td>${formatCurrency(remaining)}</td>
               </tr>
             </table>
             <div class="grid">
-              <div class="box"><strong>Mode de paiement</strong><br>${payment.payment_method || 'Espèces'}</div>
+              <div class="box"><strong>Mode de paiement</strong><br>${escapeHtml(payment.payment_method || 'Espèces')}</div>
               <div class="box"><strong>Type</strong><br>${remaining <= 0 ? 'Paiement total de l’échéance' : 'Paiement partiel'}</div>
             </div>
             <div class="footer">

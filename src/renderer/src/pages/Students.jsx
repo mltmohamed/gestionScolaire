@@ -42,6 +42,7 @@ const emptyForm = {
   first_name: '',
   last_name: '',
   date_of_birth: '',
+  place_of_birth: '',
   gender: '',
   matricule: '',
   phone: '',
@@ -276,6 +277,7 @@ export default function Students() {
         first_name: fullStudent.first_name || '',
         last_name: fullStudent.last_name || '',
         date_of_birth: fullStudent.date_of_birth?.split('T')[0] || '',
+        place_of_birth: fullStudent.place_of_birth || '',
         gender: fullStudent.gender || '',
         matricule: fullStudent.matricule || '',
         phone: fullStudent.phone || '',
@@ -612,6 +614,10 @@ export default function Students() {
                       <Input type="date" value={formData.date_of_birth} onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })} required />
                     </div>
                     <div className="space-y-2">
+                      <label className="text-sm font-medium">Lieu de naissance</label>
+                      <Input value={formData.place_of_birth} onChange={(e) => setFormData({ ...formData, place_of_birth: e.target.value })} placeholder="Ex: Bamako" />
+                    </div>
+                    <div className="space-y-2">
                       <label className="text-sm font-medium">Genre</label>
                       <SelectField value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })}>
                         <option value="">Sélectionner</option>
@@ -750,7 +756,7 @@ export default function Students() {
               <section>
                 <h3 className="mb-3 font-semibold text-slate-950 dark:text-white">Informations élève</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <InfoItem icon={Calendar} label="Naissance" value={`${formatDate(viewingStudent.date_of_birth)}${getAge(viewingStudent.date_of_birth) !== null ? ` · ${getAge(viewingStudent.date_of_birth)} ans` : ''}`} />
+                  <InfoItem icon={Calendar} label="Naissance" value={`${formatDate(viewingStudent.date_of_birth)}${viewingStudent.place_of_birth ? ` · ${viewingStudent.place_of_birth}` : ''}${getAge(viewingStudent.date_of_birth) !== null ? ` · ${getAge(viewingStudent.date_of_birth)} ans` : ''}`} />
                   <InfoItem icon={School} label="Classe" value={viewingStudent.class_name || 'Non assigné'} />
                   <InfoItem icon={Phone} label="Téléphone" value={viewingStudent.phone} />
                   <InfoItem icon={MapPin} label="Adresse" value={viewingStudent.address} />
