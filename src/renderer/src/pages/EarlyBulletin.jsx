@@ -23,6 +23,7 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { sanitizeDecimalInput } from '@/utils/decimalInput';
 
 const MONTHS = [
   { key: 'oct', label: 'Octobre', short: 'OCT.' },
@@ -139,12 +140,7 @@ function gridToNotesArray(grid) {
 }
 
 function sanitizeNote(value) {
-  const cleaned = String(value || '').replace(',', '.').replace(/[^\d.]/g, '');
-  if (cleaned === '') return '';
-  const parts = cleaned.split('.');
-  const numeric = Number(parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
-  if (!Number.isFinite(numeric)) return '';
-  return String(Math.min(10, Math.max(0, numeric)));
+  return sanitizeDecimalInput(value, 10);
 }
 
 function getEarlyAppreciation(note) {
@@ -458,6 +454,7 @@ export default function EarlyBulletin() {
 
         return `
           <section class="bulletin">
+            <div class="school-name">Ecole privee LA SAGESSE</div>
             <h1>${escapeHtml(monthLabel.toUpperCase())}</h1>
             <div class="attendance">
               <div><b>ASSIDUITE</b><span>Nombre d'absences : ${escapeHtml(monthly.absences || '........')}</span></div>
@@ -524,7 +521,8 @@ export default function EarlyBulletin() {
             .bulletin { width: 184mm; height: 138mm; margin: 0 auto 5mm; padding: 4mm; overflow: hidden; border: 1.4px solid #111827; border-radius: 7mm; page-break-after: auto; break-inside: avoid; page-break-inside: avoid; }
             .bulletin:nth-of-type(2n) { page-break-after: always; margin-bottom: 0; }
             .bulletin:last-child { page-break-after: auto; }
-            h1 { margin: 0 0 2mm; text-align: center; font-size: 10px; letter-spacing: 0; }
+            .school-name { margin: 0 0 .6mm; text-align: center; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+            h1 { margin: 0 0 1mm; text-align: center; font-size: 10px; letter-spacing: 0; }
             .attendance { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 1mm; font-size: 7.5px; }
             .attendance b { display: block; font-size: 7.5px; text-decoration: underline; }
             .attendance span { display: block; margin-top: .5mm; }
@@ -946,6 +944,7 @@ function StudentEntry({
                       <Input
                         value={appreciation}
                         readOnly
+                        tabIndex={-1}
                         className="h-9 min-w-[220px] bg-slate-50 font-semibold text-slate-700"
                         placeholder="Automatique"
                       />

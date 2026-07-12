@@ -23,6 +23,7 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { sanitizeDecimalInput } from '@/utils/decimalInput';
 
 const TERMS = [
   { key: 't1', label: 'Composition du 1er trimestre', short: '1er trim.' },
@@ -96,12 +97,7 @@ function emptyRows() {
 }
 
 function sanitizeNote(value, max = 20) {
-  const cleaned = String(value || '').replace(',', '.').replace(/[^\d.]/g, '');
-  if (cleaned === '') return '';
-  const parts = cleaned.split('.');
-  const numeric = Number(parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
-  if (!Number.isFinite(numeric)) return '';
-  return String(Math.min(max, Math.max(0, numeric)));
+  return sanitizeDecimalInput(value, max);
 }
 
 function toNumber(value) {
@@ -912,7 +908,14 @@ function StudentEntry({ student, bulletin, selectedTerm, computed, annualAverage
                 const computedRow = computeSubject(row);
                 return (
                   <tr key={subject.name} className={cn('border-b border-slate-100', index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
-                    <td className="px-3 py-2.5 text-sm font-medium text-slate-900">{subject.name}</td>
+                    <th
+                      scope="row"
+                      tabIndex={0}
+                      aria-label={`Matiere ${subject.name}`}
+                      className="px-3 py-2.5 text-left text-sm font-medium text-slate-900 outline-none focus-visible:bg-[#0066CC]/10 focus-visible:text-[#0066CC] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0066CC]"
+                    >
+                      {subject.name}
+                    </th>
                     <td className="px-3 py-2.5">
                       <Input value={row.note_classe || ''} onChange={(event) => onChangeRow(subject.name, 'note_classe', event.target.value)} inputMode="decimal" className="mx-auto h-9 w-20 text-center font-semibold" placeholder="/20" />
                     </td>
@@ -922,7 +925,13 @@ function StudentEntry({ student, bulletin, selectedTerm, computed, annualAverage
                     <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-600">{formatScore(computedRow.compX2, 1) || '-'}</td>
                     <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-950">{formatScore(computedRow.moyenne) || '-'}</td>
                     <td className="px-3 py-2.5">
-                      <Input value={row.coeff || subject.coeff} onChange={(event) => onChangeRow(subject.name, 'coeff', event.target.value)} inputMode="decimal" className="mx-auto h-9 w-16 text-center font-semibold" />
+                      <Input
+                        value={row.coeff ?? String(subject.coeff)}
+                        onChange={(event) => onChangeRow(subject.name, 'coeff', event.target.value)}
+                        onFocus={(event) => event.target.select()}
+                        inputMode="decimal"
+                        className="mx-auto h-9 w-16 text-center font-semibold"
+                      />
                     </td>
                     <td className="px-3 py-2.5 text-center text-sm font-semibold text-slate-950">{formatScore(computedRow.notesCoeff) || '-'}</td>
                     <td className="px-3 py-2.5">

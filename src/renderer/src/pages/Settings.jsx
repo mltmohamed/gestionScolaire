@@ -122,7 +122,10 @@ export default function Settings() {
 
     setDataLoading((prev) => ({ ...prev, export: true }));
     try {
-      const result = await window.electronAPI.exportData();
+      const result = await window.electronAPI.exportData({
+        profile,
+        preferences: { ...preferences, theme: preferences.theme || theme },
+      });
       if (result?.success) {
         toast.success('Export termine');
       } else if (result?.error !== 'Cancelled') {
@@ -142,7 +145,7 @@ export default function Settings() {
       return;
     }
 
-    if (!window.confirm('Importer remplacera les donnees actuelles. Continuer ?')) {
+    if (!window.confirm('Importer remplacera les donnees, les comptes et les parametres actuels. Une reconnexion sera demandee. Continuer ?')) {
       return;
     }
 
@@ -150,7 +153,24 @@ export default function Settings() {
     try {
       const result = await window.electronAPI.importData();
       if (result?.success) {
-        toast.success('Import termine');
+        const restoredSettings = result?.data?.settings;
+        if (restoredSettings?.preferences && typeof restoredSettings.preferences === 'object') {
+          persistPreferences(restoredSettings.preferences);
+          try {
+            localStorage.setItem('theme', restoredSettings.preferences.theme || 'system');
+          } catch {
+            // Le rechargement reste necessaire meme si le stockage local est indisponible.
+          }
+        }
+        if (restoredSettings?.profile && typeof restoredSettings.profile === 'object') {
+          try {
+            localStorage.setItem('settings.profile', JSON.stringify(restoredSettings.profile));
+          } catch {
+            // Le profil principal est deja restaure dans settings.json.
+          }
+        }
+        toast.success('Import termine. Reconnexion en cours...');
+        window.setTimeout(() => window.location.reload(), 700);
       } else if (result?.error !== 'Cancelled') {
         toast.error(result?.error || 'Erreur import');
       }
@@ -432,12 +452,12 @@ export default function Settings() {
             )}
 
             {activeSection === 'data' && (
-              <SectionPanel title="Donnees" description="Sauvegardez ou restaurez les donnees de l'application.">
+              <SectionPanel title="Donnees" description="Sauvegardez ou restaurez les donnees, les comptes et les parametres de l'application.">
                 <div className="grid gap-4 md:grid-cols-2">
                   <DataAction
                     icon={Download}
                     title="Exporter"
-                    description="Creez une sauvegarde JSON complete de l'ecole."
+                    description="Creez une sauvegarde complete et confidentielle de l'ecole."
                     buttonLabel={dataLoading.export ? 'Export...' : 'Exporter les donnees'}
                     onClick={handleExportData}
                     disabled={dataLoading.export}
@@ -445,7 +465,7 @@ export default function Settings() {
                   <DataAction
                     icon={Upload}
                     title="Importer"
-                    description="Restaurez une sauvegarde. Les donnees actuelles seront remplacees."
+                    description="Restaurez une sauvegarde. Les donnees, comptes et parametres actuels seront remplaces."
                     buttonLabel={dataLoading.import ? 'Import...' : 'Importer une sauvegarde'}
                     onClick={handleImportData}
                     disabled={dataLoading.import}
@@ -461,7 +481,7 @@ export default function Settings() {
                     <div>
                       <p className="font-semibold text-slate-950 dark:text-white">Stockage local</p>
                       <p className="mt-1 text-sm leading-6 text-slate-500">
-                        Les donnees restent sur cet ordinateur. Exportez regulierement une sauvegarde et conservez-la sur un support externe.
+                        Les donnees restent sur cet ordinateur. Exportez regulierement une sauvegarde et conservez ce fichier confidentiel sur un support externe securise.
                       </p>
                     </div>
                   </div>

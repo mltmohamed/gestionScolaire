@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setProfile: (profile) => ipcRenderer.invoke('settings:setProfile', profile),
 
   // Data
-  exportData: () => ipcRenderer.invoke('data:export'),
+  exportData: (snapshot) => ipcRenderer.invoke('data:export', snapshot),
   importData: () => ipcRenderer.invoke('data:import'),
 
   // Students

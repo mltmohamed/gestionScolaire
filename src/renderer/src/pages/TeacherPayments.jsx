@@ -381,6 +381,24 @@ export default function TeacherPayments() {
   };
 
   const printReceipt = (payment, teacher) => {
+    const salary = Number(teacher?.salary || 0);
+    const currentPaymentId = Number(payment?.id);
+    const periodPayments = teacherPayments.filter((item) =>
+      Number(item.teacher_id) === Number(payment.teacher_id)
+      && Number(item.period_month) === Number(payment.period_month)
+      && Number(item.period_year) === Number(payment.period_year)
+    );
+    const paymentAlreadyListed = currentPaymentId
+      ? periodPayments.some((item) => Number(item.id) === currentPaymentId)
+      : false;
+    const paidAfterPayment = periodPayments.reduce((sum, item) => {
+      if (currentPaymentId && Number(item.id) === currentPaymentId) {
+        return sum + Number(payment.amount || 0);
+      }
+      return sum + Number(item.amount || 0);
+    }, 0) + (paymentAlreadyListed ? 0 : Number(payment.amount || 0));
+    const remaining = Math.max(salary - paidAfterPayment, 0);
+
     printHtml(`
       <html>
         <head>
@@ -399,6 +417,7 @@ export default function TeacherPayments() {
             th, td { border: 1px solid #cbd5e1; padding: 1.4mm; text-align: left; font-size: 7px; }
             th { background: #eff6ff; }
             .amount { font-size: 9px; font-weight: 800; color: #0066CC; }
+            .remaining { font-size: 9px; font-weight: 800; color: #FF3300; }
             .footer { margin-top: 4mm; display: flex; justify-content: space-between; gap: 4mm; font-size: 8px; }
           </style>
         </head>
@@ -418,10 +437,12 @@ export default function TeacherPayments() {
               <div class="box"><strong>Mode</strong><br>${escapeHtml(payment.payment_method || 'Espèces')}</div>
             </div>
             <table>
-              <tr><th>Description</th><th>Montant</th></tr>
+              <tr><th>Description</th><th>Salaire</th><th>Pay&eacute;</th><th>Reste &agrave; payer</th></tr>
               <tr>
                 <td>${escapeHtml(payment.description || '-')}</td>
+                <td>${formatCurrency(salary)}</td>
                 <td class="amount">${formatCurrency(payment.amount)}</td>
+                <td class="remaining">${formatCurrency(remaining)}</td>
               </tr>
             </table>
             <div class="footer">

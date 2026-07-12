@@ -4,6 +4,117 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { query, run, runMany } = require('./database/db');
 
+const BACKUP_FORMAT = 'schoolmanage-backup';
+const BACKUP_VERSION = 2;
+const BACKUP_V1_TABLES = [
+  'students',
+  'guardians',
+  'classes',
+  'class_teachers',
+  'teachers',
+  'subjects',
+  'grades',
+  'student_payments',
+  'teacher_payments',
+  'bulletin_notes',
+  'bulletin_meta',
+];
+const BACKUP_V2_TABLES = ['users', ...BACKUP_V1_TABLES];
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeBackupProfile(value) {
+  const profile = isPlainObject(value) ? value : {};
+  return {
+    name: String(profile.name || ''),
+    email: String(profile.email || ''),
+    phone: String(profile.phone || ''),
+    role: String(profile.role || 'Administrateur'),
+    photo: typeof profile.photo === 'string' ? profile.photo : null,
+  };
+}
+
+function normalizeBackupPreferences(value) {
+  const preferences = isPlainObject(value) ? value : {};
+  const theme = ['light', 'dark', 'system'].includes(preferences.theme) ? preferences.theme : 'system';
+  const language = ['fr', 'en'].includes(preferences.language) ? preferences.language : 'fr';
+  return { theme, language };
+}
+
+function validateBackupPayload(parsed) {
+  if (!isPlainObject(parsed)) {
+    return { success: false, error: 'Format de sauvegarde invalide' };
+  }
+
+  const version = parsed.version;
+  if (version !== 1 && version !== BACKUP_VERSION) {
+    return { success: false, error: 'Version de sauvegarde non prise en charge' };
+  }
+  if (typeof parsed.exportedAt !== 'string' || Number.isNaN(Date.parse(parsed.exportedAt))) {
+    return { success: false, error: 'Date de sauvegarde invalide ou absente' };
+  }
+  if (!isPlainObject(parsed.tables)) {
+    return { success: false, error: 'Tables de sauvegarde absentes' };
+  }
+
+  const requiredTables = version === BACKUP_VERSION ? BACKUP_V2_TABLES : BACKUP_V1_TABLES;
+  for (const tableName of requiredTables) {
+    if (!Object.prototype.hasOwnProperty.call(parsed.tables, tableName) || !Array.isArray(parsed.tables[tableName])) {
+      return { success: false, error: `Sauvegarde incomplete : table ${tableName} absente` };
+    }
+    if (parsed.tables[tableName].some((row) => !isPlainObject(row))) {
+      return { success: false, error: `Sauvegarde invalide : donnees incorrectes dans ${tableName}` };
+    }
+  }
+
+  if (version === BACKUP_VERSION) {
+    if (parsed.format !== BACKUP_FORMAT) {
+      return { success: false, error: 'Format de sauvegarde non reconnu' };
+    }
+    if (!isPlainObject(parsed.manifest) || !isPlainObject(parsed.manifest.tableCounts)) {
+      return { success: false, error: 'Manifeste de sauvegarde absent' };
+    }
+    for (const tableName of requiredTables) {
+      const expectedCount = parsed.manifest.tableCounts[tableName];
+      if (!Number.isInteger(expectedCount) || expectedCount < 0 || expectedCount !== parsed.tables[tableName].length) {
+        return { success: false, error: `Sauvegarde incomplete : compteur invalide pour ${tableName}` };
+      }
+    }
+
+    const users = parsed.tables.users;
+    const invalidUser = users.length === 0 || users.some((user) => (
+      !Number.isInteger(Number(user.id))
+      || Number(user.id) <= 0
+      || !String(user.username || '').trim()
+      || !String(user.password_hash || '').trim()
+      || !String(user.password_salt || '').trim()
+    ));
+    if (invalidUser) {
+      return { success: false, error: 'Sauvegarde invalide : aucun compte utilisateur utilisable' };
+    }
+
+    if (!isPlainObject(parsed.settings)
+      || !isPlainObject(parsed.settings.profile)
+      || !isPlainObject(parsed.settings.preferences)) {
+      return { success: false, error: 'Parametres de sauvegarde absents ou invalides' };
+    }
+  }
+
+  return {
+    success: true,
+    version,
+    tables: parsed.tables,
+    settings: version === BACKUP_VERSION
+      ? {
+          profile: normalizeBackupProfile(parsed.settings.profile),
+          preferences: normalizeBackupPreferences(parsed.settings.preferences),
+        }
+      : null,
+  };
+}
+
 function setupIPCHandlers(ipcMain) {
   const sessions = new Map();
 
@@ -62,8 +173,9 @@ function setupIPCHandlers(ipcMain) {
     try {
       fs.mkdirSync(path.dirname(settingsFilePath), { recursive: true });
       fs.writeFileSync(settingsFilePath, JSON.stringify(data), { encoding: 'utf8' });
+      return true;
     } catch {
-      // ignorer
+      return false;
     }
   }
 
@@ -252,12 +364,14 @@ function setupIPCHandlers(ipcMain) {
     const safe = profile && typeof profile === 'object' ? profile : {};
     const settings = readSettings();
     const next = { ...settings, profile: safe };
-    writeSettings(next);
+    if (!writeSettings(next)) {
+      return { success: false, error: 'Impossible d enregistrer le profil' };
+    }
     return { success: true };
   });
 
   // ==================== DATA (EXPORT / IMPORT) ====================
-  handle('data:export', { auth: true }, async (event) => {
+  handle('data:export', { auth: true }, async (event, snapshot = {}) => {
     const senderWindow = event && event.sender ? require('electron').BrowserWindow.fromWebContents(event.sender) : null;
     const { canceled, filePath } = await dialog.showSaveDialog(senderWindow || undefined, {
       title: 'Exporter les données',
@@ -269,21 +383,35 @@ function setupIPCHandlers(ipcMain) {
       return { success: false, error: 'Cancelled' };
     }
 
+    const tables = {
+      users: query('SELECT * FROM users'),
+      students: query('SELECT * FROM students'),
+      guardians: query('SELECT * FROM guardians'),
+      classes: query('SELECT * FROM classes'),
+      class_teachers: query('SELECT * FROM class_teachers'),
+      teachers: query('SELECT * FROM teachers'),
+      subjects: query('SELECT * FROM subjects'),
+      grades: query('SELECT * FROM grades'),
+      student_payments: query('SELECT * FROM student_payments'),
+      teacher_payments: query('SELECT * FROM teacher_payments'),
+      bulletin_notes: query('SELECT * FROM bulletin_notes'),
+      bulletin_meta: query('SELECT * FROM bulletin_meta'),
+    };
+    const storedSettings = readSettings();
+    const safeSnapshot = isPlainObject(snapshot) ? snapshot : {};
     const payload = {
-      version: 1,
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tables: {
-        students: query('SELECT * FROM students'),
-        guardians: query('SELECT * FROM guardians'),
-        classes: query('SELECT * FROM classes'),
-        class_teachers: query('SELECT * FROM class_teachers'),
-        teachers: query('SELECT * FROM teachers'),
-        subjects: query('SELECT * FROM subjects'),
-        grades: query('SELECT * FROM grades'),
-        student_payments: query('SELECT * FROM student_payments'),
-        teacher_payments: query('SELECT * FROM teacher_payments'),
-        bulletin_notes: query('SELECT * FROM bulletin_notes'),
-        bulletin_meta: query('SELECT * FROM bulletin_meta'),
+      manifest: {
+        tableCounts: Object.fromEntries(
+          Object.entries(tables).map(([tableName, rows]) => [tableName, rows.length])
+        ),
+      },
+      tables,
+      settings: {
+        profile: normalizeBackupProfile(safeSnapshot.profile || storedSettings.profile),
+        preferences: normalizeBackupPreferences(safeSnapshot.preferences || storedSettings.preferences),
       },
     };
 
@@ -312,26 +440,28 @@ function setupIPCHandlers(ipcMain) {
       return { success: false, error: 'Fichier JSON invalide' };
     }
 
-    const data = parsed && parsed.tables ? parsed.tables : null;
-    if (!data || typeof data !== 'object') {
-      return { success: false, error: 'Format de sauvegarde invalide' };
+    const validation = validateBackupPayload(parsed);
+    if (!validation.success) {
+      return { success: false, error: validation.error };
     }
 
-    const getArr = (k) => (Array.isArray(data[k]) ? data[k] : []);
-    const students = getArr('students');
-    const guardians = getArr('guardians');
-    const classes = getArr('classes');
-    const classTeachers = getArr('class_teachers');
-    const teachers = getArr('teachers');
-    const subjects = getArr('subjects');
-    const grades = getArr('grades');
-    const studentPayments = getArr('student_payments');
-    const teacherPayments = getArr('teacher_payments');
-    const bulletinNotes = getArr('bulletin_notes');
-    const bulletinMeta = getArr('bulletin_meta');
+    const data = validation.tables;
+    const restoreApplicationSettings = validation.version === BACKUP_VERSION;
+    const users = restoreApplicationSettings ? data.users : [];
+    const students = data.students;
+    const guardians = data.guardians;
+    const classes = data.classes;
+    const classTeachers = data.class_teachers;
+    const teachers = data.teachers;
+    const subjects = data.subjects;
+    const grades = data.grades;
+    const studentPayments = data.student_payments;
+    const teacherPayments = data.teacher_payments;
+    const bulletinNotes = data.bulletin_notes;
+    const bulletinMeta = data.bulletin_meta;
 
     const statements = [];
-    // Nettoyer les tables métier (ne touche pas users)
+    // Nettoyer les tables métier ; les comptes sont remplacés uniquement en version 2.
     statements.push({ sql: 'DELETE FROM grades' });
     statements.push({ sql: 'DELETE FROM student_payments' });
     statements.push({ sql: 'DELETE FROM teacher_payments' });
@@ -343,8 +473,27 @@ function setupIPCHandlers(ipcMain) {
     statements.push({ sql: 'DELETE FROM subjects' });
     statements.push({ sql: 'DELETE FROM classes' });
     statements.push({ sql: 'DELETE FROM teachers' });
+    if (restoreApplicationSettings) {
+      statements.push({ sql: 'DELETE FROM users' });
+    }
 
     // Important: insérer dans un ordre compatible avec les FKs
+    for (const user of users) {
+      statements.push({
+        sql: `INSERT INTO users (id, username, password_hash, password_salt, role, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
+        params: [
+          user.id,
+          user.username,
+          user.password_hash,
+          user.password_salt,
+          user.role || 'administrator',
+          user.created_at,
+          user.updated_at,
+        ],
+      });
+    }
+
     for (const t of teachers) {
       statements.push({
         sql: `INSERT INTO teachers (id, first_name, last_name, email, phone, address, specialty, hire_date, status, gender, photo, salary, is_deleted, deleted_at, created_at, updated_at)
@@ -555,17 +704,32 @@ function setupIPCHandlers(ipcMain) {
     }
 
     // exécution transactionnelle
+    const previousSettings = readSettings();
+    if (restoreApplicationSettings && !writeSettings(validation.settings)) {
+      return { success: false, error: 'Impossible de restaurer les parametres de l application' };
+    }
+
     try {
       runMany(statements);
     } catch (error) {
+      if (restoreApplicationSettings) {
+        writeSettings(previousSettings);
+      }
       return { success: false, error: error && error.message ? error.message : 'Erreur import' };
     }
+
+    sessions.clear();
+    clearPersistedSession();
 
     return {
       success: true,
       data: {
         filePath,
+        backupVersion: validation.version,
+        requiresLogin: true,
+        settings: validation.settings,
         counts: {
+          users: restoreApplicationSettings ? users.length : null,
           teachers: teachers.length,
           classes: classes.length,
           class_teachers: classTeachers.length,
@@ -627,9 +791,9 @@ function setupIPCHandlers(ipcMain) {
         if (!n) continue;
         const monthKey = String(n.month_key || '').trim();
         const subject = String(n.subject || '').trim();
-        const note = Number(n.note);
+        const note = Number(String(n.note).trim().replace(',', '.'));
         if (!monthKey || !subject) continue;
-        if (Number.isNaN(note) || note < 0 || note > 10) continue;
+        if (!Number.isFinite(note) || note < 0 || note > 10) continue;
         statements.push({
           sql: `INSERT INTO bulletin_notes (student_id, academic_year, month_key, subject, note, updated_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,

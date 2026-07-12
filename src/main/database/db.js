@@ -229,6 +229,20 @@ class DatabaseManager {
           lastExportError = error;
         }
       }
+
+      // sql.js peut desactiver ce PRAGMA apres db.export(). Le reactiver ici
+      // garantit que toutes les ecritures suivantes controlent encore les FKs.
+      try {
+        this.db.run('PRAGMA foreign_keys = ON');
+        const foreignKeysEnabled = this.query('PRAGMA foreign_keys')[0]?.foreign_keys;
+        if (Number(foreignKeysEnabled) !== 1) {
+          throw new Error('Impossible de reactiver les contraintes de cles etrangeres');
+        }
+      } catch (error) {
+        console.error('Erreur lors de la reactivation des cles etrangeres:', error);
+        return;
+      }
+
       if (!data) {
         console.error('Erreur lors de l\'export de la base de données:', lastExportError);
         return;

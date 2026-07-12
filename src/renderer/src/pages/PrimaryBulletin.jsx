@@ -23,6 +23,7 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { sanitizeDecimalInput } from '@/utils/decimalInput';
 
 const MONTHS = [
   { key: 'oct', label: 'Octobre', short: 'OCT.' },
@@ -127,12 +128,7 @@ function gridToNotesArray(grid) {
 }
 
 function sanitizeNote(value) {
-  const cleaned = String(value || '').replace(',', '.').replace(/[^\d.]/g, '');
-  if (cleaned === '') return '';
-  const parts = cleaned.split('.');
-  const numeric = Number(parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
-  if (!Number.isFinite(numeric)) return '';
-  return String(Math.min(10, Math.max(0, numeric)));
+  return sanitizeDecimalInput(value, 10);
 }
 
 function getPrimaryAppreciation(note) {

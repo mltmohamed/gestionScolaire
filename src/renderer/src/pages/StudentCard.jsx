@@ -52,8 +52,15 @@ function getParentNames(student) {
 }
 
 function getAcademicYear() {
-  const year = new Date().getFullYear();
-  return `${year}-${year + 1}`;
+  const date = new Date();
+  const year = date.getFullYear();
+  const startYear = date.getMonth() >= 7 ? year : year - 1;
+  return `${startYear}-${startYear + 1}`;
+}
+
+function getClassAcademicYear(cls) {
+  const academicYear = String(cls?.academic_year || '').trim();
+  return academicYear || getAcademicYear();
 }
 
 function sortStudents(a, b) {
@@ -460,7 +467,9 @@ export default function StudentCard() {
     });
   }, [enrichedStudents, searchTerm, filters]);
 
-  const academicYear = getAcademicYear();
+  const selectedStudentAcademicYear = getClassAcademicYear(
+    classById.get(Number(selectedStudent?.class_id))
+  );
 
   const selectedClassStudents = useMemo(() => {
     if (!selectedPrintClassId) return [];
@@ -482,13 +491,13 @@ export default function StudentCard() {
 
   const handlePrint = () => {
     if (!selectedStudent) return;
-    printHtml(makeCardsPrintHtml([selectedStudent], academicYear, `Carte ${getFullName(selectedStudent)}`));
+    printHtml(makeCardsPrintHtml([selectedStudent], selectedStudentAcademicYear, `Carte ${getFullName(selectedStudent)}`));
   };
 
   const handlePrintClass = () => {
     if (!selectedPrintClassId || selectedClassStudents.length === 0) return;
     const cls = classById.get(Number(selectedPrintClassId));
-    printHtml(makeCardsPrintHtml(selectedClassStudents, academicYear, `Cartes ${cls?.name || ''}`));
+    printHtml(makeCardsPrintHtml(selectedClassStudents, getClassAcademicYear(cls), `Cartes ${cls?.name || ''}`));
   };
 
   if (loading) {
@@ -635,7 +644,7 @@ export default function StudentCard() {
               </Card>
 
               <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-100 p-6 dark:border-slate-800 dark:bg-slate-900">
-                <PrintableStudentCard student={selectedStudent} academicYear={academicYear} />
+                <PrintableStudentCard student={selectedStudent} academicYear={selectedStudentAcademicYear} />
               </div>
 
               <p className="text-center text-sm text-slate-500">

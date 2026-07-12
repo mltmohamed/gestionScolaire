@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
 import { LayoutGrid, PenLine, Printer, Search, FileText, ChevronRight, Users, GraduationCap, Eye, X, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { sanitizeDecimalInput } from '@/utils/decimalInput';
 
 const MONTHS = [
   { key: 'oct', label: 'OCT.' },
@@ -62,10 +63,7 @@ const COLLEGE_SUBJECTS = [
 ];
 
 function clampNote(value) {
-  if (value === '' || value === null || value === undefined) return '';
-  const n = Number(String(value).replace(',', '.'));
-  if (Number.isNaN(n)) return '';
-  return Math.min(10, Math.max(0, n));
+  return sanitizeDecimalInput(value, 10);
 }
 
 function formatNumber(n) {
@@ -1558,10 +1556,7 @@ export default function Bulletin() {
                               {MONTHS.map((m) => (
                                 <td key={m.key} className="p-1 border-l">
                                   <Input
-                                    type="number"
-                                    min={0}
-                                    max={10}
-                                    step="0.25"
+                                    inputMode="decimal"
                                     value={notes?.[subject]?.[m.key] ?? ''}
                                     onChange={(e) => handleNoteChange(subject, m.key, e.target.value)}
                                     className="h-9 text-center border-none focus:ring-0 bg-transparent"
