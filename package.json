@@ -4,6 +4,7 @@
   "description": "Application de gestion scolaire avec Electron",
   "main": "src/main/main.js",
   "scripts": {
+    "test": "node --test",
     "dev": "vite",
     "build": "vite build && electron-builder",
     "preview": "vite preview",

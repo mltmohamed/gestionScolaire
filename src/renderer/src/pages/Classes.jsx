@@ -159,6 +159,7 @@ export default function Classes() {
     capacity: 'all',
   });
   const [formData, setFormData] = useState(emptyForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, cls: null });
 
   const levelOptions = useMemo(() => {
@@ -287,6 +288,8 @@ export default function Classes() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!formData.name || !formData.level || !formData.academic_year) {
       toast.error('Veuillez remplir les champs obligatoires');
       return;
@@ -298,6 +301,7 @@ export default function Classes() {
       teacher_ids: isCollegeLevel(formData.level) ? formData.teacher_ids : [],
     };
 
+    setIsSubmitting(true);
     try {
       const result = editingClass
         ? await updateClass(editingClass.id, payload)
@@ -312,25 +316,37 @@ export default function Classes() {
     } catch (error) {
       console.error('Erreur complète:', error);
       toast.error(error.message || 'Une erreur est survenue');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleConfirmDelete = async () => {
     const cls = deleteDialog.cls;
-    if (!cls) return;
+    if (!cls) return false;
 
     try {
       const result = await deleteClass(cls.id);
       if (result.success) {
-        toast.success('Classe supprimée définitivement');
-      } else {
-        toast.error(result.error || 'Erreur lors de la suppression');
+        toast.success({
+          title: 'Classe supprimée',
+          message: `La classe ${cls.name} et toutes ses données associées ont été supprimées.`,
+        });
+        return true;
       }
+      toast.error({
+        title: 'Suppression impossible',
+        message: result.error || 'La classe n’a pas pu être supprimée.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la suppression');
+      toast.error({
+        title: 'Suppression impossible',
+        message: error.message || 'Une erreur inattendue a empêché la suppression de la classe.',
+      });
+      return false;
     }
-    setDeleteDialog({ open: false, cls: null });
   };
 
   if (loading) {
@@ -455,13 +471,13 @@ export default function Classes() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleViewClass(cls)} title="Voir la fiche">
+                      <Button variant="ghost" size="icon" onClick={() => handleViewClass(cls)} title="Voir la fiche" aria-label={`Voir la fiche de la classe ${cls.name}`}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(cls)} title="Modifier">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(cls)} title="Modifier" aria-label={`Modifier la classe ${cls.name}`}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, cls })} title="Supprimer définitivement">
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, cls })} title="Supprimer définitivement" aria-label={`Supprimer définitivement la classe ${cls.name}`}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
@@ -639,8 +655,8 @@ export default function Classes() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" className="bg-[#0066CC] hover:bg-[#005bb8]">
-                {editingClass ? 'Enregistrer' : 'Créer la classe'}
+              <Button type="submit" disabled={isSubmitting} className="bg-[#0066CC] hover:bg-[#005bb8]">
+                {isSubmitting ? 'Enregistrement...' : (editingClass ? 'Enregistrer' : 'Créer la classe')}
               </Button>
             </DialogFooter>
           </form>
@@ -721,12 +737,18 @@ export default function Classes() {
         onOpenChange={(open) => setDeleteDialog({ open, cls: open ? deleteDialog.cls : null })}
         onConfirm={handleConfirmDelete}
         itemName={deleteDialog.cls ? deleteDialog.cls.name : ''}
+        itemMeta={[
+          deleteDialog.cls?.level ? `Niveau : ${deleteDialog.cls.level}` : null,
+          deleteDialog.cls?.academic_year ? `Année : ${deleteDialog.cls.academic_year}` : null,
+          `${Number(deleteDialog.cls?.student_count || 0)} élève(s) inscrit(s)`,
+        ]}
+        entityLabel="Classe à supprimer"
         warnings={[
-          'Tous les élèves de la classe',
-          'Paiements des élèves',
-          'Notes et bulletins',
-          'Tuteurs des élèves si non partagés',
-          'Données de la classe',
+          'Tous les dossiers des élèves et leurs informations parentales',
+          'Tous les paiements enregistrés pour ces élèves',
+          'Toutes les notes et tous les bulletins',
+          'Les affectations des professeurs à cette classe',
+          'L’ensemble des informations et frais configurés pour la classe',
         ]}
       />
     </div>

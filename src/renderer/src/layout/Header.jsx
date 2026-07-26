@@ -6,18 +6,18 @@ import { Button } from '@/components/ui/button';
 import { useProfile } from '@/context/ProfileContext';
 
 const PAGE_META = [
-  { match: (path) => path === '/', title: 'Tableau de bord', subtitle: 'Vue generale de votre etablissement' },
-  { match: (path) => path.startsWith('/students'), title: 'Eleves', subtitle: 'Inscriptions, profils et suivi administratif' },
-  { match: (path) => path.startsWith('/teachers'), title: 'Professeurs', subtitle: 'Equipe pedagogique et affectations' },
+  { match: (path) => path === '/', title: 'Tableau de bord', subtitle: 'Vue générale de votre établissement' },
+  { match: (path) => path.startsWith('/students'), title: 'Élèves', subtitle: 'Inscriptions, profils et suivi administratif' },
+  { match: (path) => path.startsWith('/teachers'), title: 'Professeurs', subtitle: 'Équipe pédagogique et affectations' },
   { match: (path) => path.startsWith('/classes'), title: 'Classes', subtitle: 'Niveaux, effectifs et frais scolaires' },
   { match: (path) => path.startsWith('/student-card'), title: 'Cartes scolaires', subtitle: 'Impression individuelle ou par classe' },
-  { match: (path) => path.startsWith('/payments/tuition'), title: 'Paiements scolarite', subtitle: 'Encaissements, restes et recus' },
+  { match: (path) => path.startsWith('/payments/tuition'), title: 'Paiements scolarité', subtitle: 'Encaissements, restes et reçus' },
   { match: (path) => path.startsWith('/payments/uniform'), title: 'Paiements tenues', subtitle: 'Tenues de classe et sportives' },
-  { match: (path) => path.startsWith('/payments/teachers'), title: 'Paiements enseignants', subtitle: 'Salaires et recus mensuels' },
-  { match: (path) => path.startsWith('/bulletin/early'), title: 'Bulletins jardin-2e', subtitle: 'Notes mensuelles, absences, retards et appreciations' },
-  { match: (path) => path.startsWith('/bulletin/primary'), title: 'Bulletins primaire', subtitle: 'Compositions mensuelles 3e a 6e' },
-  { match: (path) => path.startsWith('/bulletin/college'), title: 'Bulletins second cycle', subtitle: 'Compositions trimestrielles 7e a 9e' },
-  { match: (path) => path.startsWith('/settings'), title: 'Parametres', subtitle: 'Profil, apparence, securite et donnees' },
+  { match: (path) => path.startsWith('/payments/teachers'), title: 'Paiements enseignants', subtitle: 'Salaires et reçus mensuels' },
+  { match: (path) => path.startsWith('/bulletin/early'), title: 'Bulletins jardin-2e', subtitle: 'Notes mensuelles, absences, retards et appréciations' },
+  { match: (path) => path.startsWith('/bulletin/primary'), title: 'Bulletins primaire', subtitle: 'Compositions mensuelles 3e à 6e' },
+  { match: (path) => path.startsWith('/bulletin/college'), title: 'Bulletins second cycle', subtitle: 'Compositions trimestrielles 7e à 9e' },
+  { match: (path) => path.startsWith('/settings'), title: 'Paramètres', subtitle: 'Profil, apparence, sécurité et données' },
 ];
 
 function getPageMeta(pathname) {
@@ -31,15 +31,16 @@ export default function Header() {
 
   const page = useMemo(() => getPageMeta(location.pathname), [location.pathname]);
   const today = useMemo(() => {
-    return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const formattedDate = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
   }, []);
 
   return (
     <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-950">
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <CalendarDays className="h-3.5 w-3.5 text-[#0066CC]" />
-          <span className="capitalize">{today}</span>
+          <CalendarDays aria-hidden="true" className="h-3.5 w-3.5 text-[#0066CC]" />
+          <span>{today}</span>
         </div>
         <h1 className="mt-1 truncate text-2xl font-black tracking-normal text-slate-950 dark:text-white">{page.title}</h1>
         <p className="truncate text-sm text-slate-500">{page.subtitle}</p>
@@ -49,7 +50,7 @@ export default function Header() {
         <div className="hidden items-center gap-2 xl:flex">
           <Button type="button" variant="outline" size="sm" onClick={() => navigate('/students')} className="gap-2">
             <UserPlus className="h-4 w-4" />
-            Eleve
+            Élève
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => navigate('/payments/tuition')} className="gap-2">
             <Receipt className="h-4 w-4" />

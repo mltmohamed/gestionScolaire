@@ -1,10 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useStudents } from '@/hooks/useStudents';
 import { useClasses } from '@/hooks/useClasses';
 import { useToast } from '@/hooks/useToast.jsx';
 import { useBulletin } from '@/hooks/useBulletin';
+import { APP_LOGO_PNG } from '@/config/appLogo';
 import {
   AlertCircle,
   ArrowLeft,
@@ -57,6 +66,8 @@ const SUBJECTS = [
   'Informatique',
   'Conduite',
 ];
+
+const OPTIONAL_SUBJECTS = ['Anglais', 'Informatique'];
 
 const META_SUBJECTS = ['TOTAL', 'Moy. de Classe', 'Moy. de Compo', 'Moy. Generale', 'Classement'];
 
@@ -112,10 +123,11 @@ function notesArrayToGrid(notes = []) {
   return grid;
 }
 
-function gridToNotesArray(grid) {
+function gridToNotesArray(grid, optionalSubjectsByMonth = {}) {
   const notes = [];
   for (const subject of SUBJECTS) {
     for (const month of MONTHS) {
+      if (OPTIONAL_SUBJECTS.includes(subject) && optionalSubjectsByMonth?.[month.key]?.[subject] === false) continue;
       const value = grid?.[subject]?.[month.key];
       if (value === '' || value === null || value === undefined) continue;
       const note = Number(String(value).replace(',', '.'));
@@ -162,14 +174,14 @@ function isFilledNote(value) {
   return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(String(value).replace(',', '.')));
 }
 
-function completeMonthAverage(grid, monthKey) {
-  const values = SUBJECTS.map((subject) => grid?.[subject]?.[monthKey]);
+function completeMonthAverage(grid, monthKey, subjects = SUBJECTS) {
+  const values = subjects.map((subject) => grid?.[subject]?.[monthKey]);
   if (!values.every(isFilledNote)) return null;
   return average(values);
 }
 
-function completeAnnualAverage(grid) {
-  const monthlyAverages = MONTHS.map((month) => completeMonthAverage(grid, month.key));
+function completeAnnualAverage(grid, subjectsForMonth = () => SUBJECTS) {
+  const monthlyAverages = MONTHS.map((month) => completeMonthAverage(grid, month.key, subjectsForMonth(month.key)));
   if (!monthlyAverages.every((value) => value !== null)) return null;
   return average(monthlyAverages);
 }
@@ -208,6 +220,14 @@ export default function PrimaryBulletin() {
   const [loadingClassData, setLoadingClassData] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeStudentId, setActiveStudentId] = useState('');
+  const [optionalSubjectsByMonth, setOptionalSubjectsByMonth] = useState({});
+  const [pendingMonth, setPendingMonth] = useState(null);
+  const [pendingOptionalSubjects, setPendingOptionalSubjects] = useState({ Anglais: true, Informatique: true });
+
+  const activeSubjects = useMemo(() => {
+    const options = optionalSubjectsByMonth[selectedMonthKey] || {};
+    return SUBJECTS.filter((subject) => !OPTIONAL_SUBJECTS.includes(subject) || options[subject] !== false);
+  }, [optionalSubjectsByMonth, selectedMonthKey]);
 
   const primaryClasses = useMemo(() => {
     return classes.filter(isPrimaryClass).sort((a, b) => {
@@ -249,8 +269,8 @@ export default function PrimaryBulletin() {
   }, [primaryClasses, students]);
 
   const selectedMonthValues = useCallback(
-    (studentId) => SUBJECTS.map((subject) => bulletins[studentId]?.notes?.[subject]?.[selectedMonthKey] || ''),
-    [bulletins, selectedMonthKey]
+    (studentId) => activeSubjects.map((subject) => bulletins[studentId]?.notes?.[subject]?.[selectedMonthKey] || ''),
+    [activeSubjects, bulletins, selectedMonthKey]
   );
 
   const getCompletion = useCallback(
@@ -258,18 +278,18 @@ export default function PrimaryBulletin() {
       const filled = selectedMonthValues(studentId).filter((value) => value !== '').length;
       return {
         filled,
-        total: SUBJECTS.length,
-        percent: Math.round((filled / SUBJECTS.length) * 100),
-        complete: filled === SUBJECTS.length,
+        total: activeSubjects.length,
+        percent: Math.round((filled / activeSubjects.length) * 100),
+        complete: filled === activeSubjects.length,
       };
     },
-    [selectedMonthValues]
+    [activeSubjects.length, selectedMonthValues]
   );
 
   const globalStats = useMemo(() => {
     const completed = classStudents.filter((student) => getCompletion(student.id).complete).length;
     const filledCells = classStudents.reduce((sum, student) => sum + getCompletion(student.id).filled, 0);
-    const totalCells = classStudents.length * SUBJECTS.length;
+    const totalCells = classStudents.length * activeSubjects.length;
     const monthAverages = classStudents
       .map((student) => average(selectedMonthValues(student.id)))
       .filter((value) => value !== null);
@@ -280,7 +300,7 @@ export default function PrimaryBulletin() {
       percent: totalCells ? Math.round((filledCells / totalCells) * 100) : 0,
       classAverage: average(monthAverages),
     };
-  }, [classStudents, getCompletion, selectedMonthValues]);
+  }, [activeSubjects.length, classStudents, getCompletion, selectedMonthValues]);
 
   const studentsWithRanks = useMemo(() => {
     const rows = classStudents.map((student) => ({
@@ -317,6 +337,7 @@ export default function PrimaryBulletin() {
               appreciation: metaData.appreciation || data?.meta?.observations_generales || '',
               decision: data?.meta?.decision || '',
               rang: data?.meta?.rang || '',
+              optionalSubjectsByMonth: metaData.optional_subjects_by_month || {},
             },
           ];
         })
@@ -369,7 +390,7 @@ export default function PrimaryBulletin() {
     const row = bulletins[student.id] || { notes: emptyNoteGrid() };
     const rank = studentsWithRanks.find((item) => item.student.id === student.id)?.rank || '';
     const result = await saveBulletin(student.id, academicYear, {
-      notes: gridToNotesArray(row.notes),
+      notes: gridToNotesArray(row.notes, { ...(row.optionalSubjectsByMonth || {}), ...optionalSubjectsByMonth }),
       meta: {
         bulletin_type: 'primary',
         rang: rank ? `${rank}/${classStudents.length}` : row.rang || '',
@@ -378,6 +399,7 @@ export default function PrimaryBulletin() {
         data_json: JSON.stringify({
           appreciation: row.appreciation || '',
           selected_month: selectedMonthKey,
+          optional_subjects_by_month: { ...(row.optionalSubjectsByMonth || {}), ...optionalSubjectsByMonth },
         }),
       },
     });
@@ -405,13 +427,46 @@ export default function PrimaryBulletin() {
   const makePrintHtml = () => {
     const monthLabel = selectedMonth?.label || '';
     const className = selectedClass?.name || '';
-    const rankedRows = studentsWithRanks;
-    const monthRankById = Object.fromEntries(rankedRows.map((row) => [row.student.id, row.rank]));
-    const annualAverages = classStudents.map((student) => {
+    const subjectsForStudentMonth = (studentId, monthKey) => {
+      const savedOptions = bulletins[studentId]?.optionalSubjectsByMonth?.[monthKey];
+      const monthOptions = monthKey === selectedMonthKey
+        ? optionalSubjectsByMonth[monthKey]
+        : savedOptions;
+      return SUBJECTS.filter((subject) => !OPTIONAL_SUBJECTS.includes(subject) || monthOptions?.[subject] !== false);
+    };
+    const monthlyStatsByStudent = Object.fromEntries(classStudents.map((student) => {
       const grid = bulletins[student.id]?.notes || emptyNoteGrid();
+      const byMonth = Object.fromEntries(MONTHS.map((month) => {
+        const values = subjectsForStudentMonth(student.id, month.key)
+          .map((subject) => grid?.[subject]?.[month.key])
+          .filter(isFilledNote)
+          .map((value) => Number(String(value).replace(',', '.')));
+        return [month.key, {
+          total: values.length ? values.reduce((sum, value) => sum + value, 0) : null,
+          average: values.length ? average(values) : null,
+        }];
+      }));
+      return [student.id, byMonth];
+    }));
+    const ranksByMonth = Object.fromEntries(MONTHS.map((month) => {
+      const ranked = classStudents
+        .map((student) => ({ id: student.id, average: monthlyStatsByStudent[student.id]?.[month.key]?.average }))
+        .filter((row) => row.average !== null)
+        .sort((a, b) => b.average - a.average);
+      return [month.key, Object.fromEntries(ranked.map((row, index) => [row.id, index + 1]))];
+    }));
+    const annualAverages = classStudents.map((student) => {
+      const studentBulletin = bulletins[student.id] || {};
+      const grid = studentBulletin.notes || emptyNoteGrid();
+      const savedOptions = studentBulletin.optionalSubjectsByMonth || {};
       return {
         id: student.id,
-        avg: completeAnnualAverage(grid),
+        avg: completeAnnualAverage(grid, (monthKey) => {
+          const monthOptions = monthKey === selectedMonthKey
+            ? optionalSubjectsByMonth[monthKey]
+            : savedOptions[monthKey];
+          return SUBJECTS.filter((subject) => !OPTIONAL_SUBJECTS.includes(subject) || monthOptions?.[subject] !== false);
+        }),
       };
     });
     const classYearComplete = classStudents.length > 0 && annualAverages.every((row) => row.avg !== null);
@@ -428,9 +483,7 @@ export default function PrimaryBulletin() {
     const bulletinsHtml = classStudents
       .map((student) => {
         const row = bulletins[student.id] || { notes: emptyNoteGrid() };
-        const monthAverage = average(selectedMonthValues(student.id));
         const annualAverage = annualAverages.find((item) => item.id === student.id)?.avg;
-        const monthRank = monthRankById[student.id] ? `${monthRankById[student.id]}/${classStudents.length}` : '';
         const annualRank = annualRankById[student.id] ? `${annualRankById[student.id]}/${classStudents.length}` : '';
 
         return `
@@ -441,8 +494,12 @@ export default function PrimaryBulletin() {
                 <strong>${escapeHtml(academicYear)}</strong>
               </div>
               <div class="title">
-                <p class="tiny">Bulletin primaire 3e a 6e</p>
-                <h1>Compositions mensuelles</h1>
+                <img class="school-logo" src="${escapeHtml(APP_LOGO_PNG)}" alt="Logo La Sagesse" />
+                <div>
+                  <p class="school-name">Ecole privee La Sagesse</p>
+                  <p class="tiny">Bulletin primaire 3e a 6e</p>
+                  <h1>Compositions mensuelles</h1>
+                </div>
               </div>
               <div>
                 <p class="tiny">Classe</p>
@@ -462,7 +519,7 @@ export default function PrimaryBulletin() {
                 </tr>
               </thead>
               <tbody>
-                ${SUBJECTS.map((subject) => `
+                ${activeSubjects.map((subject) => `
                   <tr>
                     <td class="subject">${escapeHtml(subject)}</td>
                     ${MONTHS.map((month) => {
@@ -473,16 +530,18 @@ export default function PrimaryBulletin() {
                   </tr>
                 `).join('')}
                 ${META_SUBJECTS.map((label) => {
-                  const selectedValue =
-                    label === 'TOTAL' ? formatScore(selectedMonthValues(student.id).reduce((sum, value) => sum + (Number(value) || 0), 0), 1) :
-                    label === 'Moy. de Classe' ? formatScore(monthAverage) :
-                    label === 'Moy. de Compo' ? formatScore(monthAverage) :
-                    label === 'Moy. Generale' ? formatScore(monthAverage) :
-                    monthRank;
                   return `
                     <tr class="meta-row">
                       <td class="subject">${escapeHtml(label)}</td>
-                      ${MONTHS.map((month) => `<td class="${month.key === selectedMonthKey ? 'active' : ''}">${month.key === selectedMonthKey ? escapeHtml(selectedValue) : ''}</td>`).join('')}
+                      ${MONTHS.map((month) => {
+                        const stats = monthlyStatsByStudent[student.id]?.[month.key] || {};
+                        const rank = ranksByMonth[month.key]?.[student.id];
+                        const value =
+                          label === 'TOTAL' ? formatScore(stats.total, 1) :
+                          label === 'Classement' ? (rank ? `${rank}/${classStudents.length}` : '') :
+                          formatScore(stats.average);
+                        return `<td class="${month.key === selectedMonthKey ? 'active' : ''}">${escapeHtml(value)}</td>`;
+                      }).join('')}
                     </tr>
                   `;
                 }).join('')}
@@ -539,7 +598,9 @@ export default function PrimaryBulletin() {
             .bulletin:nth-of-type(2n) { page-break-after: always; margin-bottom: 0; }
             .bulletin:last-child { page-break-after: auto; }
             .topline { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 6px; align-items: center; border-bottom: 1.5px solid #111827; padding-bottom: 3px; }
-            .title { text-align: center; }
+            .title { display: flex; align-items: center; justify-content: center; gap: 3px; text-align: center; }
+            .school-logo { width: 9mm; height: 9mm; flex: 0 0 9mm; object-fit: contain; }
+            .school-name { margin: 0; font-size: 7px; font-weight: 800; text-transform: uppercase; }
             h1 { margin: 1px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }
             .tiny { margin: 0; font-size: 6.5px; text-transform: uppercase; color: #4b5563; }
             .topline strong { font-size: 8px; }
@@ -710,6 +771,7 @@ export default function PrimaryBulletin() {
                     onClick={() => {
                       setSelectedClassId(cls.id);
                       setSelectedMonthKey('');
+                      setOptionalSubjectsByMonth({});
                       setBulletins({});
                       setStep('month');
                     }}
@@ -757,8 +819,9 @@ export default function PrimaryBulletin() {
                     key={month.key}
                     type="button"
                     onClick={() => {
-                      setSelectedMonthKey(month.key);
-                      setStep('entry');
+                      const savedOptions = optionalSubjectsByMonth[month.key] || { Anglais: true, Informatique: true };
+                      setPendingOptionalSubjects(savedOptions);
+                      setPendingMonth(month);
                     }}
                     className={cn(
                       'rounded-lg border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
@@ -869,6 +932,7 @@ export default function PrimaryBulletin() {
                       rank={studentsWithRanks.find((row) => String(row.student.id) === String(activeStudentId))?.rank}
                       classSize={classStudents.length}
                       classAverage={globalStats.classAverage}
+                      subjects={activeSubjects}
                       onChangeNote={(subject, value) => updateNote(activeStudentId, subject, value)}
                       onChangeAppreciation={(value) => updateAppreciation(activeStudentId, value)}
                     />
@@ -881,6 +945,47 @@ export default function PrimaryBulletin() {
           )}
         </div>
       </section>
+
+      <Dialog open={Boolean(pendingMonth)} onOpenChange={(open) => !open && setPendingMonth(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Matieres facultatives - {pendingMonth?.label}</DialogTitle>
+            <DialogDescription>
+              Indiquez les matieres a inclure dans la saisie et dans le bulletin de ce mois.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {OPTIONAL_SUBJECTS.map((subject) => (
+              <label key={subject} className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-200 p-4">
+                <span>
+                  <span className="block font-semibold text-slate-950">Inclure {subject}</span>
+                  <span className="text-sm text-slate-500">La matiere apparaitra dans la saisie, les calculs et le bulletin.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={pendingOptionalSubjects[subject] !== false}
+                  onChange={(event) => setPendingOptionalSubjects((prev) => ({ ...prev, [subject]: event.target.checked }))}
+                  className="h-5 w-5 accent-[#0066CC]"
+                />
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingMonth(null)}>Annuler</Button>
+            <Button
+              onClick={() => {
+                setOptionalSubjectsByMonth((prev) => ({ ...prev, [pendingMonth.key]: pendingOptionalSubjects }));
+                setSelectedMonthKey(pendingMonth.key);
+                setPendingMonth(null);
+                setStep('entry');
+              }}
+              className="bg-[#0066CC] hover:bg-[#005bb8]"
+            >
+              Continuer la saisie
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -914,11 +1019,12 @@ function StudentEntry({
   rank,
   classSize,
   classAverage,
+  subjects,
   onChangeNote,
   onChangeAppreciation,
 }) {
   const notes = bulletin?.notes || emptyNoteGrid();
-  const monthValues = SUBJECTS.map((subject) => notes?.[subject]?.[selectedMonthKey] || '');
+  const monthValues = subjects.map((subject) => notes?.[subject]?.[selectedMonthKey] || '');
   const monthAverage = average(monthValues);
   const filled = monthValues.filter((value) => value !== '').length;
 
@@ -932,7 +1038,7 @@ function StudentEntry({
             <p className="text-sm text-slate-500">{student?.matricule || 'Sans matricule'}</p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <MiniStat label="Saisies" value={`${filled}/${SUBJECTS.length}`} />
+            <MiniStat label="Saisies" value={`${filled}/${subjects.length}`} />
             <MiniStat label="Moyenne" value={formatScore(monthAverage) || '-'} />
             <MiniStat label="Rang" value={rank ? `${rank}/${classSize}` : '-'} />
           </div>
@@ -950,7 +1056,7 @@ function StudentEntry({
               </tr>
             </thead>
             <tbody>
-              {SUBJECTS.map((subject, index) => {
+              {subjects.map((subject, index) => {
                 const value = notes?.[subject]?.[selectedMonthKey] || '';
                 const appreciation = getPrimaryAppreciation(value);
                 return (
@@ -983,7 +1089,7 @@ function StudentEntry({
             <p className="mt-1 text-3xl font-bold">{formatScore(monthAverage) || '-'}</p>
             <p className="text-sm text-slate-300">Moyenne personnelle /10</p>
             <div className="mt-4 h-2 rounded-full bg-white/20">
-              <div className="h-2 rounded-full bg-amber-300" style={{ width: `${Math.round((filled / SUBJECTS.length) * 100)}%` }} />
+              <div className="h-2 rounded-full bg-amber-300" style={{ width: `${Math.round((filled / subjects.length) * 100)}%` }} />
             </div>
           </div>
 

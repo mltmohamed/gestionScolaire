@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/useToast.jsx';
+import { ConfirmActionDialog } from '@/components/ui/alert-dialog';
 import { useTheme } from '@/context/ThemeContext';
 import { useProfile } from '@/context/ProfileContext';
 import { cn } from '@/utils/cn';
@@ -62,6 +63,7 @@ export default function Settings() {
   });
   const [securityLoading, setSecurityLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState({ export: false, import: false });
+  const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -138,17 +140,17 @@ export default function Settings() {
     }
   };
 
-  const handleImportData = async () => {
+  const handleImportData = () => {
     if (dataLoading.import) return;
     if (!window.electronAPI || !window.electronAPI.importData) {
       toast.error('API non disponible');
       return;
     }
 
-    if (!window.confirm('Importer remplacera les donnees, les comptes et les parametres actuels. Une reconnexion sera demandee. Continuer ?')) {
-      return;
-    }
+    setIsImportConfirmOpen(true);
+  };
 
+  const confirmImportData = async () => {
     setDataLoading((prev) => ({ ...prev, import: true }));
     try {
       const result = await window.electronAPI.importData();
@@ -171,11 +173,15 @@ export default function Settings() {
         }
         toast.success('Import termine. Reconnexion en cours...');
         window.setTimeout(() => window.location.reload(), 700);
+        return true;
       } else if (result?.error !== 'Cancelled') {
         toast.error(result?.error || 'Erreur import');
+        return false;
       }
+      return true;
     } catch (error) {
       toast.error(error?.message || 'Erreur import');
+      return false;
     } finally {
       setDataLoading((prev) => ({ ...prev, import: false }));
     }
@@ -491,6 +497,25 @@ export default function Settings() {
           </main>
         </div>
       </section>
+
+      <ConfirmActionDialog
+        open={isImportConfirmOpen}
+        onOpenChange={setIsImportConfirmOpen}
+        onConfirm={confirmImportData}
+        title="Remplacer les données actuelles ?"
+        description="L’importation restaure entièrement le contenu de la sauvegarde sélectionnée et remplace les informations présentes sur cet ordinateur."
+        entityLabel="Opération"
+        itemName="Importation d’une sauvegarde complète"
+        itemMeta={['Données locales', 'Comptes', 'Paramètres']}
+        details={[
+          'Les élèves, professeurs, classes, paiements et bulletins actuels seront remplacés.',
+          'Les comptes utilisateurs, le profil et les préférences seront restaurés depuis la sauvegarde.',
+          'La session sera fermée et une nouvelle connexion sera obligatoire.',
+          'Il est recommandé d’exporter une sauvegarde actuelle avant de continuer.',
+        ]}
+        confirmLabel="Remplacer et importer"
+        pendingLabel="Importation..."
+      />
     </div>
   );
 }

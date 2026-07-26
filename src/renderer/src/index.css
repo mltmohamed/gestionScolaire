@@ -75,6 +75,44 @@
   animation: fadeIn 0.3s ease-out;
 }
 
+@keyframes notificationEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialogEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.app-notification-enter {
+  animation: notificationEnter 0.22s ease-out;
+}
+
+.app-dialog-enter {
+  animation: dialogEnter 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .app-notification-enter,
+  .app-dialog-enter {
+    animation: none;
+  }
+}
+
 /* Scrollbar personnalisée */
 ::-webkit-scrollbar {
   width: 8px;

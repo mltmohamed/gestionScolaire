@@ -312,14 +312,64 @@ class DatabaseManager {
     }
   }
 
-  // Exécution simple sans retour
+  _runWithoutSave(sql, params = []) {
+    const sanitized = params && params.length > 0
+      ? params.map((p) => (p === undefined ? null : p))
+      : params;
+    this.db.run(sql, sanitized);
+
+    // db.export() (appelé par save()) remet last_insert_rowid() à 0 avec sql.js.
+    // Il faut donc capturer les métadonnées de l'écriture avant toute sauvegarde.
+    const metadata = this.query(
+      'SELECT last_insert_rowid() AS lastInsertRowid, changes() AS changes'
+    )[0] || {};
+
+    return {
+      lastInsertRowid: Number(metadata.lastInsertRowid || 0),
+      changes: Number(metadata.changes || 0),
+    };
+  }
+
+  // Exécution simple avec métadonnées de l'écriture
   run(sql, params = []) {
     try {
-      const sanitized = params && params.length > 0 ? params.map((p) => (p === undefined ? null : p)) : params;
-      this.db.run(sql, sanitized);
+      const result = this._runWithoutSave(sql, params);
       this.save(); // Sauvegarder automatiquement après chaque modification
+      return result;
     } catch (error) {
       console.error('Erreur SQL:', error);
+      throw error;
+    }
+  }
+
+  transaction(callback) {
+    if (typeof callback !== 'function') {
+      throw new TypeError('La transaction attend une fonction');
+    }
+
+    this.db.run('BEGIN');
+    try {
+      const result = callback({
+        query: (sql, params) => this.query(sql, params),
+        run: (sql, params) => this._runWithoutSave(sql, params),
+      });
+
+      // Les handlers IPC actuels sont synchrones. Refuser une promesse évite de
+      // valider la transaction avant la fin réelle d'un callback asynchrone.
+      if (result && typeof result.then === 'function') {
+        throw new TypeError('Les transactions asynchrones ne sont pas prises en charge');
+      }
+
+      this.db.run('COMMIT');
+      this.save();
+      return result;
+    } catch (error) {
+      try {
+        this.db.run('ROLLBACK');
+      } catch {
+        // ignorer une éventuelle erreur de rollback pour préserver l'erreur initiale
+      }
+      console.error('Erreur transaction SQL:', error);
       throw error;
     }
   }
@@ -360,5 +410,6 @@ module.exports = {
   closeDatabase: () => dbManager.close(),
   query: (sql, params) => dbManager.query(sql, params),
   run: (sql, params) => dbManager.run(sql, params),
-  runMany: (statements) => dbManager.runMany(statements)
+  runMany: (statements) => dbManager.runMany(statements),
+  transaction: (callback) => dbManager.transaction(callback)
 };

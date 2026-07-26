@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Briefcase,
   Calendar,
   Eye,
   Filter,
@@ -28,7 +27,6 @@ import {
   RotateCcw,
   School,
   Search,
-  Shield,
   Trash2,
   User,
   UserCheck,
@@ -55,14 +53,6 @@ const emptyForm = {
   mother_name: '',
   class_id: '',
   photo: null,
-  guardian: {
-    first_name: '',
-    last_name: '',
-    phone: '',
-    address: '',
-    job: '',
-    relationship: '',
-  },
 };
 
 const formatDate = (date) => {
@@ -242,13 +232,6 @@ export default function Students() {
     setFilters({ class_id: 'all', status: 'all', gender: 'all' });
   };
 
-  const updateGuardian = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      guardian: { ...prev.guardian, [field]: value },
-    }));
-  };
-
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -290,14 +273,6 @@ export default function Students() {
         mother_name: fullStudent.mother_name || '',
         class_id: fullStudent.class_id || '',
         photo: fullStudent.photo || null,
-        guardian: {
-          first_name: fullStudent.guardian_first_name || '',
-          last_name: fullStudent.guardian_last_name || '',
-          phone: fullStudent.guardian_phone || '',
-          address: fullStudent.guardian_address || '',
-          job: fullStudent.guardian_job || '',
-          relationship: fullStudent.guardian_relationship || '',
-        },
       });
     } else {
       setEditingStudent(null);
@@ -350,56 +325,88 @@ export default function Students() {
 
   const handleConfirmActivate = async () => {
     const student = activateDialog.student;
-    if (!student) return;
+    if (!student) return false;
 
     try {
       const result = await activateStudent(student.id);
       if (result.success) {
-        toast.success('Élève réactivé avec succès');
-      } else {
-        toast.error(result.error || 'Erreur lors de la réactivation');
+        toast.success({
+          title: 'Élève réactivé',
+          message: `Le dossier de ${getStudentName(student)} est de nouveau actif.`,
+          description: 'L’élève peut à nouveau être utilisé dans les opérations de l’application.',
+        });
+        return true;
       }
+      toast.error({
+        title: 'Réactivation impossible',
+        message: result.error || 'Le dossier de l’élève n’a pas pu être réactivé.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la réactivation');
+      toast.error({
+        title: 'Réactivation impossible',
+        message: error.message || 'Une erreur inattendue a empêché la réactivation de l’élève.',
+      });
+      return false;
     }
-    setActivateDialog({ open: false, student: null });
   };
 
   const handleConfirmDeactivate = async () => {
     const student = deactivateDialog.student;
-    if (!student) return;
+    if (!student) return false;
 
     try {
       const result = await deactivateStudent(student.id);
       if (result.success) {
-        toast.success('Élève désactivé avec succès');
-      } else {
-        toast.error(result.error || 'Erreur lors de la désactivation');
+        toast.success({
+          title: 'Élève désactivé',
+          message: `Le dossier de ${getStudentName(student)} est maintenant inactif.`,
+          description: 'Toutes ses données restent conservées et une réactivation reste possible.',
+        });
+        return true;
       }
+      toast.error({
+        title: 'Désactivation impossible',
+        message: result.error || 'Le dossier de l’élève n’a pas pu être désactivé.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la désactivation');
+      toast.error({
+        title: 'Désactivation impossible',
+        message: error.message || 'Une erreur inattendue a empêché la désactivation de l’élève.',
+      });
+      return false;
     }
-    setDeactivateDialog({ open: false, student: null });
   };
 
   const handleConfirmHardDelete = async () => {
     const student = hardDeleteDialog.student;
-    if (!student) return;
+    if (!student) return false;
 
     try {
       const result = await hardDeleteStudent(student.id);
       if (result.success) {
-        toast.success('Élève et données associées supprimés définitivement');
-      } else {
-        toast.error(result.error || 'Erreur lors de la suppression définitive');
+        toast.success({
+          title: 'Suppression terminée',
+          message: `Le dossier de ${getStudentName(student)} et ses données associées ont été supprimés.`,
+        });
+        return true;
       }
+      toast.error({
+        title: 'Suppression impossible',
+        message: result.error || 'Le dossier de l’élève n’a pas pu être supprimé.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la suppression définitive');
+      toast.error({
+        title: 'Suppression impossible',
+        message: error.message || 'Une erreur inattendue a empêché la suppression du dossier.',
+      });
+      return false;
     }
-    setHardDeleteDialog({ open: false, student: null });
   };
 
   if (loading) {
@@ -419,7 +426,7 @@ export default function Students() {
             </div>
             <h1 className="mt-4 text-3xl font-bold text-slate-950 dark:text-white">Gestion des élèves</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-              Retrouvez rapidement un dossier, contrôlez les affectations et gardez les informations du tuteur à portée de main.
+              Retrouvez rapidement un dossier, contrôlez les affectations et gardez les informations des parents à portée de main.
             </p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-11 gap-2 bg-[#0066CC] hover:bg-[#005bb8]">
@@ -515,10 +522,10 @@ export default function Students() {
                       </div>
 
                       <div className="flex shrink-0 items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleViewStudent(student)} title="Voir la fiche">
+                        <Button variant="ghost" size="icon" onClick={() => handleViewStudent(student)} title="Voir la fiche" aria-label={`Voir la fiche de ${getStudentName(student)}`}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(student)} title="Modifier">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(student)} title="Modifier" aria-label={`Modifier ${getStudentName(student)}`}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -526,10 +533,11 @@ export default function Students() {
                           size="icon"
                           onClick={() => isActive ? setDeactivateDialog({ open: true, student }) : setActivateDialog({ open: true, student })}
                           title={isActive ? 'Désactiver' : 'Réactiver'}
+                          aria-label={`${isActive ? 'Désactiver' : 'Réactiver'} ${getStudentName(student)}`}
                         >
                           <Power className={`h-4 w-4 ${isActive ? 'text-[#FF6600]' : 'text-emerald-600'}`} />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setHardDeleteDialog({ open: true, student })} title="Supprimer définitivement">
+                        <Button variant="ghost" size="icon" onClick={() => setHardDeleteDialog({ open: true, student })} title="Supprimer définitivement" aria-label={`Supprimer définitivement ${getStudentName(student)}`}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -546,7 +554,7 @@ export default function Students() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                         <Phone className="h-4 w-4 text-[#0066CC]" />
-                        <span className="truncate">{student.guardian_phone || student.phone || '-'}</span>
+                        <span className="truncate">{student.phone || student.guardian_phone || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -639,7 +647,7 @@ export default function Students() {
                       </SelectField>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Téléphone élève</label>
+                      <label className="text-sm font-medium">Téléphone / contact</label>
                       <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
                     </div>
                     <div className="space-y-2">
@@ -674,38 +682,6 @@ export default function Students() {
                   </div>
                 </section>
 
-                <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-[#FF6600]" />
-                    <h3 className="font-semibold text-slate-950 dark:text-white">Tuteur obligatoire</h3>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Prénom tuteur *</label>
-                      <Input value={formData.guardian.first_name} onChange={(e) => updateGuardian('first_name', e.target.value)} required />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Nom tuteur *</label>
-                      <Input value={formData.guardian.last_name} onChange={(e) => updateGuardian('last_name', e.target.value)} required />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Téléphone tuteur *</label>
-                      <Input value={formData.guardian.phone} onChange={(e) => updateGuardian('phone', e.target.value)} required />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Lien</label>
-                      <Input value={formData.guardian.relationship} onChange={(e) => updateGuardian('relationship', e.target.value)} placeholder="Ex: Père, Mère" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Profession</label>
-                      <Input value={formData.guardian.job} onChange={(e) => updateGuardian('job', e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Adresse tuteur</label>
-                      <Input value={formData.guardian.address} onChange={(e) => updateGuardian('address', e.target.value)} />
-                    </div>
-                  </div>
-                </section>
               </div>
             </div>
 
@@ -765,18 +741,6 @@ export default function Students() {
                 </div>
               </section>
 
-              <section>
-                <h3 className="mb-3 font-semibold text-slate-950 dark:text-white">Tuteur</h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <InfoItem icon={Shield} label="Nom complet" value={`${viewingStudent.guardian_first_name || '-'} ${viewingStudent.guardian_last_name || ''}`.trim()} />
-                  <InfoItem icon={Phone} label="Téléphone" value={viewingStudent.guardian_phone} />
-                  <InfoItem icon={Users} label="Lien" value={viewingStudent.guardian_relationship} />
-                  <InfoItem icon={Briefcase} label="Profession" value={viewingStudent.guardian_job} />
-                  <div className="sm:col-span-2">
-                    <InfoItem icon={MapPin} label="Adresse" value={viewingStudent.guardian_address} />
-                  </div>
-                </div>
-              </section>
             </div>
           )}
 
@@ -791,6 +755,11 @@ export default function Students() {
         onOpenChange={(open) => setDeactivateDialog({ open, student: open ? deactivateDialog.student : null })}
         onConfirm={handleConfirmDeactivate}
         itemName={deactivateDialog.student ? getStudentName(deactivateDialog.student) : ''}
+        itemMeta={[
+          deactivateDialog.student?.matricule ? `Matricule : ${deactivateDialog.student.matricule}` : null,
+          deactivateDialog.student?.class_name ? `Classe : ${deactivateDialog.student.class_name}` : 'Sans classe',
+        ]}
+        entityLabel="Élève à désactiver"
       />
 
       <ConfirmActivateDialog
@@ -798,6 +767,11 @@ export default function Students() {
         onOpenChange={(open) => setActivateDialog({ open, student: open ? activateDialog.student : null })}
         onConfirm={handleConfirmActivate}
         itemName={activateDialog.student ? getStudentName(activateDialog.student) : ''}
+        itemMeta={[
+          activateDialog.student?.matricule ? `Matricule : ${activateDialog.student.matricule}` : null,
+          activateDialog.student?.class_name ? `Classe : ${activateDialog.student.class_name}` : 'Sans classe',
+        ]}
+        entityLabel="Élève à réactiver"
       />
 
       <ConfirmHardDeleteDialog
@@ -805,11 +779,16 @@ export default function Students() {
         onOpenChange={(open) => setHardDeleteDialog({ open, student: open ? hardDeleteDialog.student : null })}
         onConfirm={handleConfirmHardDelete}
         itemName={hardDeleteDialog.student ? getStudentName(hardDeleteDialog.student) : ''}
+        itemMeta={[
+          hardDeleteDialog.student?.matricule ? `Matricule : ${hardDeleteDialog.student.matricule}` : null,
+          hardDeleteDialog.student?.class_name ? `Classe : ${hardDeleteDialog.student.class_name}` : 'Sans classe',
+        ]}
+        entityLabel="Élève à supprimer"
         warnings={[
-          'Paiements de scolarité',
-          'Notes et bulletins',
-          'Historique complet',
-          'Toutes les données associées',
+          'Le dossier administratif et les coordonnées parentales',
+          'Tous les paiements de scolarité et de tenue',
+          'Toutes les notes et tous les bulletins',
+          'L’historique scolaire associé à cet élève',
         ]}
       />
     </div>

@@ -135,8 +135,23 @@ export const classAPI = {
 
 export const dashboardAPI = {
   getStats: async () => {
+    if (!window.electronAPI?.getDashboardStats) {
+      throw new Error('Le service du tableau de bord est indisponible. Redémarrez l’application puis réessayez.');
+    }
+
     const result = await window.electronAPI.getDashboardStats();
-    return result.success ? result.data : null;
+    if (!result?.success) {
+      const message = result?.error === 'Unauthorized'
+        ? 'Votre session a expiré. Reconnectez-vous pour accéder au tableau de bord.'
+        : result?.error || 'Les données du tableau de bord n’ont pas pu être chargées.';
+      throw new Error(message);
+    }
+
+    if (!result.data) {
+      throw new Error('Le tableau de bord a reçu une réponse vide. Actualisez la page pour réessayer.');
+    }
+
+    return result.data;
   },
 };
 

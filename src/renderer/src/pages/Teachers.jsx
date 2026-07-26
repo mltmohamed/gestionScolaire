@@ -290,56 +290,90 @@ export default function Teachers() {
 
   const handleConfirmActivate = async () => {
     const teacher = activateDialog.teacher;
-    if (!teacher) return;
+    if (!teacher) return false;
 
     try {
       const result = await activateTeacher(teacher.id);
       if (result.success) {
-        toast.success('Professeur réactivé avec succès');
-      } else {
-        toast.error(result.error || 'Erreur lors de la réactivation');
+        toast.success({
+          title: 'Professeur réactivé',
+          message: `${getTeacherName(teacher)} est de nouveau actif.`,
+          description: 'Le professeur peut à nouveau être sélectionné et affecté.',
+        });
+        return true;
       }
+      toast.error({
+        title: 'Réactivation impossible',
+        message: result.error || 'Le professeur n’a pas pu être réactivé.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la réactivation');
+      toast.error({
+        title: 'Réactivation impossible',
+        message: error.message || 'Une erreur inattendue a empêché la réactivation du professeur.',
+      });
+      return false;
     }
-    setActivateDialog({ open: false, teacher: null });
   };
 
   const handleConfirmDeactivate = async () => {
     const teacher = deactivateDialog.teacher;
-    if (!teacher) return;
+    if (!teacher) return false;
 
     try {
       const result = await deactivateTeacher(teacher.id);
       if (result.success) {
-        toast.success('Professeur désactivé avec succès');
-      } else {
-        toast.error(result.error || 'Erreur lors de la désactivation');
+        toast.success({
+          title: 'Professeur désactivé',
+          message: `${getTeacherName(teacher)} est maintenant inactif.`,
+          description: 'Son dossier et son historique restent intégralement conservés.',
+        });
+        return true;
       }
+      toast.error({
+        title: 'Désactivation impossible',
+        message: result.error || 'Le professeur n’a pas pu être désactivé.',
+        description: 'Un professeur encore affecté à une classe doit d’abord être réassigné.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la désactivation');
+      toast.error({
+        title: 'Désactivation impossible',
+        message: error.message || 'Une erreur inattendue a empêché la désactivation du professeur.',
+      });
+      return false;
     }
-    setDeactivateDialog({ open: false, teacher: null });
   };
 
   const handleConfirmHardDelete = async () => {
     const teacher = hardDeleteDialog.teacher;
-    if (!teacher) return;
+    if (!teacher) return false;
 
     try {
       const result = await hardDeleteTeacher(teacher.id);
       if (result.success) {
-        toast.success('Professeur et données associées supprimés définitivement');
-      } else {
-        toast.error(result.error || 'Erreur lors de la suppression définitive');
+        toast.success({
+          title: 'Suppression terminée',
+          message: `Le dossier de ${getTeacherName(teacher)} et ses données associées ont été supprimés.`,
+        });
+        return true;
       }
+      toast.error({
+        title: 'Suppression impossible',
+        message: result.error || 'Le professeur n’a pas pu être supprimé.',
+        description: 'Vérifiez notamment qu’il n’est plus affecté à aucune classe.',
+      });
+      return false;
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la suppression définitive');
+      toast.error({
+        title: 'Suppression impossible',
+        message: error.message || 'Une erreur inattendue a empêché la suppression du professeur.',
+      });
+      return false;
     }
-    setHardDeleteDialog({ open: false, teacher: null });
   };
 
   if (loading) {
@@ -448,10 +482,10 @@ export default function Teachers() {
                       </div>
 
                       <div className="flex shrink-0 items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleViewTeacher(teacher)} title="Voir la fiche">
+                        <Button variant="ghost" size="icon" onClick={() => handleViewTeacher(teacher)} title="Voir la fiche" aria-label={`Voir la fiche de ${getTeacherName(teacher)}`}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(teacher)} title="Modifier">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(teacher)} title="Modifier" aria-label={`Modifier ${getTeacherName(teacher)}`}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -459,10 +493,11 @@ export default function Teachers() {
                           size="icon"
                           onClick={() => isActive ? setDeactivateDialog({ open: true, teacher }) : setActivateDialog({ open: true, teacher })}
                           title={isActive ? 'Désactiver' : 'Réactiver'}
+                          aria-label={`${isActive ? 'Désactiver' : 'Réactiver'} ${getTeacherName(teacher)}`}
                         >
                           <Power className={`h-4 w-4 ${isActive ? 'text-[#FF6600]' : 'text-emerald-600'}`} />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setHardDeleteDialog({ open: true, teacher })} title="Supprimer définitivement">
+                        <Button variant="ghost" size="icon" onClick={() => setHardDeleteDialog({ open: true, teacher })} title="Supprimer définitivement" aria-label={`Supprimer définitivement ${getTeacherName(teacher)}`}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -675,6 +710,11 @@ export default function Teachers() {
         onOpenChange={(open) => setDeactivateDialog({ open, teacher: open ? deactivateDialog.teacher : null })}
         onConfirm={handleConfirmDeactivate}
         itemName={deactivateDialog.teacher ? getTeacherName(deactivateDialog.teacher) : ''}
+        itemMeta={[
+          deactivateDialog.teacher?.specialty ? `Spécialité : ${deactivateDialog.teacher.specialty}` : 'Spécialité non définie',
+          deactivateDialog.teacher?.phone ? `Téléphone : ${deactivateDialog.teacher.phone}` : null,
+        ]}
+        entityLabel="Professeur à désactiver"
       />
 
       <ConfirmActivateDialog
@@ -682,6 +722,11 @@ export default function Teachers() {
         onOpenChange={(open) => setActivateDialog({ open, teacher: open ? activateDialog.teacher : null })}
         onConfirm={handleConfirmActivate}
         itemName={activateDialog.teacher ? getTeacherName(activateDialog.teacher) : ''}
+        itemMeta={[
+          activateDialog.teacher?.specialty ? `Spécialité : ${activateDialog.teacher.specialty}` : 'Spécialité non définie',
+          activateDialog.teacher?.phone ? `Téléphone : ${activateDialog.teacher.phone}` : null,
+        ]}
+        entityLabel="Professeur à réactiver"
       />
 
       <ConfirmHardDeleteDialog
@@ -689,11 +734,15 @@ export default function Teachers() {
         onOpenChange={(open) => setHardDeleteDialog({ open, teacher: open ? hardDeleteDialog.teacher : null })}
         onConfirm={handleConfirmHardDelete}
         itemName={hardDeleteDialog.teacher ? getTeacherName(hardDeleteDialog.teacher) : ''}
+        itemMeta={[
+          hardDeleteDialog.teacher?.specialty ? `Spécialité : ${hardDeleteDialog.teacher.specialty}` : 'Spécialité non définie',
+          hardDeleteDialog.teacher?.phone ? `Téléphone : ${hardDeleteDialog.teacher.phone}` : null,
+        ]}
+        entityLabel="Professeur à supprimer"
         warnings={[
-          'Paiements de salaire',
-          'Assignations aux classes',
-          'Historique complet',
-          'Toutes les données associées',
+          'Le dossier administratif et les coordonnées du professeur',
+          'Tous les paiements de salaire enregistrés',
+          'L’historique professionnel associé à ce professeur',
         ]}
       />
     </div>

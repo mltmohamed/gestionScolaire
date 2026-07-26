@@ -22,14 +22,14 @@ import { APP_LOGO_PNG } from '@/config/appLogo';
 
 const MAIN_NAV = [
   { name: 'Tableau de bord', href: '/', icon: LayoutDashboard, end: true },
-  { name: 'Eleves', href: '/students', icon: GraduationCap },
+  { name: 'Élèves', href: '/students', icon: GraduationCap },
   { name: 'Professeurs', href: '/teachers', icon: Users },
   { name: 'Classes', href: '/classes', icon: School },
   { name: 'Cartes scolaires', href: '/student-card', icon: CreditCard },
 ];
 
 const PAYMENT_NAV = [
-  { name: 'Scolarite', href: '/payments/tuition', icon: DollarSign },
+  { name: 'Scolarité', href: '/payments/tuition', icon: DollarSign },
   { name: 'Tenues', href: '/payments/uniform', icon: Shirt },
   { name: 'Enseignants', href: '/payments/teachers', icon: Users },
 ];

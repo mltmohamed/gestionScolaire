@@ -2,7 +2,12 @@ const { app, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { query, run, runMany } = require('./database/db');
+const {
+  query,
+  run,
+  runMany,
+  transaction: runTransaction,
+} = require('./database/db');
 
 const BACKUP_FORMAT = 'schoolmanage-backup';
 const BACKUP_VERSION = 2;
@@ -858,9 +863,6 @@ function setupIPCHandlers(ipcMain) {
     if (!data || !data.matricule) {
       return { success: false, error: 'Matricule obligatoire' };
     }
-    if (!data.guardian || !data.guardian.first_name || !data.guardian.last_name || !data.guardian.phone) {
-      return { success: false, error: 'Tuteur obligatoire' };
-    }
 
     const existing = query('SELECT id FROM students WHERE matricule = ? LIMIT 1', [data.matricule]);
     if (existing && existing[0] && existing[0].id) {
@@ -871,7 +873,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO students (first_name, last_name, date_of_birth, place_of_birth, gender, matricule, phone, address, father_first_name, father_last_name, mother_first_name, mother_last_name, father_name, mother_name, class_id, status, photo)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    run(sql, [
+    const result = run(sql, [
       data.first_name,
       data.last_name,
       data.date_of_birth,
@@ -891,47 +893,17 @@ function setupIPCHandlers(ipcMain) {
       data.photo || null
     ]);
 
-    const inserted = query('SELECT id FROM students WHERE matricule = ? ORDER BY id DESC LIMIT 1', [data.matricule]);
-    const id = inserted && inserted[0] ? inserted[0].id : null;
+    const id = result.lastInsertRowid;
     if (!id || Number(id) <= 0) {
       return { success: false, error: 'Erreur lors de la création de l\'élève' };
     }
 
-    run(
-      `INSERT INTO guardians (student_id, first_name, last_name, phone, address, job, relationship)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(student_id) DO UPDATE SET
-         first_name=excluded.first_name,
-         last_name=excluded.last_name,
-         phone=excluded.phone,
-         address=excluded.address,
-         job=excluded.job,
-         relationship=excluded.relationship,
-         updated_at=CURRENT_TIMESTAMP`
-      , [
-        id,
-        data.guardian.first_name,
-        data.guardian.last_name,
-        data.guardian.phone,
-        data.guardian.address || null,
-        data.guardian.job || null,
-        data.guardian.relationship || null
-      ]
-    );
-
-    const guardian = query('SELECT * FROM guardians WHERE student_id = ? LIMIT 1', [id])[0];
-    if (!guardian) {
-      return { success: false, error: 'Erreur lors de l\'enregistrement du tuteur' };
-    }
-    return { success: true, data: { id, guardian } };
+    return { success: true, data: { id } };
   });
 
   handle('students:update', { auth: true }, (event, id, data) => {
     if (!data || !data.matricule) {
       return { success: false, error: 'Matricule obligatoire' };
-    }
-    if (!data.guardian || !data.guardian.first_name || !data.guardian.last_name || !data.guardian.phone) {
-      return { success: false, error: 'Tuteur obligatoire' };
     }
 
     const sql = `
@@ -962,32 +934,6 @@ function setupIPCHandlers(ipcMain) {
       id
     ]);
 
-    run(
-      `INSERT INTO guardians (student_id, first_name, last_name, phone, address, job, relationship)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(student_id) DO UPDATE SET
-         first_name=excluded.first_name,
-         last_name=excluded.last_name,
-         phone=excluded.phone,
-         address=excluded.address,
-         job=excluded.job,
-         relationship=excluded.relationship,
-         updated_at=CURRENT_TIMESTAMP`
-      , [
-        id,
-        data.guardian.first_name,
-        data.guardian.last_name,
-        data.guardian.phone,
-        data.guardian.address || null,
-        data.guardian.job || null,
-        data.guardian.relationship || null
-      ]
-    );
-
-    const guardian = query('SELECT * FROM guardians WHERE student_id = ? LIMIT 1', [id])[0];
-    if (!guardian) {
-      return { success: false, error: 'Erreur lors de l\'enregistrement du tuteur' };
-    }
     return { success: true };
   });
 
@@ -1032,10 +978,7 @@ function setupIPCHandlers(ipcMain) {
       data.photo || null,
       data.salary || 0
     ]);
-    // Note: run() doesn't return the result like query() did in previous implementation, 
-    // but my db.js run() doesn't return anything. I need to get the last ID.
-    const lastId = query('SELECT last_insert_rowid() as id')[0].id;
-    return { success: true, data: { id: lastId } };
+    return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   handle('teachers:update', { auth: true }, (event, id, data) => {
@@ -1260,34 +1203,103 @@ function setupIPCHandlers(ipcMain) {
   });
 
   handle('classes:create', { auth: true }, (event, data) => {
-    const sql = `
-      INSERT INTO classes (name, level, academic_year, max_students, teacher_id, tuition_fee, uniform_fee, uniform_class_fee, uniform_sport_fee)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    run(sql, [
-      data.name,
-      data.level,
-      data.academic_year,
-      data.max_students || 30,
-      data.teacher_id || null,
-      data.tuition_fee || 0,
-      data.uniform_fee || 0,
-      data.uniform_class_fee || data.uniform_fee || 0,
-      data.uniform_sport_fee || 0
-    ]);
-    const classId = query('SELECT last_insert_rowid() as id')[0]?.id;
+    const safeData = isPlainObject(data) ? data : {};
+    const name = String(safeData.name || '').trim();
+    const level = String(safeData.level || '').trim();
+    const academicYear = String(safeData.academic_year || '').trim();
 
-    // Handle multiple teachers
-    if (data.teacher_ids && Array.isArray(data.teacher_ids)) {
-      for (const tId of data.teacher_ids) {
-        run('INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)', [classId, tId]);
-        run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [tId]);
+    if (!name || !level || !academicYear) {
+      return { success: false, error: 'Nom, niveau et année scolaire obligatoires' };
+    }
+
+    const existingClass = query(
+      'SELECT id FROM classes WHERE name = ? LIMIT 1',
+      [name]
+    )[0];
+    if (existingClass) {
+      return {
+        success: false,
+        error: 'Une classe portant ce nom existe déjà. Modifiez-la pour assigner les professeurs.',
+      };
+    }
+
+    const normalizeTeacherId = (value) => {
+      const id = Number(value);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    };
+
+    const rawTeacherIds = Array.isArray(safeData.teacher_ids) ? safeData.teacher_ids : [];
+    const normalizedTeacherIds = rawTeacherIds.map(normalizeTeacherId);
+    if (normalizedTeacherIds.some((id) => !id)) {
+      return { success: false, error: 'Sélection de professeur invalide' };
+    }
+    const teacherIds = [...new Set(normalizedTeacherIds)];
+
+    const hasPrimaryTeacher = safeData.teacher_id !== undefined
+      && safeData.teacher_id !== null
+      && safeData.teacher_id !== '';
+    const teacherId = hasPrimaryTeacher ? normalizeTeacherId(safeData.teacher_id) : null;
+    if (hasPrimaryTeacher && !teacherId) {
+      return { success: false, error: 'Professeur principal invalide' };
+    }
+
+    const allTeacherIds = [...new Set([teacherId, ...teacherIds].filter(Boolean))];
+    if (allTeacherIds.length > 0) {
+      const placeholders = allTeacherIds.map(() => '?').join(', ');
+      const existingTeacherIds = new Set(
+        query(
+          `SELECT id FROM teachers
+           WHERE id IN (${placeholders}) AND COALESCE(is_deleted, 0) = 0`,
+          allTeacherIds
+        ).map((teacher) => Number(teacher.id))
+      );
+      if (allTeacherIds.some((id) => !existingTeacherIds.has(id))) {
+        return { success: false, error: 'Un ou plusieurs professeurs sont introuvables' };
       }
     }
 
-    if (data.teacher_id) {
-      run("UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [data.teacher_id]);
-    }
+    const sql = `
+      INSERT INTO classes (
+        name, level, academic_year, max_students, teacher_id,
+        tuition_fee, uniform_fee, uniform_class_fee, uniform_sport_fee
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const classId = runTransaction(({ run: transactionRun }) => {
+      const result = transactionRun(sql, [
+        name,
+        level,
+        academicYear,
+        safeData.max_students || 30,
+        teacherId,
+        safeData.tuition_fee || 0,
+        safeData.uniform_fee || 0,
+        safeData.uniform_class_fee || safeData.uniform_fee || 0,
+        safeData.uniform_sport_fee || 0
+      ]);
+
+      if (!result.lastInsertRowid) {
+        throw new Error('Impossible de récupérer la classe créée');
+      }
+
+      for (const selectedTeacherId of teacherIds) {
+        transactionRun(
+          'INSERT INTO class_teachers (class_id, teacher_id) VALUES (?, ?)',
+          [result.lastInsertRowid, selectedTeacherId]
+        );
+      }
+
+      for (const assignedTeacherId of allTeacherIds) {
+        transactionRun(
+          "UPDATE teachers SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [assignedTeacherId]
+        );
+      }
+
+      return result.lastInsertRowid;
+    });
+
     return { success: true, data: { id: classId } };
   });
 
@@ -1403,40 +1415,109 @@ function setupIPCHandlers(ipcMain) {
   // ==================== DASHBOARD STATS ====================
   handle('dashboard:getStats', { auth: true }, () => {
     const stats = {};
-    
+
+    const today = new Date();
+    const defaultStartYear = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
+    const defaultAcademicYear = `${defaultStartYear}-${defaultStartYear + 1}`;
+    const availableAcademicYears = query(`
+      SELECT DISTINCT TRIM(academic_year) as academic_year
+      FROM classes
+      WHERE is_deleted = 0
+        AND academic_year IS NOT NULL
+        AND TRIM(academic_year) != ''
+      ORDER BY academic_year DESC
+    `).map((row) => row.academic_year);
+    stats.academicYear = availableAcademicYears.includes(defaultAcademicYear)
+      ? defaultAcademicYear
+      : availableAcademicYears[0] || defaultAcademicYear;
+
     // Nombre d'élèves
     stats.totalStudents = query('SELECT COUNT(*) as count FROM students WHERE is_deleted = 0')[0].count;
-    
+
     // Nombre de professeurs
     stats.totalTeachers = query('SELECT COUNT(*) as count FROM teachers WHERE is_deleted = 0')[0].count;
-    
+    stats.activeTeachers = query("SELECT COUNT(*) as count FROM teachers WHERE status = 'active' AND is_deleted = 0")[0].count;
+
     // Nombre de classes
     stats.totalClasses = query('SELECT COUNT(*) as count FROM classes WHERE is_deleted = 0')[0].count;
-    
+
     // Nombre de matières
     stats.totalSubjects = query('SELECT COUNT(*) as count FROM subjects')[0].count;
-    
+
     // Élèves actifs
     stats.activeStudents = query("SELECT COUNT(*) as count FROM students WHERE status = 'active' AND is_deleted = 0")[0].count;
-    stats.inactiveStudents = query("SELECT COUNT(*) as count FROM students WHERE status != 'active' AND is_deleted = 0")[0].count;
-    stats.unassignedStudents = query("SELECT COUNT(*) as count FROM students WHERE class_id IS NULL AND is_deleted = 0")[0].count;
+    stats.inactiveStudents = query("SELECT COUNT(*) as count FROM students WHERE COALESCE(status, '') != 'active' AND is_deleted = 0")[0].count;
+    stats.unassignedStudents = query(`
+      SELECT COUNT(*) as count
+      FROM students s
+      LEFT JOIN classes c
+        ON c.id = s.class_id
+        AND c.is_deleted = 0
+        AND c.academic_year = ?
+      WHERE s.status = 'active'
+        AND s.is_deleted = 0
+        AND c.id IS NULL
+    `, [stats.academicYear])[0].count;
 
     const financeRows = query(`
       SELECT
         COALESCE((SELECT SUM(amount) FROM student_payments), 0) as totalStudentPayments,
         COALESCE((SELECT SUM(amount) FROM student_payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as studentPaymentsThisMonth,
-        COALESCE((SELECT SUM(amount) FROM student_payments WHERE type = 'tuition'), 0) as tuitionPaid,
-        COALESCE((SELECT SUM(c.tuition_fee) FROM students s LEFT JOIN classes c ON s.class_id = c.id WHERE s.status = 'active' AND s.is_deleted = 0), 0) as tuitionExpected,
+        COALESCE((SELECT SUM(amount) FROM student_payments WHERE type = 'tuition' AND strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as tuitionPaymentsThisMonth,
+        COALESCE((SELECT COUNT(*) FROM student_payments WHERE type = 'tuition' AND strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as tuitionPaymentCountThisMonth,
+        COALESCE((SELECT SUM(amount) FROM student_payments WHERE type = 'tuition' AND academic_year = ?), 0) as tuitionPaid,
+        COALESCE((
+          SELECT SUM(c.tuition_fee)
+          FROM students s
+          JOIN classes c ON s.class_id = c.id
+          WHERE s.status = 'active'
+            AND s.is_deleted = 0
+            AND c.is_deleted = 0
+            AND c.academic_year = ?
+        ), 0) as tuitionExpected,
         COALESCE((SELECT SUM(amount) FROM teacher_payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')), 0) as teacherPaymentsThisMonth
-    `)[0] || {};
+    `, [stats.academicYear, stats.academicYear])[0] || {};
 
     stats.finance = {
       totalStudentPayments: Number(financeRows.totalStudentPayments || 0),
       studentPaymentsThisMonth: Number(financeRows.studentPaymentsThisMonth || 0),
+      tuitionPaymentsThisMonth: Number(financeRows.tuitionPaymentsThisMonth || 0),
+      tuitionPaymentCountThisMonth: Number(financeRows.tuitionPaymentCountThisMonth || 0),
       teacherPaymentsThisMonth: Number(financeRows.teacherPaymentsThisMonth || 0),
       tuitionPaid: Number(financeRows.tuitionPaid || 0),
       tuitionExpected: Number(financeRows.tuitionExpected || 0),
       tuitionRemaining: Math.max(Number(financeRows.tuitionExpected || 0) - Number(financeRows.tuitionPaid || 0), 0),
+    };
+
+    const classSummaryRows = query(`
+      SELECT
+        COUNT(*) as total_classes,
+        COALESCE(SUM(max_students), 0) as total_capacity,
+        COALESCE(SUM(student_count), 0) as assigned_students,
+        COALESCE(SUM(CASE WHEN max_students > 0 AND student_count >= max_students THEN 1 ELSE 0 END), 0) as full_classes,
+        COALESCE(SUM(CASE WHEN max_students > 0 AND student_count > max_students THEN 1 ELSE 0 END), 0) as over_capacity_classes
+      FROM (
+        SELECT
+          c.id,
+          COALESCE(c.max_students, 0) as max_students,
+          COUNT(s.id) as student_count
+        FROM classes c
+        LEFT JOIN students s
+          ON s.class_id = c.id
+          AND s.is_deleted = 0
+          AND s.status = 'active'
+        WHERE c.is_deleted = 0
+          AND c.academic_year = ?
+        GROUP BY c.id
+      ) current_classes
+    `, [stats.academicYear])[0] || {};
+
+    stats.classSummary = {
+      totalClasses: Number(classSummaryRows.total_classes || 0),
+      totalCapacity: Number(classSummaryRows.total_capacity || 0),
+      assignedStudents: Number(classSummaryRows.assigned_students || 0),
+      fullClasses: Number(classSummaryRows.full_classes || 0),
+      overCapacityClasses: Number(classSummaryRows.over_capacity_classes || 0),
     };
 
     stats.classOccupancy = query(`
@@ -1453,10 +1534,11 @@ function setupIPCHandlers(ipcMain) {
       FROM classes c
       LEFT JOIN students s ON s.class_id = c.id AND s.is_deleted = 0 AND s.status = 'active'
       WHERE c.is_deleted = 0
+        AND c.academic_year = ?
       GROUP BY c.id
       ORDER BY occupancy_rate DESC, student_count DESC
       LIMIT 5
-    `);
+    `, [stats.academicYear]);
 
     stats.genderDistribution = query(`
       SELECT
@@ -1469,21 +1551,17 @@ function setupIPCHandlers(ipcMain) {
     
     // Derniers élèves inscrits
     stats.recentStudents = query(`
-      SELECT s.*, c.name as class_name 
-      FROM students s 
-      LEFT JOIN classes c ON s.class_id = c.id 
+      SELECT
+        s.id,
+        s.first_name,
+        s.last_name,
+        s.enrollment_date,
+        s.created_at,
+        c.name as class_name
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id AND c.is_deleted = 0
       WHERE s.is_deleted = 0
-      ORDER BY s.enrollment_date DESC 
-      LIMIT 5
-    `);
-    
-    // Derniers paiements (scolarité)
-    stats.recentTuition = query(`
-      SELECT p.*, s.first_name, s.last_name
-      FROM student_payments p
-      JOIN students s ON p.student_id = s.id
-      WHERE p.type = 'tuition'
-      ORDER BY p.payment_date DESC
+      ORDER BY s.created_at DESC, s.id DESC
       LIMIT 5
     `);
 
@@ -1496,6 +1574,7 @@ function setupIPCHandlers(ipcMain) {
           p.type as payment_type,
           p.amount,
           p.payment_date as activity_date,
+          p.created_at,
           s.first_name || ' ' || s.last_name as person_name,
           COALESCE(p.description, CASE WHEN p.type = 'uniform' THEN 'Tenue scolaire' ELSE 'Scolarité' END) as label
         FROM student_payments p
@@ -1507,12 +1586,13 @@ function setupIPCHandlers(ipcMain) {
           'salary' as payment_type,
           tp.amount,
           tp.payment_date as activity_date,
+          tp.created_at,
           t.first_name || ' ' || t.last_name as person_name,
           COALESCE(tp.description, 'Paiement enseignant') as label
         FROM teacher_payments tp
         JOIN teachers t ON tp.teacher_id = t.id
       )
-      ORDER BY activity_date DESC
+      ORDER BY activity_date DESC, created_at DESC, id DESC, activity_type ASC
       LIMIT 8
     `);
     
@@ -1530,14 +1610,13 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO subjects (name, code, description, coefficient)
       VALUES (?, ?, ?, ?)
     `;
-    run(sql, [
+    const result = run(sql, [
       data.name,
       data.code,
       data.description || null,
       data.coefficient || 1
     ]);
-    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
-    return { success: true, data: { id } };
+    return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   // ==================== GRADES ====================
@@ -1569,7 +1648,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO grades (student_id, subject_id, value, max_value, comment, date, term)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    run(sql, [
+    const result = run(sql, [
       data.student_id,
       data.subject_id,
       data.value,
@@ -1578,8 +1657,7 @@ function setupIPCHandlers(ipcMain) {
       data.date || new Date().toISOString().split('T')[0],
       data.term || null
     ]);
-    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
-    return { success: true, data: { id } };
+    return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   // ==================== PAYMENTS ====================
@@ -1611,7 +1689,7 @@ function setupIPCHandlers(ipcMain) {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    run(sql, [
+    const result = run(sql, [
       data.student_id,
       data.type,
       data.amount,
@@ -1623,8 +1701,7 @@ function setupIPCHandlers(ipcMain) {
       data.period_month ?? null,
       data.period_year ?? null,
     ]);
-    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
-    return { success: true, data: { id } };
+    return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   handle('payments:updateStudentPayment', { auth: true }, (event, id, data) => {
@@ -1672,7 +1749,7 @@ function setupIPCHandlers(ipcMain) {
       INSERT INTO teacher_payments (teacher_id, amount, payment_date, payment_method, period_month, period_year, description)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    run(sql, [
+    const result = run(sql, [
       data.teacher_id,
       data.amount,
       data.payment_date || new Date().toISOString().split('T')[0],
@@ -1681,8 +1758,7 @@ function setupIPCHandlers(ipcMain) {
       data.period_year,
       data.description || null
     ]);
-    const id = query('SELECT last_insert_rowid() as id')[0]?.id;
-    return { success: true, data: { id } };
+    return { success: true, data: { id: result.lastInsertRowid } };
   });
 
   handle('payments:updateTeacherPayment', { auth: true }, (event, id, data) => {

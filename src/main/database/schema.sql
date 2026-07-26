@@ -200,5 +200,9 @@ CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_student_payments_student ON student_payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_teacher ON teacher_payments(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_students_dashboard ON students(is_deleted, status, class_id);
+CREATE INDEX IF NOT EXISTS idx_classes_dashboard ON classes(is_deleted, academic_year);
+CREATE INDEX IF NOT EXISTS idx_student_payments_dashboard ON student_payments(type, academic_year, payment_date);
+CREATE INDEX IF NOT EXISTS idx_teacher_payments_dashboard ON teacher_payments(payment_date);
 
 CREATE INDEX IF NOT EXISTS idx_bulletin_notes_student_year ON bulletin_notes(student_id, academic_year);
